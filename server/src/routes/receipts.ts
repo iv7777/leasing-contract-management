@@ -152,3 +152,52 @@ receiptsRouter.post("/receipt-allocations/:id/reverse", requireRole("admin"), (r
   recordAudit({ actorUserId: req.user!.id, action: "receipt_allocation_reversed", entityType: "receipt_allocation", entityId: id, reason });
   res.status(201).json({ reversal });
 });
+
+/** Reverses an entire receipt (e.g. a bounced check) rather than one
+ * allocation: cascades a reversal across every charge it was ever applied
+ * to (netting out any prior partial reversal first, so this is safe to
+ * call regardless of allocation history) before marking the receipt itself
+ * reversed. Everything is additive rows, never an edit — matching the
+ * brief's "linked history retained, balances correct" requirement. */
+receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) => {
+  const id = Number(req.params.id);
+  const receipt = db.select().from(receipts).where(eq(receipts.id, id)).get();
+  if (!receipt) return res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
+  if (!ensureContractAccess(req, res, receipt.contractId)) return;
+  if (receipt.status === "reversed") {
+    return res.status(409).json({ error: { code: "already_reversed", message: "This receipt has already been reversed." } });
+  }
+
+  const reason = req.body?.reason as string | undefined;
+  if (!reason) return res.status(400).json({ error: { code: "invalid_input", message: "A reason is required to reverse a receipt." } });
+
+  const allocations = db.select().from(receiptAllocations).where(eq(receiptAllocations.receiptId, id)).all();
+  const netByCharge = new Map<number, number>();
+  for (const a of allocations) netByCharge.set(a.chargeId, (netByCharge.get(a.chargeId) ?? 0) + a.amountFen);
+
+  const reversals = db.transaction((tx) => {
+    const created: (typeof receiptAllocations.$inferSelect)[] = [];
+    for (const [chargeId, net] of netByCharge) {
+      if (net === 0) continue;
+      created.push(
+        tx
+          .insert(receiptAllocations)
+          .values({ receiptId: id, chargeId, amountFen: -net, createdBy: req.user!.id })
+          .returning()
+          .get(),
+      );
+    }
+    tx.update(receipts).set({ status: "reversed" }).where(eq(receipts.id, id)).run();
+    return created;
+  });
+
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "receipt_reversed",
+    entityType: "receipt",
+    entityId: id,
+    reason,
+    details: { reversedAllocationCount: reversals.length },
+  });
+  res.status(200).json({ reversals });
+});

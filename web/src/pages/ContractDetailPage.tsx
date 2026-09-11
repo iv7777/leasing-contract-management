@@ -166,6 +166,7 @@ export default function ContractDetailPage() {
   const [amendmentModal, setAmendmentModal] = useState(false);
   const [receiptModal, setReceiptModal] = useState(false);
   const [allocateModal, setAllocateModal] = useState<{ receiptId: number } | null>(null);
+  const [reverseReceiptModal, setReverseReceiptModal] = useState<{ receiptId: number } | null>(null);
   const [depositTxnModal, setDepositTxnModal] = useState(false);
   const [depositTxnType, setDepositTxnType] = useState("receipt");
   const [unitForm] = Form.useForm();
@@ -176,6 +177,7 @@ export default function ContractDetailPage() {
   const [amendmentForm] = Form.useForm();
   const [receiptForm] = Form.useForm();
   const [allocateForm] = Form.useForm();
+  const [reverseReceiptForm] = Form.useForm();
   const [depositTxnForm] = Form.useForm();
 
   const load = () => {
@@ -353,6 +355,19 @@ export default function ContractDetailPage() {
       await api.post(`/receipts/${allocateModal.receiptId}/allocate`, { chargeId: values.chargeId, amountFen: Math.round(values.amountFen * 100) });
       setAllocateModal(null);
       allocateForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onReverseReceipt = async () => {
+    if (!reverseReceiptModal) return;
+    try {
+      const values = await reverseReceiptForm.validateFields();
+      await api.post(`/receipts/${reverseReceiptModal.receiptId}/reverse`, values);
+      setReverseReceiptModal(null);
+      reverseReceiptForm.resetFields();
       load();
     } catch (err) {
       handleError(err);
@@ -611,15 +626,24 @@ export default function ContractDetailPage() {
                       key: "unallocated",
                       render: (_: unknown, r: ReceiptDto) => yuan(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0),
                     },
-                    { title: t("common.actions"), dataIndex: "status", render: (s: string) => s === "posted" && <Tag>{s}</Tag> },
+                    { title: t("common.actions"), dataIndex: "status", render: (s: string) => (s === "reversed" ? <Tag color="red">{s}</Tag> : <Tag>{s}</Tag>) },
                     {
                       title: "",
                       key: "action",
                       render: (_: unknown, r: ReceiptDto) =>
-                        (receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0) > 0 && (
-                          <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
-                            {t("contracts.allocate")}
-                          </Button>
+                        r.status === "posted" && (
+                          <Space>
+                            {(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0) > 0 && (
+                              <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
+                                {t("contracts.allocate")}
+                              </Button>
+                            )}
+                            {user?.role === "admin" && (
+                              <Button size="small" danger onClick={() => setReverseReceiptModal({ receiptId: r.id })}>
+                                {t("contracts.reverse")}
+                              </Button>
+                            )}
+                          </Space>
                         ),
                     },
                   ]}
@@ -846,6 +870,22 @@ export default function ContractDetailPage() {
           </Form.Item>
           <Form.Item name="amountFen" label={`${t("contracts.amount")} (yuan)`} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.reverse")}
+        open={!!reverseReceiptModal}
+        onCancel={() => setReverseReceiptModal(null)}
+        onOk={onReverseReceipt}
+        okText={t("contracts.reverse")}
+        okButtonProps={{ danger: true }}
+        cancelText={t("common.cancel")}
+      >
+        <Form form={reverseReceiptForm} layout="vertical">
+          <Form.Item name="reason" label={t("contracts.reversalReason")} rules={[{ required: true }]}>
+            <Input.TextArea rows={2} placeholder="e.g. check bounced" />
           </Form.Item>
         </Form>
       </Modal>

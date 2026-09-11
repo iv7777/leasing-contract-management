@@ -17,6 +17,7 @@ import {
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getContractPropertyIds, canAccessContract } from "../lib/contractScope.js";
+import { contractUnitBelongsToContract, pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
@@ -169,6 +170,11 @@ contractsRouter.post("/:id/pricing-streams", requireRole("admin", "manager"), (r
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid pricing stream payload.", details: parsed.error.flatten() } });
 
   const { contractUnitIds, initialRate, ...streamFields } = parsed.data;
+  const invalidUnitId = contractUnitIds.find((cuId) => !contractUnitBelongsToContract(cuId, contractId));
+  if (invalidUnitId !== undefined) {
+    return res.status(400).json({ error: { code: "invalid_reference", message: `Contract unit ${invalidUnitId} does not belong to this contract.` } });
+  }
+
   const stream = db.insert(pricingStreams).values({ contractId, ...streamFields }).returning().get();
   for (const contractUnitId of contractUnitIds) {
     db.insert(pricingStreamUnits).values({ pricingStreamId: stream.id, contractUnitId }).run();
@@ -199,6 +205,9 @@ contractsRouter.post("/:id/concessions", requireRole("admin", "manager"), (req, 
 
   const parsed = addConcessionSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid concession payload." } });
+  if (parsed.data.pricingStreamId !== null && !pricingStreamBelongsToContract(parsed.data.pricingStreamId, contractId)) {
+    return res.status(400).json({ error: { code: "invalid_reference", message: "Pricing stream does not belong to this contract." } });
+  }
 
   const inserted = db.insert(concessions).values({ contractId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "concession_added", entityType: "contract", entityId: contractId });

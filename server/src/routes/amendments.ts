@@ -16,6 +16,12 @@ import {
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
+import {
+  contractUnitBelongsToContract,
+  pricingStreamBelongsToContract,
+  chargeBelongsToContract,
+  rateScheduleBelongsToStream,
+} from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 
 export const amendmentsRouter = Router();
@@ -212,6 +218,11 @@ function applyApproval(req: import("express").Request, res: import("express").Re
 
   const changes = JSON.parse(amendment.changesJson) as z.infer<typeof changesSchema>;
 
+  const referenceError = validateAmendmentReferences(changes, contract.id);
+  if (referenceError) {
+    return res.status(400).json({ error: { code: "invalid_reference", message: referenceError } });
+  }
+
   db.transaction((tx) => {
     if (changes.contract) {
       tx.update(contracts).set({ ...changes.contract, updatedAt: new Date().toISOString() }).where(eq(contracts.id, contract.id)).run();
@@ -267,6 +278,47 @@ function applyApproval(req: import("express").Request, res: import("express").Re
 
   const updatedAmendment = db.select().from(amendments).where(eq(amendments.id, amendment.id)).get();
   res.json({ amendment: updatedAmendment });
+}
+
+/** Every child-entity ID inside an approved amendment must actually belong
+ * to the contract being amended — an amendment's JSON payload is untrusted
+ * input from whoever drafted it, and approving it must not be able to
+ * mutate a different contract's units, pricing, or charges just because a
+ * plausible-looking numeric ID was included. Checked once, before the
+ * transaction starts, so a bad reference rejects the whole approval rather
+ * than partially applying it. */
+function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, contractId: number): string | null {
+  for (const eu of changes.endUnits ?? []) {
+    if (!contractUnitBelongsToContract(eu.contractUnitId, contractId)) {
+      return `Contract unit ${eu.contractUnitId} does not belong to this contract.`;
+    }
+  }
+  for (const s of changes.addPricingStreams ?? []) {
+    for (const cuId of s.contractUnitIds) {
+      if (!contractUnitBelongsToContract(cuId, contractId)) {
+        return `Contract unit ${cuId} does not belong to this contract.`;
+      }
+    }
+  }
+  for (const r of changes.addRateSchedule ?? []) {
+    if (!pricingStreamBelongsToContract(r.pricingStreamId, contractId)) {
+      return `Pricing stream ${r.pricingStreamId} does not belong to this contract.`;
+    }
+    if (r.closePreviousRateScheduleId && !rateScheduleBelongsToStream(r.closePreviousRateScheduleId, r.pricingStreamId)) {
+      return `Rate schedule ${r.closePreviousRateScheduleId} does not belong to pricing stream ${r.pricingStreamId}.`;
+    }
+  }
+  for (const c of changes.addConcessions ?? []) {
+    if (c.pricingStreamId !== null && !pricingStreamBelongsToContract(c.pricingStreamId, contractId)) {
+      return `Pricing stream ${c.pricingStreamId} does not belong to this contract.`;
+    }
+  }
+  for (const adj of changes.retroactiveAdjustments ?? []) {
+    if (!chargeBelongsToContract(adj.chargeId, contractId)) {
+      return `Charge ${adj.chargeId} does not belong to this contract.`;
+    }
+  }
+  return null;
 }
 
 function addDaysIso(date: string, delta: number): string {
