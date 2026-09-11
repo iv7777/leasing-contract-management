@@ -2,12 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { receipts, receiptAllocations, charges } from "../db/schema.js";
+import { receipts, receiptAllocations, charges, billingRules } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, computeUnallocatedFen, validateAllocation } from "../billing/ledger.js";
+import { computeLatePenalty } from "../billing/latePenalty.js";
 import { todayInChina } from "@lcm/shared";
 
 export const receiptsRouter = Router();
@@ -32,7 +33,17 @@ receiptsRouter.get("/contracts/:contractId/ledger", (req, res) => {
   const asOfDate = (req.query.asOf as string) ?? todayInChina();
   const data = loadLedgerInputs(contractId);
 
-  const chargeBalances = data.charges.map((c) => computeChargeBalance(c, data.adjustments, data.allocations, asOfDate));
+  const rules = db.select().from(billingRules).where(eq(billingRules.contractId, contractId)).get();
+  const penaltyRules = {
+    enabled: rules?.latePenaltyEnabled ?? false,
+    dailyRatePermille: rules?.latePenaltyDailyRatePermille ?? null,
+    capFen: rules?.latePenaltyCapFen ?? null,
+  };
+
+  const chargeBalances = data.charges.map((c) => {
+    const balance = computeChargeBalance(c, data.adjustments, data.allocations, asOfDate);
+    return { ...balance, latePenaltyFen: computeLatePenalty(balance.balanceFen, balance.daysOverdue, penaltyRules) };
+  });
   const receiptBalances = data.receipts.map((r) => ({ receiptId: r.id, unallocatedFen: computeUnallocatedFen(r, data.allocations) }));
 
   res.json({

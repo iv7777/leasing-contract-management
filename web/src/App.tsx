@@ -9,6 +9,8 @@ import PropertyDetailPage from "./pages/PropertyDetailPage";
 import ContractsPage from "./pages/ContractsPage";
 import ContractDetailPage from "./pages/ContractDetailPage";
 import PartiesPage from "./pages/PartiesPage";
+import RemindersPage from "./pages/RemindersPage";
+import OccupancyPage from "./pages/OccupancyPage";
 import UsersPage from "./pages/UsersPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -40,6 +42,8 @@ export default function App() {
                 <Route path="/contracts" element={<ContractsPage />} />
                 <Route path="/contracts/:id" element={<ContractDetailPage />} />
                 <Route path="/parties" element={<PartiesPage />} />
+                <Route path="/reminders" element={<RemindersPage />} />
+                <Route path="/occupancy" element={<OccupancyPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

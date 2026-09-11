@@ -18,7 +18,7 @@ import {
   Typography,
   message,
 } from "antd";
-import { PlusOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
@@ -406,6 +406,16 @@ export default function ContractDetailPage() {
         <Space>
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           <Tag>v{contract.versionNumber}</Tag>
+          {(user?.canDownloadPdf || user?.role === "admin" || user?.role === "manager") && (
+            <Button icon={<FilePdfOutlined />} onClick={() => window.open(`/api/contracts/${id}/pdf-summary`, "_blank")}>
+              {t("contracts.exportPdf")}
+            </Button>
+          )}
+          {(user?.canPrint || user?.role === "admin" || user?.role === "manager") && (
+            <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts/${id}/ledger.csv`, "_blank")}>
+              {t("contracts.exportCsv")}
+            </Button>
+          )}
           {isDraft && user?.role === "admin" && (
             <Button icon={<ThunderboltOutlined />} onClick={onActivate}>
               {t("contracts.activate")}

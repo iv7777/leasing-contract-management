@@ -9,6 +9,8 @@ import {
   GlobalOutlined,
   LogoutOutlined,
   FileTextOutlined,
+  BellOutlined,
+  PieChartOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -30,6 +32,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
     { key: "/properties", icon: <HomeOutlined />, label: t("nav.properties") },
     { key: "/contracts", icon: <FileTextOutlined />, label: t("nav.contracts") },
+    { key: "/reminders", icon: <BellOutlined />, label: t("nav.reminders") },
+    { key: "/occupancy", icon: <PieChartOutlined />, label: t("nav.occupancy") },
     { key: "/parties", icon: <TeamOutlined />, label: t("nav.parties") },
     ...(user?.role === "admin" ? [{ key: "/users", icon: <UserOutlined />, label: t("nav.users") }] : []),
   ];

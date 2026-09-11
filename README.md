@@ -44,7 +44,8 @@ Writes a consistent SQLite snapshot plus a manifest of every referenced document
 - **Phase 1 — Foundation** (done): authentication, roles (Admin/Manager/Collector/Viewer), property/unit inventory, tenant/landlord records (with Admin-only sensitive identity details), private classified document storage, append-only audit logging, backup/restore.
 - **Phase 2 — Agreements and calculation** (done): contracts, contract units, pricing streams (per-unit, grouped, or contract-wide), rate schedules (flat / per-sqm / percentage escalation), free-rent and discount concessions, deposit terms, the charge-generation engine (`server/src/billing`), and the amendment workflow (draft → pending → approved, with staleness checks and a `contract_versions` snapshot on every approval).
 - **Phase 3 — Collection pilot** (done): receipts, allocations with over-allocation guards on both the receipt and the charge, unallocated credit, reversals (append-only — nothing is edited or deleted), a deposit ledger (receipt/refund/deduction/transfer-to-rent, refund and deduction and transfer gated to Admin), and the monthly collection statement.
-- **Phase 4 onward** (not started): reminder dashboard, late-penalty support, PDF summaries, full CSV/Excel exports, occupancy/rollup views, and eventually WeChat/SMS notifications.
+- **Phase 4 — Operational rollout** (done): reminder dashboard (renewal notices, upcoming rate changes, deposit shortfalls, overdue escalation past 10 days — computed live, not persisted, so a reminder disappears the moment its cause is resolved), simple per-contract late-penalty calculation, a generated PDF contract summary, and CSV exports.
+- **Phase 5 — External notifications** (not started): WeChat/SMS urgent delivery, deferred per the brief until a provider is selected and validated.
 
 ### Charge generation engine
 
@@ -64,5 +65,13 @@ A contract accepts direct edits (units, pricing, concessions, deposit terms) onl
 - `POST /api/contracts/:id/deposit-transactions` (`transactionType`: `receipt` | `refund` | `deduction` | `transfer_to_rent`; refund/deduction/transfer require Admin), `POST /api/deposit-transactions/:id/reverse`
 - `GET /api/contracts/:id/ledger` — charges with computed balance/overdue status, receipts with unallocated credit
 - `GET /api/contracts/:id/statement?period=YYYY-MM` — the brief's first working milestone: opening receivable, new charges, adjustments, receipts applied, closing receivable, unallocated receipts, and deposit balance held separately
+
+### Reminders, occupancy, and exports
+
+- `GET /api/reminders` — computed live from current contract/charge/deposit state (`server/src/reports/reminders.ts`, unit-tested): renewal notice windows, rate changes due within 30 days, deposit shortfalls (skipped when an Admin has recorded the waiver condition as met), and overdue balances escalated past the brief's 10-day threshold. Nothing is persisted, so there's no "obsolete reminder" state to clean up — an amendment, payment, or adjustment that resolves the underlying condition makes the reminder disappear on the next request.
+- Late penalty: `server/src/billing/latePenalty.ts` — a flat daily rate against the outstanding balance with an optional cap, configured per contract (`PATCH /api/contracts/:id/late-penalty-rules`, draft only) and surfaced as `latePenaltyFen` on `GET /api/contracts/:id/ledger`. Deliberately not a rule engine, per the brief.
+- `GET /api/reports/occupancy?date=YYYY-MM-DD` — leased/total rentable area and unit counts, building and open-land reported separately so combining them never misstates either figure.
+- `GET /api/contracts/:id/pdf-summary` — a generated PDF (terms, units, pricing, deposit, payment ledger, amendment history), gated the same way document download is (`canDownloadPdf` / Admin / Manager).
+- `GET /api/contracts.csv` and `GET /api/contracts/:id/ledger.csv` — CSV exports respecting the same scope and `canPrint` gate.
 
 See the project brief for the full phase plan and acceptance scenarios.

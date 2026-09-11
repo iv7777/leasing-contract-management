@@ -256,6 +256,26 @@ contractsRouter.patch("/deposit-terms/:depositTermId/waiver-decision", requireRo
   res.json({ depositTerms: updated });
 });
 
+const latePenaltySchema = z.object({
+  latePenaltyEnabled: z.boolean(),
+  latePenaltyDailyRatePermille: decimalString.optional(),
+  latePenaltyCapFen: z.number().optional(),
+});
+
+contractsRouter.patch("/:id/late-penalty-rules", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+
+  const parsed = latePenaltySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid late penalty payload." } });
+
+  const updated = db.update(billingRules).set(parsed.data).where(eq(billingRules.contractId, contractId)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "late_penalty_rules_updated", entityType: "contract", entityId: contractId });
+  res.json({ billingRules: updated });
+});
+
 // ---------------------------------------------------------------------------
 // Activation (locks direct edits; further changes must go through amendments)
 // ---------------------------------------------------------------------------

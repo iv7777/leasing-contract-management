@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Typography, Card } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import type { PartyDto } from "@lcm/shared";
@@ -67,11 +67,16 @@ export default function ContractsPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           {t("contracts.title")}
         </Typography.Title>
-        {canCreate && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            {t("contracts.addContract")}
+        <Space>
+          <Button icon={<DownloadOutlined />} onClick={() => window.open("/api/contracts.csv", "_blank")}>
+            {t("contracts.exportCsv")}
           </Button>
-        )}
+          {canCreate && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+              {t("contracts.addContract")}
+            </Button>
+          )}
+        </Space>
       </Space>
 
       {isMobile ? (
