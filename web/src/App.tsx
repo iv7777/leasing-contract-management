@@ -6,6 +6,8 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import PropertiesPage from "./pages/PropertiesPage";
 import PropertyDetailPage from "./pages/PropertyDetailPage";
+import ContractsPage from "./pages/ContractsPage";
+import ContractDetailPage from "./pages/ContractDetailPage";
 import PartiesPage from "./pages/PartiesPage";
 import UsersPage from "./pages/UsersPage";
 
@@ -35,6 +37,8 @@ export default function App() {
                 <Route path="/" element={<DashboardPage />} />
                 <Route path="/properties" element={<PropertiesPage />} />
                 <Route path="/properties/:id" element={<PropertyDetailPage />} />
+                <Route path="/contracts" element={<ContractsPage />} />
+                <Route path="/contracts/:id" element={<ContractDetailPage />} />
                 <Route path="/parties" element={<PartiesPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

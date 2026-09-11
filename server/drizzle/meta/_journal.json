@@ -8,6 +8,13 @@
       "when": 1789141662626,
       "tag": "0000_flowery_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789142488856,
+      "tag": "0001_rich_puff_adder",
+      "breakpoints": true
     }
   ]
 }

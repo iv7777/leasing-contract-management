@@ -60,3 +60,25 @@ export function daysBetween(a: IsoDate, b: IsoDate): number {
 export function daysInMonth(year: number, month1to12: number): number {
   return new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
 }
+
+/** Whole calendar months between two ISO dates counting only year/month
+ * (day-of-month ignored), used for escalation interval and due-date offset
+ * math — e.g. monthsBetween("2024-01-15", "2024-04-01") === 3. */
+export function monthsBetween(a: IsoDate, b: IsoDate): number {
+  const [ay, am] = a.split("-").map(Number);
+  const [by, bm] = b.split("-").map(Number);
+  return (by - ay) * 12 + (bm - am);
+}
+
+export function addMonths(date: IsoDate, months: number): IsoDate {
+  const [y, m, d] = date.split("-").map(Number);
+  const totalMonths = (y * 12 + (m - 1)) + months;
+  const newYear = Math.floor(totalMonths / 12);
+  const newMonth1to12 = (totalMonths % 12) + 1;
+  const clampedDay = Math.min(d, daysInMonth(newYear, newMonth1to12));
+  return `${newYear}-${String(newMonth1to12).padStart(2, "0")}-${String(clampedDay).padStart(2, "0")}`;
+}
+
+export function lastDayOfMonth(year: number, month1to12: number): IsoDate {
+  return `${year}-${String(month1to12).padStart(2, "0")}-${String(daysInMonth(year, month1to12)).padStart(2, "0")}`;
+}
