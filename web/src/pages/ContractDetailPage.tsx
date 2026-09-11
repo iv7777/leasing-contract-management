@@ -90,6 +90,46 @@ interface AmendmentDto {
   baseContractVersion: number;
   supportingDocumentId: number | null;
 }
+interface ChargeBalanceDto {
+  chargeId: number;
+  billedFen: number;
+  adjustedFen: number;
+  allocatedFen: number;
+  balanceFen: number;
+  isOverdue: boolean;
+  daysOverdue: number;
+}
+interface ReceiptDto {
+  id: number;
+  receivedDate: string;
+  amountFen: number;
+  paymentMethod: string;
+  externalReference: string | null;
+  status: "posted" | "reversed";
+}
+interface ReceiptBalanceDto {
+  receiptId: number;
+  unallocatedFen: number;
+}
+interface DepositTransactionDto {
+  id: number;
+  transactionType: string;
+  amountFen: number;
+  transactionDate: string;
+  reason: string;
+}
+interface StatementDto {
+  periodStart: string;
+  periodEnd: string;
+  openingReceivableFen: number;
+  newChargesFen: number;
+  adjustmentsFen: number;
+  receiptsAppliedFen: number;
+  closingReceivableFen: number;
+  unallocatedReceiptsFen: number;
+  depositBalanceFen: number;
+}
+const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
 const feeTypes = ["rent", "management", "electricity_base", "water", "elevator", "other"] as const;
 const rateBases = ["per_month", "per_quarter", "per_year", "per_sqm_per_month"] as const;
@@ -107,6 +147,13 @@ export default function ContractDetailPage() {
   const [concessions, setConcessions] = useState<ConcessionDto[]>([]);
   const [depositTerms, setDepositTerms] = useState<DepositTermsDto[]>([]);
   const [charges, setCharges] = useState<ChargeDto[]>([]);
+  const [chargeBalances, setChargeBalances] = useState<ChargeBalanceDto[]>([]);
+  const [receipts, setReceipts] = useState<ReceiptDto[]>([]);
+  const [receiptBalances, setReceiptBalances] = useState<ReceiptBalanceDto[]>([]);
+  const [depositTxns, setDepositTxns] = useState<DepositTransactionDto[]>([]);
+  const [depositBalanceFen, setDepositBalanceFen] = useState(0);
+  const [statement, setStatement] = useState<StatementDto | null>(null);
+  const [statementPeriod, setStatementPeriod] = useState("");
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number }[]>([]);
@@ -117,12 +164,19 @@ export default function ContractDetailPage() {
   const [depositModal, setDepositModal] = useState(false);
   const [generateModal, setGenerateModal] = useState(false);
   const [amendmentModal, setAmendmentModal] = useState(false);
+  const [receiptModal, setReceiptModal] = useState(false);
+  const [allocateModal, setAllocateModal] = useState<{ receiptId: number } | null>(null);
+  const [depositTxnModal, setDepositTxnModal] = useState(false);
+  const [depositTxnType, setDepositTxnType] = useState("receipt");
   const [unitForm] = Form.useForm();
   const [streamForm] = Form.useForm();
   const [concessionForm] = Form.useForm();
   const [depositForm] = Form.useForm();
   const [generateForm] = Form.useForm();
   const [amendmentForm] = Form.useForm();
+  const [receiptForm] = Form.useForm();
+  const [allocateForm] = Form.useForm();
+  const [depositTxnForm] = Form.useForm();
 
   const load = () => {
     void api.get<any>(`/contracts/${id}`).then((r) => {
@@ -134,6 +188,19 @@ export default function ContractDetailPage() {
       setDepositTerms(r.depositTerms);
     });
     void api.get<{ charges: ChargeDto[] }>(`/contracts/${id}/charges`).then((r) => setCharges(r.charges));
+    void api
+      .get<{ chargeBalances: ChargeBalanceDto[]; receipts: ReceiptDto[]; receiptBalances: ReceiptBalanceDto[] }>(`/contracts/${id}/ledger`)
+      .then((r) => {
+        setChargeBalances(r.chargeBalances);
+        setReceipts(r.receipts);
+        setReceiptBalances(r.receiptBalances);
+      });
+    void api
+      .get<{ transactions: DepositTransactionDto[]; balanceFen: number }>(`/contracts/${id}/deposit-transactions`)
+      .then((r) => {
+        setDepositTxns(r.transactions);
+        setDepositBalanceFen(r.balanceFen);
+      });
     void api.get<{ amendments: AmendmentDto[] }>(`/contracts/${id}/amendments`).then((r) => setAmendments(r.amendments));
     void api.get<{ parties: PartyDto[] }>("/parties").then((r) => setParties(r.parties));
     void api.get<{ properties: { id: number }[] }>("/properties").then(async (r) => {
@@ -262,6 +329,52 @@ export default function ContractDetailPage() {
       setAmendmentModal(false);
       amendmentForm.resetFields();
       load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onRecordReceipt = async () => {
+    try {
+      const values = await receiptForm.validateFields();
+      await api.post(`/contracts/${id}/receipts`, { ...values, amountFen: Math.round(values.amountFen * 100) });
+      setReceiptModal(false);
+      receiptForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onAllocate = async () => {
+    if (!allocateModal) return;
+    try {
+      const values = await allocateForm.validateFields();
+      await api.post(`/receipts/${allocateModal.receiptId}/allocate`, { chargeId: values.chargeId, amountFen: Math.round(values.amountFen * 100) });
+      setAllocateModal(null);
+      allocateForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onRecordDepositTxn = async () => {
+    try {
+      const values = await depositTxnForm.validateFields();
+      await api.post(`/contracts/${id}/deposit-transactions`, { ...values, amountFen: Math.round(values.amountFen * 100) });
+      setDepositTxnModal(false);
+      depositTxnForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onViewStatement = async () => {
+    try {
+      const r = await api.get<{ statement: StatementDto }>(`/contracts/${id}/statement?period=${statementPeriod}`);
+      setStatement(r.statement);
     } catch (err) {
       handleError(err);
     }
@@ -406,11 +519,100 @@ export default function ContractDetailPage() {
                 <List
                   bordered
                   dataSource={depositTerms}
+                  style={{ marginBottom: 16 }}
                   renderItem={(d) => (
                     <List.Item>
-                      {d.requirementType === "fixed" ? `¥${((d.fixedAmountFen ?? 0) / 100).toFixed(2)}` : d.formulaBasis} · {t("common.active")}: {d.effectiveStart}
+                      {d.requirementType === "fixed" ? yuan(d.fixedAmountFen ?? 0) : d.formulaBasis} · {t("common.active")}: {d.effectiveStart}
                     </List.Item>
                   )}
+                />
+
+                <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
+                  <Typography.Text strong>
+                    {t("contracts.depositBalance")}: {yuan(depositBalanceFen)}
+                  </Typography.Text>
+                  {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && (
+                    <Button icon={<PlusOutlined />} onClick={() => setDepositTxnModal(true)}>
+                      {t("contracts.recordDepositTxn")}
+                    </Button>
+                  )}
+                </Space>
+                <Table
+                  rowKey="id"
+                  size="small"
+                  dataSource={depositTxns}
+                  columns={[
+                    { title: t("contracts.transactionDate"), dataIndex: "transactionDate" },
+                    { title: t("contracts.transactionType"), dataIndex: "transactionType" },
+                    { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
+                    { title: t("contracts.reason"), dataIndex: "reason" },
+                  ]}
+                />
+              </>
+            ),
+          },
+          {
+            key: "statement",
+            label: t("contracts.statement"),
+            children: (
+              <>
+                <Space style={{ marginBottom: 16 }}>
+                  <Input placeholder="2026-04" value={statementPeriod} onChange={(e) => setStatementPeriod(e.target.value)} style={{ width: 140 }} />
+                  <Button type="primary" onClick={onViewStatement}>
+                    {t("contracts.viewStatement")}
+                  </Button>
+                </Space>
+                {statement && (
+                  <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label={t("contracts.openingReceivable")}>{yuan(statement.openingReceivableFen)}</Descriptions.Item>
+                    <Descriptions.Item label={t("contracts.newCharges")}>{yuan(statement.newChargesFen)}</Descriptions.Item>
+                    <Descriptions.Item label={t("contracts.adjustments")}>{yuan(statement.adjustmentsFen)}</Descriptions.Item>
+                    <Descriptions.Item label={t("contracts.receiptsApplied")}>{yuan(statement.receiptsAppliedFen)}</Descriptions.Item>
+                    <Descriptions.Item label={t("contracts.closingReceivable")}>
+                      <Typography.Text strong>{yuan(statement.closingReceivableFen)}</Typography.Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("contracts.unallocatedReceipts")}>{yuan(statement.unallocatedReceiptsFen)}</Descriptions.Item>
+                    <Descriptions.Item label={t("contracts.depositBalance")}>{yuan(statement.depositBalanceFen)}</Descriptions.Item>
+                  </Descriptions>
+                )}
+              </>
+            ),
+          },
+          {
+            key: "receipts",
+            label: t("contracts.receipts"),
+            children: (
+              <>
+                {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && (
+                  <Button icon={<PlusOutlined />} onClick={() => setReceiptModal(true)} style={{ marginBottom: 12 }}>
+                    {t("contracts.recordReceipt")}
+                  </Button>
+                )}
+                <Table
+                  rowKey="id"
+                  size="small"
+                  dataSource={receipts}
+                  columns={[
+                    { title: t("contracts.receivedDate"), dataIndex: "receivedDate" },
+                    { title: t("contracts.paymentMethod"), dataIndex: "paymentMethod" },
+                    { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
+                    {
+                      title: t("contracts.unallocated"),
+                      key: "unallocated",
+                      render: (_: unknown, r: ReceiptDto) => yuan(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0),
+                    },
+                    { title: t("common.actions"), dataIndex: "status", render: (s: string) => s === "posted" && <Tag>{s}</Tag> },
+                    {
+                      title: "",
+                      key: "action",
+                      render: (_: unknown, r: ReceiptDto) =>
+                        (receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0) > 0 && (
+                          <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
+                            {t("contracts.allocate")}
+                          </Button>
+                        ),
+                    },
+                  ]}
                 />
               </>
             ),
@@ -434,7 +636,21 @@ export default function ContractDetailPage() {
                     { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
                     { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
                     { title: t("contracts.dueDate"), dataIndex: "dueDate" },
-                    { title: t("contracts.amount"), dataIndex: "amountFen", render: (v: number) => `¥${(v / 100).toFixed(2)}` },
+                    { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
+                    {
+                      title: t("contracts.balance"),
+                      key: "balance",
+                      render: (_: unknown, c: ChargeDto) => {
+                        const b = chargeBalances.find((x) => x.chargeId === c.id);
+                        if (!b) return null;
+                        return (
+                          <Space>
+                            {yuan(b.balanceFen)}
+                            {b.isOverdue && <Tag color="red">{t("contracts.overdueDays", { days: b.daysOverdue })}</Tag>}
+                          </Space>
+                        );
+                      },
+                    },
                   ]}
                 />
               </>
@@ -580,6 +796,86 @@ export default function ContractDetailPage() {
         <Form form={generateForm} layout="vertical">
           <Form.Item name="period" label={t("contracts.period")} rules={[{ required: true, pattern: /^\d{4}-\d{2}$/ }]}>
             <Input placeholder="2026-04" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={t("contracts.recordReceipt")} open={receiptModal} onCancel={() => setReceiptModal(false)} onOk={onRecordReceipt} okText={t("common.create")} cancelText={t("common.cancel")}>
+        <Form form={receiptForm} layout="vertical">
+          <Form.Item name="receivedDate" label={t("contracts.receivedDate")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="amountFen" label={`${t("contracts.amount")} (yuan)`} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item name="paymentMethod" label={t("contracts.paymentMethod")} rules={[{ required: true }]} initialValue="bank_transfer">
+            <Input />
+          </Form.Item>
+          <Form.Item name="externalReference" label={t("contracts.externalReference")}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.allocateTo")}
+        open={!!allocateModal}
+        onCancel={() => setAllocateModal(null)}
+        onOk={onAllocate}
+        okText={t("contracts.allocate")}
+        cancelText={t("common.cancel")}
+      >
+        <Form form={allocateForm} layout="vertical">
+          <Form.Item name="chargeId" label={t("contracts.charges")} rules={[{ required: true }]}>
+            <Select
+              options={charges.map((c) => {
+                const b = chargeBalances.find((x) => x.chargeId === c.id);
+                return { value: c.id, label: `${t(`contracts.${camel(c.feeType)}`)} ${c.serviceStart} — ${b ? yuan(b.balanceFen) : ""}` };
+              })}
+            />
+          </Form.Item>
+          <Form.Item name="amountFen" label={`${t("contracts.amount")} (yuan)`} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.recordDepositTxn")}
+        open={depositTxnModal}
+        onCancel={() => setDepositTxnModal(false)}
+        onOk={onRecordDepositTxn}
+        okText={t("common.create")}
+        cancelText={t("common.cancel")}
+      >
+        <Form form={depositTxnForm} layout="vertical" onValuesChange={(v) => v.transactionType && setDepositTxnType(v.transactionType)}>
+          <Form.Item name="transactionType" label={t("contracts.transactionType")} rules={[{ required: true }]} initialValue="receipt">
+            <Select
+              options={[
+                { value: "receipt", label: t("contracts.depositReceipt") },
+                ...(user?.role === "admin"
+                  ? [
+                      { value: "refund", label: t("contracts.refund") },
+                      { value: "deduction", label: t("contracts.deduction") },
+                      { value: "transfer_to_rent", label: t("contracts.transferToRent") },
+                    ]
+                  : []),
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="transactionDate" label={t("contracts.transactionDate")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="amountFen" label={`${t("contracts.amount")} (yuan)`} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          {depositTxnType === "transfer_to_rent" && (
+            <Form.Item name="chargeId" label={t("contracts.charges")} rules={[{ required: true }]}>
+              <Select options={charges.map((c) => ({ value: c.id, label: `${t(`contracts.${camel(c.feeType)}`)} ${c.serviceStart}` }))} />
+            </Form.Item>
+          )}
+          <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true }]}>
+            <Input />
           </Form.Item>
         </Form>
       </Modal>

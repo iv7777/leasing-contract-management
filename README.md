@@ -43,7 +43,8 @@ Writes a consistent SQLite snapshot plus a manifest of every referenced document
 
 - **Phase 1 — Foundation** (done): authentication, roles (Admin/Manager/Collector/Viewer), property/unit inventory, tenant/landlord records (with Admin-only sensitive identity details), private classified document storage, append-only audit logging, backup/restore.
 - **Phase 2 — Agreements and calculation** (done): contracts, contract units, pricing streams (per-unit, grouped, or contract-wide), rate schedules (flat / per-sqm / percentage escalation), free-rent and discount concessions, deposit terms, the charge-generation engine (`server/src/billing`), and the amendment workflow (draft → pending → approved, with staleness checks and a `contract_versions` snapshot on every approval).
-- **Phase 3 onward** (not started): receipts, allocations, unallocated credit, adjustments/reversals, deposit movements, the monthly collection statement, reminders, and reporting.
+- **Phase 3 — Collection pilot** (done): receipts, allocations with over-allocation guards on both the receipt and the charge, unallocated credit, reversals (append-only — nothing is edited or deleted), a deposit ledger (receipt/refund/deduction/transfer-to-rent, refund and deduction and transfer gated to Admin), and the monthly collection statement.
+- **Phase 4 onward** (not started): reminder dashboard, late-penalty support, PDF summaries, full CSV/Excel exports, occupancy/rollup views, and eventually WeChat/SMS notifications.
 
 ### Charge generation engine
 
@@ -54,5 +55,14 @@ Trigger it via `POST /api/contracts/:id/generate-charges` with `{ "period": "YYY
 ### Amendments
 
 A contract accepts direct edits (units, pricing, concessions, deposit terms) only while in `draft` status. `POST /api/contracts/:id/activate` requires a `signed_lease` document to already be uploaded and locks the contract to `active`; from then on, changes go through `POST /api/contracts/:id/amendments` → `POST /api/amendments/:id/submit` → `POST /api/amendments/:id/approve`. Submitting a non-Admin amendment leaves it `pending` for Admin review; an Admin's own submission auto-approves. Approval is rejected as stale if the contract's version has moved since the amendment was based, and everything in an approval (contract fields, new units, new rate rows, concessions, retroactive charge adjustments) commits in a single transaction alongside a new `contract_versions` snapshot.
+
+### Receipts, allocations, and deposits
+
+`server/src/billing/ledger.ts` is pure and unit-tested (`server/src/billing/ledger.test.ts`) against the brief's §12 scenarios: a partial receipt, one receipt spanning multiple months' charges, an overpayment left as visible unallocated credit rather than inflating a charge, a reversal that keeps both the original and the reversing row and restores balances correctly, and deposit refund/deduction reducing the held balance without touching the rent ledger. A `transfer_to_rent` deposit transaction creates a synthetic receipt internally so it goes through the same allocation/over-allocation guard as any other payment — the held amount and the amount applied to rent are conserved and never double-counted.
+
+- `POST /api/contracts/:id/receipts`, `POST /api/receipts/:id/allocate`, `POST /api/receipt-allocations/:id/reverse`
+- `POST /api/contracts/:id/deposit-transactions` (`transactionType`: `receipt` | `refund` | `deduction` | `transfer_to_rent`; refund/deduction/transfer require Admin), `POST /api/deposit-transactions/:id/reverse`
+- `GET /api/contracts/:id/ledger` — charges with computed balance/overdue status, receipts with unallocated credit
+- `GET /api/contracts/:id/statement?period=YYYY-MM` — the brief's first working milestone: opening receivable, new charges, adjustments, receipts applied, closing receivable, unallocated receipts, and deposit balance held separately
 
 See the project brief for the full phase plan and acceptance scenarios.

@@ -308,6 +308,64 @@ export const chargeAdjustments = sqliteTable("charge_adjustments", {
 });
 
 // ---------------------------------------------------------------------------
+// Receipts and deposits
+// ---------------------------------------------------------------------------
+
+export const receipts = sqliteTable("receipts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contractId: integer("contract_id").notNull().references(() => contracts.id),
+  receivedDate: text("received_date").notNull(),
+  amountFen: integer("amount_fen").notNull(),
+  paymentMethod: text("payment_method").notNull(),
+  externalReference: text("external_reference"),
+  recordedBy: integer("recorded_by").notNull().references(() => users.id),
+  evidenceDocumentId: integer("evidence_document_id").references(() => documents.id),
+  status: text("status", { enum: ["posted", "reversed"] }).notNull().default("posted"),
+  createdAt: text("created_at").notNull().default(nowIso),
+}, (t) => ({
+  contractIdx: index("receipts_contract_idx").on(t.contractId),
+}));
+
+/** A positive row applies money from a receipt to a charge. A reversal is a
+ * new negative row referencing the row it reverses via reversalOfId —
+ * nothing is ever deleted or edited in place, so the full history of what
+ * was applied and undone stays intact. */
+export const receiptAllocations = sqliteTable("receipt_allocations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  receiptId: integer("receipt_id").notNull().references(() => receipts.id),
+  chargeId: integer("charge_id").notNull().references(() => charges.id),
+  amountFen: integer("amount_fen").notNull(),
+  reversalOfId: integer("reversal_of_id"),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  createdAt: text("created_at").notNull().default(nowIso),
+}, (t) => ({
+  receiptIdx: index("receipt_allocations_receipt_idx").on(t.receiptId),
+  chargeIdx: index("receipt_allocations_charge_idx").on(t.chargeId),
+}));
+
+/** Every deposit movement — receipt, refund, deduction, or a transfer of
+ * held deposit to rent — as one append-only ledger, kept independent of the
+ * rent ledger so the two amounts are never double-counted (brief §6). */
+export const depositTransactions = sqliteTable("deposit_transactions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contractId: integer("contract_id").notNull().references(() => contracts.id),
+  transactionType: text("transaction_type", {
+    enum: ["receipt", "refund", "deduction", "transfer_to_rent", "reversal"],
+  }).notNull(),
+  amountFen: integer("amount_fen").notNull(),
+  transactionDate: text("transaction_date").notNull(),
+  receiptId: integer("receipt_id").references(() => receipts.id),
+  chargeId: integer("charge_id").references(() => charges.id),
+  reversalOfId: integer("reversal_of_id"),
+  reason: text("reason").notNull(),
+  actorUserId: integer("actor_user_id").notNull().references(() => users.id),
+  approvedBy: integer("approved_by").references(() => users.id),
+  createdAt: text("created_at").notNull().default(nowIso),
+}, (t) => ({
+  contractIdx: index("deposit_transactions_contract_idx").on(t.contractId),
+}));
+
+// ---------------------------------------------------------------------------
 // Change control
 // ---------------------------------------------------------------------------
 

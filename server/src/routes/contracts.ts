@@ -21,6 +21,8 @@ import { recordAudit } from "../lib/audit.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
 import { previewEscalationTiers } from "../billing/chargeEngine.js";
+import { computeMonthlyStatement } from "../billing/ledger.js";
+import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { daysInMonth } from "@lcm/shared";
 
 export const contractsRouter = Router();
@@ -323,6 +325,24 @@ contractsRouter.get("/:id/charges", (req, res) => {
   }
   const rows = db.select().from(charges).where(eq(charges.contractId, contractId)).all();
   res.json({ charges: rows });
+});
+
+contractsRouter.get("/:id/statement", (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+  }
+  const period = req.query.period as string | undefined;
+  if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+    return res.status(400).json({ error: { code: "invalid_input", message: "Provide ?period=YYYY-MM." } });
+  }
+  const [year, month] = period.split("-").map(Number);
+  const periodStart = `${period}-01`;
+  const periodEnd = `${period}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
+
+  const input = loadLedgerInputs(contractId);
+  const statement = computeMonthlyStatement(input, periodStart, periodEnd);
+  res.json({ statement });
 });
 
 contractsRouter.get("/:id/escalation-preview/:rateScheduleId", (req, res) => {

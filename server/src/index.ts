@@ -12,6 +12,8 @@ import { usersRouter } from "./routes/users.js";
 import { documentsRouter } from "./routes/documents.js";
 import { contractsRouter } from "./routes/contracts.js";
 import { amendmentsRouter } from "./routes/amendments.js";
+import { receiptsRouter } from "./routes/receipts.js";
+import { depositTransactionsRouter } from "./routes/depositTransactions.js";
 import { runBackup } from "./jobs/backup.js";
 
 const app = express();
@@ -50,6 +52,8 @@ app.use("/api/users", usersRouter);
 app.use("/api/documents", documentsRouter);
 app.use("/api/contracts", contractsRouter);
 app.use("/api", amendmentsRouter);
+app.use("/api", receiptsRouter);
+app.use("/api", depositTransactionsRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
