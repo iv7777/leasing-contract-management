@@ -8,6 +8,7 @@ import "./i18n";
 import { useTranslation } from "react-i18next";
 import App from "./App";
 import { AuthProvider } from "./auth/AuthContext";
+import { HelpProvider } from "./help/HelpContext";
 import { appTheme } from "./theme";
 import "./index.css";
 
@@ -18,7 +19,9 @@ function Root() {
     <ConfigProvider theme={appTheme} locale={antdLocale}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <HelpProvider>
+            <App />
+          </HelpProvider>
         </AuthProvider>
       </BrowserRouter>
     </ConfigProvider>

@@ -21,6 +21,8 @@ import { useTranslation } from "react-i18next";
 import type { PropertyDto, UnitDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useHelpTopic } from "../help/HelpContext";
+import { HelpIcon } from "../help/HelpIcon";
 
 interface DocumentDto {
   id: number;
@@ -50,6 +52,8 @@ export default function PropertyDetailPage() {
   const [editPropertyForm] = Form.useForm();
   const [editingUnit, setEditingUnit] = useState<UnitDto | null>(null);
   const [editUnitForm] = Form.useForm();
+  const [activeTab, setActiveTab] = useState("units");
+  useHelpTopic(`properties.detail.${activeTab}`);
 
   const load = () => {
     void api
@@ -200,6 +204,8 @@ export default function PropertyDetailPage() {
       </Space>
 
       <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: "units",
@@ -371,7 +377,11 @@ export default function PropertyDetailPage() {
           </Form.Item>
           <Form.Item
             name="classification"
-            label={t("properties.classification")}
+            label={
+              <>
+                {t("properties.classification")} <HelpIcon field="documentClassification" />
+              </>
+            }
             rules={[{ required: true }]}
             initialValue="ordinary"
           >

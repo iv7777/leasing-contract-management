@@ -6,6 +6,7 @@ import type { PropertyDto, PublicUser, Role } from "@lcm/shared";
 import { ROLES } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { HelpIcon } from "../help/HelpIcon";
 
 export default function UsersPage() {
   const { t } = useTranslation();
@@ -193,14 +194,29 @@ export default function UsersPage() {
           <Form.Item name="role" label={t("users.role")} rules={[{ required: true }]} initialValue="viewer">
             <Select options={ROLES.map((r) => ({ value: r, label: t(`users.${r}`) }))} />
           </Form.Item>
-          <Form.Item name="propertyIds" label={t("users.assignedProperties")}>
+          <Form.Item
+            name="propertyIds"
+            label={
+              <>
+                {t("users.assignedProperties")} <HelpIcon field="assignedProperties" />
+              </>
+            }
+          >
             <Select
               mode="multiple"
               options={properties.map((p) => ({ value: p.id, label: p.name }))}
               placeholder={t("users.assignedProperties")}
             />
           </Form.Item>
-          <Form.Item name="canDownloadPdf" label={t("users.canDownloadPdf")} valuePropName="checked">
+          <Form.Item
+            name="canDownloadPdf"
+            label={
+              <>
+                {t("users.canDownloadPdf")} <HelpIcon field="userPermissions" />
+              </>
+            }
+            valuePropName="checked"
+          >
             <Switch />
           </Form.Item>
           <Form.Item name="canPrint" label={t("users.canPrint")} valuePropName="checked">
@@ -236,14 +252,29 @@ export default function UsersPage() {
               options={ROLES.map((r) => ({ value: r, label: t(`users.${r}`) }))}
             />
           </Form.Item>
-          <Form.Item name="propertyIds" label={t("users.assignedProperties")}>
+          <Form.Item
+            name="propertyIds"
+            label={
+              <>
+                {t("users.assignedProperties")} <HelpIcon field="assignedProperties" />
+              </>
+            }
+          >
             <Select
               mode="multiple"
               options={properties.map((p) => ({ value: p.id, label: p.name }))}
               placeholder={t("users.assignedProperties")}
             />
           </Form.Item>
-          <Form.Item name="canDownloadPdf" label={t("users.canDownloadPdf")} valuePropName="checked">
+          <Form.Item
+            name="canDownloadPdf"
+            label={
+              <>
+                {t("users.canDownloadPdf")} <HelpIcon field="userPermissions" />
+              </>
+            }
+            valuePropName="checked"
+          >
             <Switch />
           </Form.Item>
           <Form.Item name="canPrint" label={t("users.canPrint")} valuePropName="checked">

@@ -288,6 +288,153 @@ const en = {
     restoreNote:
       "The script stops to confirm before changing anything, saves a safety copy of the current database first, and prints the commands to stop/start the service around it. Document files are not affected by a database restore — recover those separately from documents.manifest.json in the backup folder if needed.",
   },
+  help: {
+    drawerTitle: "Help",
+    tipsHeading: "Good to know",
+    noContent: "No help topic for this page yet.",
+    dashboard: {
+      title: "Dashboard",
+      body: "A quick snapshot of your portfolio: how many properties and tenants/landlords you have on file, and how many reminders currently need attention. Each tile is a shortcut — click any of them to jump straight to that list.",
+      tips: "The reminder count only includes contracts that are active or expiring soon — draft and terminated contracts never generate reminders.\nAn Admin can edit the copyright line shown at the bottom of the page by clicking the pencil icon next to it.",
+    },
+    properties: {
+      list: {
+        title: "Properties",
+        body: "Every building or plot of land you manage, with its address. Click a row to open its detail page, where you manage its individual rentable units and any property-level documents (e.g. title deeds, permits).",
+        tips: "Toggle \"Show archived\" to see properties that have been archived instead of deleted — archiving keeps their history intact for existing contracts.\nOnly an Admin can add a new property.",
+      },
+      detail: {
+        title: "Property detail",
+        body: "This page manages one property's inventory (its individual rentable units) and any documents attached at the property level. A unit is the actual thing a tenant leases — a floor, a workshop, a plot of open land — and gets linked to one or more contracts over its lifetime.",
+        tips: "Retiring a unit (marking it unavailable) doesn't delete it or affect any contract already using it — it just hides it from \"available unit\" pickers for new contracts.\n\"Related contracts\" on each unit shows every contract that has ever used it, not just the current tenant, so you can see its full leasing history at a glance.",
+        units: {
+          title: "Units",
+          body: "Each unit is one leasable space within this property — a floor, a workshop bay, or a parcel of open land. Its rentable area (in sqm) feeds directly into per-sqm rent calculations and the Occupancy report, so keep it accurate if the space is remeasured or subdivided.",
+          tips: "\"Building\" vs \"Open land\" determines which bucket a unit counts under on the Occupancy page — make sure it's set correctly for accurate occupancy percentages.\nYou can edit a unit's label, type, or area at any time; existing contracts that reference it keep whatever contracted area they recorded at signing, even if you later change the unit's own rentable area.",
+        },
+        documents: {
+          title: "Property documents",
+          body: "Files attached to the property itself rather than to any specific contract — title deeds, government permits, floor plans, and similar. Mark a document \"Sensitive\" to restrict who can see it.",
+          tips: "Only an Admin can see or download documents marked Sensitive; everyone else simply won't see them in this list.\nDeleting a document here is permanent and only available to an Admin.",
+        },
+      },
+    },
+    parties: {
+      list: {
+        title: "Tenants & Landlords",
+        body: "Every company or individual who appears on a contract, either as landlord or tenant. The same party can be the landlord on one contract and a completely unrelated role on another — this list isn't scoped per-property.",
+        tips: "A party can only be deleted if no contract references it; if it's in use, archive it instead — archived parties stay visible on their existing contracts.\nClick a contract tag in the \"Related contracts\" column to jump straight to that contract.",
+      },
+    },
+    contracts: {
+      list: {
+        title: "Contracts",
+        body: "Every lease contract, across every property. Draft contracts are still being set up and don't appear anywhere else in the system (no charges, no reminders) until an Admin activates them. Once active, most further changes go through the amendment workflow rather than direct edits.",
+        tips: "Export CSV downloads the full contract list in the currently selected display language.\nThe \"Version\" column increments every time an amendment is approved on that contract — it's a quick way to see how many changes a contract has been through.",
+      },
+      detail: {
+        title: "Contract",
+        body: "This page is the full record for one lease: its units, pricing, deposit, billing history, and every change ever made to it via an amendment. Use the tabs below to move between areas — the help panel updates to match whichever tab you're on.",
+        tips: "A draft contract can still be edited directly. Once it's Active, use \"Propose amendment\" for any change — direct edits are blocked so there's always an audit trail of who changed what and why.\nActivating a contract requires a signed lease document to be uploaded first (see the Documents tab).",
+        units: {
+          title: "Units",
+          body: "The specific rentable space(s) this contract covers, plus the contracted area recorded for each — which may differ slightly from the unit's own rentable area if the lease specifies a different figure. \"Effective start\" is when this unit's coverage under the contract begins, which matters when a unit is added partway through the contract's term (e.g. an expansion).",
+          tips: "Adding a unit to an active contract is done via an amendment, not directly — see the Amendments tab.\nA unit added by amendment still needs its own pricing stream to actually generate charges — adding the unit alone doesn't create any rent for it.",
+        },
+        pricing: {
+          title: "Pricing",
+          body: "Each pricing stream is one recurring charge — rent, management fee, base electricity, elevator, etc. — with its own calculation method and rate history. \"Per sqm\" streams multiply the rate by the combined contracted area of every unit linked to that stream, so link a stream only to the unit(s) its rate actually applies to; linking it to every unit when only one should be priced this way will overcharge.",
+          tips: "A single stream can carry multiple rate-schedule entries over time (e.g. Year 1-3 at one rate, Year 4-6 at a higher one) — this is how staged rent increases are modeled.\n\"Percentage escalation\" compounds automatically at each tier boundary; setting one up fully currently requires the bulk-import tool rather than this form.",
+        },
+        concessions: {
+          title: "Concessions",
+          body: "A concession is a temporary discount against one pricing stream (or all streams, if left unset) for a specific date range — most commonly a free-rent period at the start of a lease. A 100% discount fully waives the charge for that window.",
+          tips: "Concessions only apply to charges generated after they're added — if charges already exist for the discounted period, you may need to regenerate or manually adjust them.",
+        },
+        deposit: {
+          title: "Deposit",
+          body: "Deposit terms record how much deposit is required and from when; the transaction ledger below records what's actually been received, refunded, deducted, or transferred to rent. The running \"Deposit balance\" is what the tenant currently has on file with you — compare it against the required amount to spot a shortfall.",
+          tips: "A deposit shortfall reminder fires automatically whenever the ledger balance is below the required amount for an active contract.\n\"Formula\" deposit terms (e.g. \"2x monthly rent\") are descriptive only — the system doesn't auto-calculate the yuan amount from the formula, so track the actual required figure separately if you use this option.",
+        },
+        statement: {
+          title: "Monthly statement",
+          body: "A month-by-month reconciliation: what was owed coming into the period, what new charges were billed, any adjustments, what was collected, and what's still outstanding at the end. Use this to answer \"does this tenant owe us anything\" for any given month.",
+          tips: "Unallocated receipts (payments received but not yet matched to a specific charge) show separately so they don't get lost or double-counted.",
+        },
+        receipts: {
+          title: "Receipts",
+          body: "Payments received from the tenant. A receipt can be allocated to one or more specific charges, or left unallocated until you know which invoice it covers. Reversing a receipt undoes its allocations and requires a reason, for audit purposes.",
+          tips: "Recording a receipt doesn't automatically allocate it to a charge — use \"Allocate\" afterward to apply it against a specific outstanding charge.",
+        },
+        charges: {
+          title: "Charges",
+          body: "Generated bills for a given period, one per pricing stream. Use \"Generate charges\" to create the next period's charges based on the current rate schedule — it's safe to run more than once, since charges already generated for a period are skipped rather than duplicated.",
+          tips: "A charge's balance reflects receipts allocated to it; overdue charges (past their due date with an outstanding balance) drive the Overdue balance reminder.",
+        },
+        amendments: {
+          title: "Amendments",
+          body: "The only way to change an Active contract: propose a change, submit it for approval, and once approved it's applied to the live contract atomically. Every amendment needs a supporting document attached before it can be submitted — unless it's an internal correction — so there's always a paper trail behind every change to an active lease.",
+          tips: "Adding a new unit and adding a pricing stream for that same new unit can't be done in a single amendment — approve the unit first, then propose a second amendment for its pricing.\nAn Admin's own submissions are auto-approved; a Manager's submission stays pending until an Admin reviews it.",
+        },
+        documents: {
+          title: "Documents",
+          body: "Files attached to this specific contract — the signed lease itself, amendment backups, correspondence. A signed lease document is required before the contract can be activated.",
+          tips: "Mark a document \"Sensitive\" to restrict it to Admins only.",
+        },
+      },
+    },
+    reminders: {
+      title: "Reminders",
+      body: "An automatically generated list of things that need attention across all active contracts: an upcoming renewal deadline, a rate change about to take effect, a deposit that's short of what's required, or a balance that's overdue. Click any reminder to jump straight to the contract it concerns.",
+      tips: "Reminders are computed live from current contract data — nothing here is manually created or dismissed; resolve the underlying issue (top up the deposit, collect the payment) and the reminder disappears on its own.",
+    },
+    occupancy: {
+      title: "Occupancy",
+      body: "A portfolio-wide snapshot of how much of your building space and open land is currently leased versus available, as of a given date. Change the date field to see occupancy as of a past or future point in time.",
+      tips: "Occupancy is split into \"Building\" and \"Open land\" because they're usually priced and marketed very differently — check each unit's type on its Property page if a figure looks off.",
+    },
+    users: {
+      title: "Users",
+      body: "Manage who can log in and what they can do. Roles control feature access (Admin/Manager/Collector/Viewer); \"Assigned properties\" further restricts a non-Admin user to only see contracts and data tied to those specific properties.",
+      tips: "You can't deactivate your own account or change your own admin role, as a safeguard against accidental lockout.\nA user can only be deleted if they have no recorded activity (audit history) — deactivate them instead if they've ever done anything in the system.",
+    },
+    audit: {
+      title: "Audit Log",
+      body: "A read-only, complete history of every meaningful action taken in the system — who did what, when, and (where relevant) why. Use the filters to narrow down to a specific entity or date range.",
+      tips: "Expand a row to see its full detail payload and any reason text that was recorded with it (e.g. an amendment's approval reason).",
+    },
+    backups: {
+      title: "Backups",
+      body: "Snapshots of the entire database plus a manifest of the document files referenced at that point in time. Run one manually before a risky change, or rely on the scheduled ones.",
+      tips: "Restoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
+    },
+    field: {
+      rateBasis:
+        "How this rate is applied: per month/quarter/year charges a flat amount regardless of area; \"per sqm / month\" multiplies the rate by the combined contracted area of every unit linked to this stream.",
+      pricingTargetUnits:
+        "Only link the unit(s) this rate should actually apply to. Linking a per-sqm stream to more than one unit sums their areas together — correct only when one combined rate genuinely covers all of them.",
+      calculationMethod:
+        "Flat charges the same amount every period. Per sqm multiplies the rate by area. Percentage escalation compounds automatically at each rate-schedule tier boundary — configuring a full escalation schedule currently requires the bulk-import tool.",
+      amendmentType:
+        "A short label for what kind of change this is (e.g. \"rent_change\", \"renewal\"). Only the special value \"internal_correction\" skips the supporting-document requirement below.",
+      supportingDocument:
+        "Required to submit this amendment for approval, unless its type is \"internal_correction\". Attach the document that justifies the change — e.g. a signed amendment agreement or correspondence — uploading it via the Documents tab first if it isn't listed yet.",
+      depositRequirementType:
+        "\"Fixed\" records an exact yuan amount. \"Formula\" is a free-text description only (e.g. \"2x monthly rent\") — the system won't calculate the yuan figure for you, so also track the real required amount separately if you use this option.",
+      concessionDiscount:
+        "100% fully waives the charge for the selected date range (the usual case for a free-rent period). A lower percentage reduces the charge by that much for the same window.",
+      dueMonthOffset:
+        "How many months after the billing period the payment is due. 0 means due the same month as the period being billed; -1 means due the month before (e.g. rent for March is due in February); a positive number means due after.",
+      documentClassification:
+        "\"Sensitive\" restricts a document to Admins only — everyone else won't see it in the list at all. Use it for anything containing personal ID numbers, financial details, or other information that shouldn't be broadly visible.",
+      depositTxnType:
+        "\"Deposit received\" increases the balance; \"Refund\" and \"Deduction\" decrease it; \"Transfer to rent\" decreases the deposit balance and allocates that amount to a specific charge in one step.",
+      assignedProperties:
+        "Restricts this user to only see contracts, units, and documents tied to these specific properties. Admins always see everything and this field is ignored for them.",
+      userPermissions:
+        "These two toggles are independent of role: they control whether this user can download PDF contract summaries and export/print data, regardless of what their role otherwise allows.",
+    },
+  },
 };
 
 export type Translations = typeof en;

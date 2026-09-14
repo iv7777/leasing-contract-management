@@ -13,10 +13,12 @@ import {
   PieChartOutlined,
   AuditOutlined,
   CloudServerOutlined,
+  QuestionCircleOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../auth/AuthContext";
+import { HelpDrawer } from "../help/HelpDrawer";
 
 const { Header, Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -29,6 +31,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const items = [
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
@@ -92,9 +95,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
             {isMobile && <Typography.Text strong>{t("app.title")}</Typography.Text>}
           </Space>
           <Space>
+            <Button type="text" icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)} aria-label={t("help.drawerTitle")} />
             <Dropdown menu={languageMenu}>
               <Button type="text" icon={<GlobalOutlined />}>
-                {i18n.language?.startsWith("zh") ? "中文" : "EN"}
+                <span className="desktop-only">{i18n.language?.startsWith("zh") ? "中文" : "EN"}</span>
               </Button>
             </Dropdown>
             <Typography.Text className="desktop-only">{user?.name}</Typography.Text>
@@ -107,6 +111,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Drawer placement="left" open={drawerOpen} onClose={() => setDrawerOpen(false)} width={240} styles={{ body: { padding: 0 } }}>
           {nav}
         </Drawer>
+
+        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
 
         <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 72 : 24 }}>{children}</Content>
 

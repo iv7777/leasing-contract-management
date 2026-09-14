@@ -6,6 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { PartyDto } from "@lcm/shared";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { HelpIcon } from "../help/HelpIcon";
 
 interface ContractDto {
   id: number;
@@ -147,7 +148,15 @@ export default function ContractsPage() {
           <Form.Item name="dueDay" label={t("contracts.dueDay")} rules={[{ required: true }]} initialValue={25}>
             <InputNumber min={1} max={31} style={{ width: "100%" }} />
           </Form.Item>
-          <Form.Item name="dueMonthOffset" label={t("contracts.dueMonthOffset")} initialValue={-1}>
+          <Form.Item
+            name="dueMonthOffset"
+            label={
+              <>
+                {t("contracts.dueMonthOffset")} <HelpIcon field="dueMonthOffset" />
+              </>
+            }
+            initialValue={-1}
+          >
             <InputNumber min={-3} max={3} style={{ width: "100%" }} />
           </Form.Item>
         </Form>

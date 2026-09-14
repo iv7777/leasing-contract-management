@@ -25,6 +25,8 @@ import { useTranslation } from "react-i18next";
 import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useHelpTopic } from "../help/HelpContext";
+import { HelpIcon } from "../help/HelpIcon";
 
 interface ContractDto {
   id: number;
@@ -168,6 +170,8 @@ export default function ContractDetailPage() {
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number }[]>([]);
   const [documents, setDocuments] = useState<DocumentDto[]>([]);
+  const [activeTab, setActiveTab] = useState("units");
+  useHelpTopic(`contracts.detail.${activeTab}`);
 
   const [docModal, setDocModal] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -594,6 +598,8 @@ export default function ContractDetailPage() {
       </Descriptions>
 
       <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: "units",
@@ -966,7 +972,11 @@ export default function ContractDetailPage() {
           </Form.Item>
           <Form.Item
             name="classification"
-            label={t("properties.classification")}
+            label={
+              <>
+                {t("properties.classification")} <HelpIcon field="documentClassification" />
+              </>
+            }
             rules={[{ required: true }]}
             initialValue="ordinary"
           >
@@ -1032,10 +1042,27 @@ export default function ContractDetailPage() {
           <Form.Item name="label" label={t("common.name")}>
             <Input />
           </Form.Item>
-          <Form.Item name="contractUnitIds" label={t("contracts.units")} rules={[{ required: true }]}>
+          <Form.Item
+            name="contractUnitIds"
+            label={
+              <>
+                {t("contracts.units")} <HelpIcon field="pricingTargetUnits" />
+              </>
+            }
+            rules={[{ required: true }]}
+          >
             <Select mode="multiple" options={units.map((u) => ({ value: u.id, label: availableUnits.find((au) => au.id === u.unitId)?.unitLabel ?? u.unitId }))} />
           </Form.Item>
-          <Form.Item name="calculationMethod" label={t("contracts.calculationMethod")} rules={[{ required: true }]} initialValue="flat">
+          <Form.Item
+            name="calculationMethod"
+            label={
+              <>
+                {t("contracts.calculationMethod")} <HelpIcon field="calculationMethod" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="flat"
+          >
             <Select
               options={[
                 { value: "flat", label: t("contracts.flat") },
@@ -1044,7 +1071,16 @@ export default function ContractDetailPage() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="rateBasis" label={t("contracts.rateBasis")} rules={[{ required: true }]} initialValue="per_month">
+          <Form.Item
+            name="rateBasis"
+            label={
+              <>
+                {t("contracts.rateBasis")} <HelpIcon field="rateBasis" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="per_month"
+          >
             <Select options={rateBases.map((b) => ({ value: b, label: t(`contracts.${camel(b)}`) }))} />
           </Form.Item>
           <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]}>
@@ -1067,7 +1103,16 @@ export default function ContractDetailPage() {
           <Form.Item name="effectiveEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
             <Input placeholder="YYYY-MM-DD" />
           </Form.Item>
-          <Form.Item name="discountPercentage" label={t("contracts.discountPercentage")} rules={[{ required: true }]} initialValue={100}>
+          <Form.Item
+            name="discountPercentage"
+            label={
+              <>
+                {t("contracts.discountPercentage")} <HelpIcon field="concessionDiscount" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue={100}
+          >
             <InputNumber min={0} max={100} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="reason" label={t("contracts.reason")}>
@@ -1081,7 +1126,16 @@ export default function ContractDetailPage() {
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
             <Input placeholder="YYYY-MM-DD" />
           </Form.Item>
-          <Form.Item name="requirementType" label={t("contracts.calculationMethod")} rules={[{ required: true }]} initialValue="fixed">
+          <Form.Item
+            name="requirementType"
+            label={
+              <>
+                {t("contracts.calculationMethod")} <HelpIcon field="depositRequirementType" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="fixed"
+          >
             <Select
               options={[
                 { value: "fixed", label: t("contracts.fixedAmount") },
@@ -1171,7 +1225,16 @@ export default function ContractDetailPage() {
         cancelText={t("common.cancel")}
       >
         <Form form={depositTxnForm} layout="vertical" onValuesChange={(v) => v.transactionType && setDepositTxnType(v.transactionType)}>
-          <Form.Item name="transactionType" label={t("contracts.transactionType")} rules={[{ required: true }]} initialValue="receipt">
+          <Form.Item
+            name="transactionType"
+            label={
+              <>
+                {t("contracts.transactionType")} <HelpIcon field="depositTxnType" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="receipt"
+          >
             <Select
               options={[
                 { value: "receipt", label: t("contracts.depositReceipt") },
@@ -1222,7 +1285,16 @@ export default function ContractDetailPage() {
             if (v.amendStreamTargetType) setAmendmentStreamTargetType(v.amendStreamTargetType);
           }}
         >
-          <Form.Item name="type" label={t("common.name")} rules={[{ required: true }]} initialValue="rent_change">
+          <Form.Item
+            name="type"
+            label={
+              <>
+                {t("common.name")} <HelpIcon field="amendmentType" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="rent_change"
+          >
             <Input />
           </Form.Item>
           <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true }]}>
