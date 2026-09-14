@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
+    "reset-password": "tsx src/db/resetPassword.ts",
     "backup": "tsx src/jobs/backup.ts",
     "pretest": "cd .. && npm run build --workspace=shared",
     "test": "tsx --test src/**/*.test.ts"
