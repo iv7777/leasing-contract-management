@@ -104,6 +104,10 @@ const unitSchema = z.object({
   // rentableAreaSqm when omitted. For the single-unit `unit` field, the
   // top-level `contractedAreaSqm` is used instead when this is unset.
   contractedAreaSqm: decimalString.optional(),
+  // Optional per-unit override for when this specific space's coverage
+  // starts later than the contract's own termStart (e.g. space added
+  // partway through an existing lease's term). Falls back to termStart.
+  effectiveStart: z.string().optional(),
 });
 
 const importSchema = z
@@ -134,7 +138,13 @@ const importSchema = z
     }),
     pricingStreams: z.array(pricingStreamSchema).min(1),
     concessions: z.array(concessionSchema).default([]),
+    // A contract can carry more than one deposit requirement — e.g. the
+    // original committed area's deposit plus a separately-negotiated (or
+    // waived) deposit for space added later. `depositTerms` (singular)
+    // stays for the common one-deposit case; `depositTermsList` covers more
+    // than one without disturbing any existing single-deposit import file.
     depositTerms: depositTermsSchema.optional(),
+    depositTermsList: z.array(depositTermsSchema).optional(),
     sourceDocument: z.object({ path: z.string(), docType: z.string().default("signed_lease"), classification: z.enum(["ordinary", "sensitive"]).default("ordinary") }).optional(),
   })
   .refine((data) => !!data.unit !== !!data.units, {
@@ -234,7 +244,7 @@ function main() {
     db.insert(billingRules).values({ contractId: contract.id, ...data.billingRules }).run();
 
     const contractUnitsCreated = unitsInput.map((unitInput) => {
-      const { contractedAreaSqm, ...unitFields } = unitInput;
+      const { contractedAreaSqm, effectiveStart, ...unitFields } = unitInput;
       const unit = findOrCreateUnit(property.id, unitFields);
       // The top-level `contractedAreaSqm` is a single-unit concept (paired
       // with the singular `unit` field) — never applied per-entry here, or
@@ -246,7 +256,7 @@ function main() {
         .values({
           contractId: contract.id,
           unitId: unit.id,
-          effectiveStart: data.termStart,
+          effectiveStart: effectiveStart ?? data.termStart,
           contractedAreaSqm: resolvedContractedAreaSqm,
         })
         .returning()
@@ -291,8 +301,8 @@ function main() {
       console.log(`  + concession: ${fields.discountPercentage}% off ${streamLabel ?? "all streams"}, ${fields.effectiveStart}..${fields.effectiveEnd}`);
     }
 
-    if (data.depositTerms) {
-      db.insert(depositTerms).values({ contractId: contract.id, ...data.depositTerms }).run();
+    for (const dt of [...(data.depositTerms ? [data.depositTerms] : []), ...(data.depositTermsList ?? [])]) {
+      db.insert(depositTerms).values({ contractId: contract.id, ...dt }).run();
       console.log(`  + deposit terms recorded`);
     }
 
