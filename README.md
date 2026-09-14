@@ -2,6 +2,8 @@
 
 A web app for managing ~100 factory/property lease contracts across China, with an owner working remotely from the US.
 
+**Deploying to a VPS?** See [`docs/deployment-guide.html`](docs/deployment-guide.html) (open it in a browser) for a full Ubuntu 24.04 walkthrough, or run [`deploy/vps-deploy.sh`](deploy/vps-deploy.sh) for an automated root-based install/redeploy.
+
 ## Stack
 
 - **Backend**: Node.js / Express / TypeScript, SQLite via Drizzle ORM (`better-sqlite3`), session-based auth

@@ -1,0 +1,874 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Lease Manager Deployment</title>
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f6f5f0;
+    --surface: #ffffff;
+    --surface-tint: #edf1ea;
+    --ink: #1b201c;
+    --ink-soft: #57635b;
+    --ink-faint: #838f86;
+    --line: #dde3da;
+    --line-strong: #c7cfc3;
+    --accent: #1f5f4a;
+    --accent-ink: #0f3a2c;
+    --accent-soft: #dcece4;
+    --amber: #92640f;
+    --amber-soft: #f3e6cd;
+    --red: #9c3f38;
+    --red-soft: #f4dfdc;
+    --code-bg: #12211b;
+    --code-bg-2: #0d1a15;
+    --code-ink: #dcefe3;
+    --code-ink-soft: #8fae9d;
+    --code-accent: #7fd9ab;
+    --shadow: 0 1px 2px rgba(20, 30, 24, 0.06), 0 6px 20px rgba(20, 30, 24, 0.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #10130f;
+      --surface: #171b16;
+      --surface-tint: #1c2318;
+      --ink: #e9ede6;
+      --ink-soft: #a9b3a6;
+      --ink-faint: #74806f;
+      --line: #2a322a;
+      --line-strong: #3a4438;
+      --accent: #5cbe93;
+      --accent-ink: #bfeed6;
+      --accent-soft: #1d3327;
+      --amber: #dcae5a;
+      --amber-soft: #3a2f19;
+      --red: #e19187;
+      --red-soft: #3c221f;
+      --code-bg: #0b140f;
+      --code-bg-2: #08100c;
+      --code-ink: #d7ecdd;
+      --code-ink-soft: #7f9c8b;
+      --code-accent: #7fd9ab;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #10130f;
+    --surface: #171b16;
+    --surface-tint: #1c2318;
+    --ink: #e9ede6;
+    --ink-soft: #a9b3a6;
+    --ink-faint: #74806f;
+    --line: #2a322a;
+    --line-strong: #3a4438;
+    --accent: #5cbe93;
+    --accent-ink: #bfeed6;
+    --accent-soft: #1d3327;
+    --amber: #dcae5a;
+    --amber-soft: #3a2f19;
+    --red: #e19187;
+    --red-soft: #3c221f;
+    --code-bg: #0b140f;
+    --code-bg-2: #08100c;
+    --code-ink: #d7ecdd;
+    --code-ink-soft: #7f9c8b;
+    --code-accent: #7fd9ab;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    padding-inline: 20px;
+  }
+  h1, h2, h3, h4 { font-family: "Archivo", "Source Sans 3", sans-serif; text-wrap: balance; color: var(--ink); }
+  a { color: var(--accent-ink); }
+  code, pre, kbd { font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace; }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 780px);
+    gap: 48px;
+    padding-block: 40px 96px;
+  }
+  @media (max-width: 980px) {
+    .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+    .toc { display: none; }
+    .mobile-toc { display: block !important; }
+  }
+
+  /* ---------- Sidebar TOC ---------- */
+  .toc {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+  .toc-eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; border-left: 1px solid var(--line); }
+  .toc li { counter-increment: toc; }
+  .toc a {
+    display: block;
+    padding: 6px 0 6px 16px;
+    margin-left: -1px;
+    border-left: 2px solid transparent;
+    color: var(--ink-soft);
+    text-decoration: none;
+    font-size: 13.5px;
+    line-height: 1.35;
+  }
+  .toc a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  .toc a.done { color: var(--accent-ink); }
+  .toc a.done::after { content: " ✓"; color: var(--accent); }
+  .toc-sep { margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; }
+
+  .mobile-toc { display: none; margin-bottom: 8px; }
+  .mobile-toc select {
+    width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--ink); font: inherit; font-size: 14px;
+  }
+
+  /* ---------- Header ---------- */
+  header.hero { max-width: 780px; }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent-ink); background: var(--accent-soft);
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 18px;
+  }
+  h1 { font-size: clamp(28px, 4vw, 38px); font-weight: 800; margin: 0 0 12px; letter-spacing: -0.01em; }
+  .lede { font-size: 17.5px; color: var(--ink-soft); max-width: 62ch; margin: 0 0 28px; }
+  .stack-facts {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 36px;
+  }
+  .fact {
+    font-size: 13px; font-weight: 500; color: var(--ink-soft);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 12px; font-family: "IBM Plex Mono", monospace;
+  }
+
+  /* ---------- Architecture diagram ---------- */
+  .diagram {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 28px 24px; margin-bottom: 40px; box-shadow: var(--shadow);
+  }
+  .diagram-row { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+  .dbox {
+    background: var(--surface-tint); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; font-size: 13.5px; line-height: 1.4; min-width: 140px; flex: 1;
+  }
+  .dbox strong { display: block; font-family: "Archivo", sans-serif; font-size: 14px; margin-bottom: 3px; }
+  .dbox.accent { background: var(--accent-soft); border-color: var(--accent); }
+  .dbox .path { display: block; margin-top: 5px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-soft); word-break: break-all; }
+  .darrow { display: flex; align-items: center; justify-content: center; padding: 0 10px; color: var(--ink-faint); font-size: 20px; flex: 0 0 auto; }
+  .dcol { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 140px; }
+  .dside {
+    margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .dside .dbox { flex: 1 1 200px; background: var(--paper); font-size: 12.5px; }
+  @media (max-width: 640px) {
+    .diagram-row { flex-direction: column; }
+    .darrow { transform: rotate(90deg); padding: 4px 0; }
+  }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 56px; scroll-margin-top: 20px; }
+  .step-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .step-num {
+    font-family: "Archivo", sans-serif; font-weight: 800; font-size: 15px; color: var(--accent-ink);
+    background: var(--accent-soft); border-radius: 8px; padding: 3px 10px; flex: 0 0 auto;
+  }
+  h2 { font-size: 23px; font-weight: 700; margin: 0; }
+  h3 { font-size: 17px; font-weight: 700; margin: 28px 0 10px; }
+  section > .step-body { padding-left: 0; }
+  p { margin: 0 0 14px; }
+  ul, ol.plain { margin: 0 0 14px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+
+  /* ---------- Callouts ---------- */
+  .callout {
+    border-radius: 10px; padding: 14px 16px; margin: 18px 0; font-size: 14.5px;
+    border: 1px solid var(--line); display: flex; gap: 10px;
+  }
+  .callout .icon { flex: 0 0 auto; font-size: 15px; line-height: 1.5; }
+  .callout.note { background: var(--surface-tint); }
+  .callout.warn { background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 35%, var(--line)); }
+  .callout.danger { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 35%, var(--line)); }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout strong { display: block; margin-bottom: 2px; font-family: "Archivo", sans-serif; font-size: 13px; letter-spacing: 0.02em; }
+  .callout.warn strong { color: var(--amber); }
+  .callout.danger strong { color: var(--red); }
+  .callout.note strong { color: var(--accent-ink); }
+
+  /* ---------- Terminal / code blocks ---------- */
+  .term { margin: 16px 0 22px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+  .term-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--code-bg-2); padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .term-tag {
+    font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 500;
+    color: var(--code-ink-soft); display: flex; align-items: center; gap: 7px;
+  }
+  .term-tag .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--code-accent); flex: 0 0 auto; }
+  .term-tag.root .dot { background: #e19187; }
+  .term-tag.file .dot { background: #dcae5a; }
+  .copy-btn {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--code-ink-soft);
+    background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+    padding: 4px 9px; cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--code-ink); border-color: rgba(255,255,255,0.25); }
+  .copy-btn:focus-visible { outline: 2px solid var(--code-accent); outline-offset: 1px; }
+  pre {
+    margin: 0; padding: 16px 18px; background: var(--code-bg); color: var(--code-ink);
+    overflow-x: auto; font-size: 13.3px; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  .term.compact pre { padding: 10px 14px; font-size: 13px; }
+  code.inline {
+    background: var(--surface-tint); border: 1px solid var(--line); border-radius: 5px;
+    padding: 1.5px 6px; font-size: 0.88em; color: var(--accent-ink);
+  }
+
+  /* ---------- Tables ---------- */
+  .twrap { overflow-x: auto; margin: 16px 0 22px; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.8px; background: var(--surface); }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th { background: var(--surface-tint); font-family: "Archivo", sans-serif; font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-soft); }
+  tbody tr:last-child td { border-bottom: none; }
+  td code.inline, th code.inline { white-space: nowrap; }
+  .num-col { font-variant-numeric: tabular-nums; }
+
+  /* ---------- Checklist ---------- */
+  .checklist { list-style: none; margin: 16px 0; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .checklist li { margin: 0; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist label { display: flex; align-items: flex-start; gap: 10px; padding: 11px 14px; cursor: pointer; font-size: 14.5px; }
+  .checklist input[type="checkbox"] { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+  .checklist label:has(input:checked) { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+
+  /* ---------- Pills / badges ---------- */
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-tint); color: var(--ink-soft); border: 1px solid var(--line); }
+  .pill.accent { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+
+  footer { max-width: 780px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 13px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .copy-btn { transition: color 0.15s, border-color 0.15s; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Table of contents">
+    <p class="toc-eyebrow">On this page</p>
+    <ol id="toc-list">
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#prereqs">Prerequisites</a></li>
+      <li><a href="#s1">1. Harden the server</a></li>
+      <li><a href="#s2">2. Install Node.js</a></li>
+      <li><a href="#s3">3. Create the app user</a></li>
+      <li><a href="#s4">4. Get the code</a></li>
+      <li><a href="#s5">5. Install &amp; build</a></li>
+      <li><a href="#s6">6. Configure the environment</a></li>
+      <li><a href="#s7">7. Initialize the database</a></li>
+      <li><a href="#s8">8. Run it with systemd</a></li>
+      <li><a href="#s9">9. Nginx</a></li>
+      <li><a href="#s10">10. TLS with Let's Encrypt</a></li>
+      <li><a href="#s11">11. Lock down the firewall</a></li>
+      <li><a href="#s12">12. Backups</a></li>
+      <li><a href="#s13">13. Verify &amp; go live</a></li>
+    </ol>
+    <p class="toc-sep">Reference</p>
+    <ol>
+      <li><a href="#redeploy">Redeploying updates</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#security">Security checklist</a></li>
+      <li><a href="#envref">Environment variables</a></li>
+      <li><a href="#cheatsheet">Command cheat sheet</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <div class="mobile-toc">
+      <select id="mobile-toc-select" aria-label="Jump to section"></select>
+    </div>
+
+    <header class="hero" id="overview">
+      <span class="kicker">🐧 Ubuntu 24.04 LTS · self-hosted</span>
+      <h1>Deploying the Lease Manager</h1>
+      <p class="lede">A start-to-finish path from a bare Ubuntu 24.04 VPS to a running, backed-up, HTTPS lease-management app: hardened SSH, a dedicated service account, systemd for the API, Nginx for TLS and static hosting, and both the internal and off-site backup jobs the project brief calls for.</p>
+      <div class="stack-facts">
+        <span class="fact">Node.js 22 LTS</span>
+        <span class="fact">Express + SQLite (better-sqlite3)</span>
+        <span class="fact">React + Vite static build</span>
+        <span class="fact">systemd · Nginx · Let's Encrypt</span>
+      </div>
+
+      <div class="diagram">
+        <div class="diagram-row">
+          <div class="dbox"><strong>Browser</strong>Staff in China, owner in the US</div>
+          <div class="darrow">→</div>
+          <div class="dbox accent"><strong>Nginx :443</strong>TLS termination<span class="path">/etc/nginx/sites-available/lcm</span></div>
+          <div class="darrow">→</div>
+          <div class="dcol">
+            <div class="dbox"><strong>Static files</strong>the built React app<span class="path">/opt/lcm/app/web/dist</span></div>
+            <div class="dbox"><strong>Node :4000</strong>loopback only, proxied at <code class="inline">/api/*</code><span class="path">systemd unit: lcm.service</span></div>
+          </div>
+          <div class="darrow">→</div>
+          <div class="dbox"><strong>Local disk</strong>SQLite + uploaded documents<span class="path">/opt/lcm/{data,documents}</span></div>
+        </div>
+        <div class="dside">
+          <div class="dbox">⏱ <strong style="display:inline">cron inside the app</strong> writes a nightly snapshot to <code class="inline">/opt/lcm/backups</code></div>
+          <div class="dbox">🔁 <strong style="display:inline">certbot</strong> renews the TLS certificate automatically</div>
+          <div class="dbox">🛡 <strong style="display:inline">ufw</strong> only ever opens SSH, 80, and 443</div>
+        </div>
+      </div>
+    </header>
+
+    <section id="prereqs">
+      <h2>Prerequisites</h2>
+      <ul>
+        <li>An Ubuntu <strong>24.04 LTS</strong> VPS with root (or sudo) SSH access.</li>
+        <li>A domain or subdomain whose DNS <code class="inline">A</code> record already points at the VPS's public IP — check with <code class="inline">dig +short lease.yourcompany.com</code> before starting §10.</li>
+        <li>The app's git repository URL, and a way to authenticate to it (a personal access token for HTTPS, or an SSH deploy key).</li>
+        <li>About 20–30 minutes; most of it is <code class="inline">apt</code> waiting on you.</li>
+      </ul>
+      <div class="callout note">
+        <span class="icon">📌</span>
+        <div><strong>Placeholders used throughout</strong>
+        <p>Swap these for your own everywhere they appear: domain <code class="inline">lease.yourcompany.com</code>, deploy root <code class="inline">/opt/lcm</code>, service account <code class="inline">lcm</code>, systemd unit <code class="inline">lcm.service</code>, sudo login <code class="inline">deploy</code>.</p></div>
+      </div>
+    </section>
+
+    <section id="s1">
+      <div class="step-head"><span class="step-num">01</span><h2>Harden the server</h2></div>
+      <p>Start as <code class="inline">root</code> over SSH and create a sudo user you'll actually work as — don't run the app, or the rest of this guide, as root.</p>
+
+      <div class="term">
+        <div class="term-bar"><span class="term-tag root"><span class="dot"></span>root · first login</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>adduser deploy
+usermod -aG sudo deploy
+rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy</code></pre>
+      </div>
+
+      <div class="callout warn">
+        <span class="icon">⚠️</span>
+        <div><strong>Before you disable anything</strong>
+        <p>Open a <em>second</em> terminal now and confirm <code class="inline">ssh deploy@your-vps-ip</code> logs in with your key. Keep your original root session open until that succeeds — it's your recovery line if a step below goes wrong.</p></div>
+      </div>
+
+      <p>Once the second session confirms key-based login as <code class="inline">deploy</code> works, continue there for everything else in this guide.</p>
+
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo apt update && sudo apt full-upgrade -y
+sudo apt install -y ufw fail2ban unattended-upgrades
+sudo dpkg-reconfigure -f noninteractive unattended-upgrades
+sudo ufw allow OpenSSH
+sudo ufw enable</code></pre>
+      </div>
+
+      <p>Turn off root login and password auth over SSH — key-only from here on:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag file"><span class="dot"></span>/etc/ssh/sshd_config.d/60-hardening.conf</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no</code></pre>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo systemctl restart ssh</code></pre>
+      </div>
+      <div class="callout danger">
+        <span class="icon">⛔</span>
+        <div><strong>Don't close your root session yet</strong>
+        <p>Open a third terminal and confirm <code class="inline">ssh deploy@your-vps-ip</code> still works, and that <code class="inline">ssh root@your-vps-ip</code> is now refused. Only then close the original root session.</p></div>
+      </div>
+      <p><code class="inline">ufw</code> only allows SSH for now — ports 80/443 open in <a href="#s9">§9</a> once Nginx exists.</p>
+    </section>
+
+    <section id="s2">
+      <div class="step-head"><span class="step-num">02</span><h2>Install Node.js 22</h2></div>
+      <p>The app was built and tested against Node 22 LTS. Ubuntu 24.04's own <code class="inline">apt</code> repository ships an older Node, so use NodeSource's:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs git build-essential python3
+node -v   # v22.x
+npm -v</code></pre>
+      </div>
+      <p><code class="inline">build-essential</code> and <code class="inline">python3</code> are a safety net: the database driver (<code class="inline">better-sqlite3</code>) ships prebuilt binaries for standard x64 Ubuntu, but having a compiler toolchain on hand means an install never dead-ends if a prebuilt binary isn't available.</p>
+    </section>
+
+    <section id="s3">
+      <div class="step-head"><span class="step-num">03</span><h2>Create the app's service account</h2></div>
+      <p>The app runs as its own unprivileged, no-login system user — never as <code class="inline">deploy</code> or <code class="inline">root</code>.</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo useradd --system --home-dir /opt/lcm --create-home --shell /usr/sbin/nologin lcm
+sudo mkdir -p /opt/lcm/{app,data,documents,backups}
+sudo chown -R lcm:lcm /opt/lcm</code></pre>
+      </div>
+      <div class="twrap">
+        <table>
+          <thead><tr><th>Path</th><th>Holds</th></tr></thead>
+          <tbody>
+            <tr><td><code class="inline">/opt/lcm/app</code></td><td>The git checkout — code only. Replaced wholesale on every redeploy.</td></tr>
+            <tr><td><code class="inline">/opt/lcm/data</code></td><td>The SQLite database file (<code class="inline">app.db</code>). Never touched by <code class="inline">git pull</code>.</td></tr>
+            <tr><td><code class="inline">/opt/lcm/documents</code></td><td>Uploaded lease PDFs, floor plans, ID scans — classified ordinary/sensitive by the app itself.</td></tr>
+            <tr><td><code class="inline">/opt/lcm/backups</code></td><td>Nightly snapshot + document manifest (<a href="#s12">§12</a>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Keeping data outside <code class="inline">app</code> means a redeploy can never accidentally wipe a lease record or an uploaded document.</p>
+    </section>
+
+    <section id="s4">
+      <div class="step-head"><span class="step-num">04</span><h2>Get the code onto the server</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo -u lcm git clone YOUR_REPO_URL /opt/lcm/app
+cd /opt/lcm/app
+sudo -u lcm git checkout main   # or whichever branch you've decided is production-ready</code></pre>
+      </div>
+      <div class="callout note">
+        <span class="icon">🔑</span>
+        <div><strong>Private repository</strong>
+        <p>If the repo isn't public, clone with a token embedded in the URL (<code class="inline">https://&lt;token&gt;@github.com/owner/repo.git</code>) or set up an SSH deploy key for the <code class="inline">lcm</code> user first — either works, since the command above just needs whatever URL you'd normally clone with.</p></div>
+      </div>
+    </section>
+
+    <section id="s5">
+      <div class="step-head"><span class="step-num">05</span><h2>Install dependencies and build</h2></div>
+      <p>This is an npm-workspaces monorepo (<code class="inline">shared</code> / <code class="inline">server</code> / <code class="inline">web</code>) — one install at the root covers all three.</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app
+sudo -u lcm npm ci
+sudo -u lcm npm run build:shared
+sudo -u lcm npm run build:server
+sudo -u lcm npm run build:web</code></pre>
+      </div>
+      <p><code class="inline">npm ci</code> installs exactly what <code class="inline">package-lock.json</code> pins — the same dependency tree that was tested, not whatever <code class="inline">^</code>-ranges resolve to today. <code class="inline">build:server</code> compiles TypeScript to <code class="inline">server/dist</code>; <code class="inline">build:web</code> produces the static bundle at <code class="inline">web/dist</code> that Nginx will serve directly in <a href="#s9">§9</a>.</p>
+      <div class="callout note">
+        <span class="icon">💡</span>
+        <div><strong>If <code class="inline">npm ci</code> fails compiling <code class="inline">better-sqlite3</code></strong>
+        <p>Re-check §2's <code class="inline">build-essential</code>/<code class="inline">python3</code> install, then re-run <code class="inline">npm ci</code>.</p></div>
+      </div>
+    </section>
+
+    <section id="s6">
+      <div class="step-head"><span class="step-num">06</span><h2>Configure the environment</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo -u lcm cp /opt/lcm/app/server/.env.example /opt/lcm/app/server/.env
+openssl rand -base64 48   # copy this value for SESSION_SECRET below
+sudo -u lcm nano /opt/lcm/app/server/.env</code></pre>
+      </div>
+      <p>Replace its contents with production values:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag file"><span class="dot"></span>/opt/lcm/app/server/.env</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>NODE_ENV=production
+PORT=4000
+WEB_ORIGIN=https://lease.yourcompany.com
+SESSION_SECRET=&lt;paste the openssl output here&gt;
+DATABASE_PATH=/opt/lcm/data/app.db
+DOCUMENT_STORAGE_DIR=/opt/lcm/documents
+BACKUP_DIR=/opt/lcm/backups
+ENABLE_BACKUP_SCHEDULE=true
+SEED_ADMIN_EMAIL=you@yourcompany.com
+SEED_ADMIN_PASSWORD=&lt;a temporary strong password, changed in the next step&gt;</code></pre>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo -u lcm chmod 600 /opt/lcm/app/server/.env</code></pre>
+      </div>
+      <p>See the full <a href="#envref">environment variable reference</a> at the end of this guide for what every value does.</p>
+    </section>
+
+    <section id="s7">
+      <div class="step-head"><span class="step-num">07</span><h2>Initialize the database</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app/server
+sudo -u lcm npm run migrate
+sudo -u lcm npm run seed</code></pre>
+      </div>
+      <p>This creates the SQLite schema at <code class="inline">DATABASE_PATH</code> and seeds one Admin user from <code class="inline">SEED_ADMIN_EMAIL</code>/<code class="inline">SEED_ADMIN_PASSWORD</code>.</p>
+      <div class="callout danger">
+        <span class="icon">🔒</span>
+        <div><strong>There is no in-app "change password" yet</strong>
+        <p>Neither a self-service nor an admin-reset password flow exists in the UI at this stage of the build. The only way to change a password is this server-side command — run it now, before the app is reachable from the internet in <a href="#s9">§9</a>:</p>
+        <pre style="margin-top:10px"><code>sudo -u lcm npm run reset-password -- you@yourcompany.com "a different, strong password"</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="s8">
+      <div class="step-head"><span class="step-num">08</span><h2>Run it with systemd</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag file"><span class="dot"></span>/etc/systemd/system/lcm.service</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>[Unit]
+Description=Lease Contract Management API
+After=network.target
+
+[Service]
+Type=simple
+User=lcm
+Group=lcm
+WorkingDirectory=/opt/lcm/app/server
+EnvironmentFile=/opt/lcm/app/server/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lcm/data /opt/lcm/documents /opt/lcm/backups
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      </div>
+      <p>The <code class="inline">Protect*</code>/<code class="inline">ReadWritePaths</code> lines make the rest of the filesystem read-only to this process — it can only ever write inside the three data directories it actually needs.</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo systemctl daemon-reload
+sudo systemctl enable --now lcm.service
+sudo systemctl status lcm.service
+curl http://127.0.0.1:4000/api/health</code></pre>
+      </div>
+      <p>Expect <code class="inline">{"ok":true}</code>. Tail logs any time with <code class="inline">sudo journalctl -u lcm.service -f</code>.</p>
+    </section>
+
+    <section id="s9">
+      <div class="step-head"><span class="step-num">09</span><h2>Nginx: static files + API proxy</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo apt install -y nginx</code></pre>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag file"><span class="dot"></span>/etc/nginx/sites-available/lcm</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>server {
+    listen 80;
+    listen [::]:80;
+    server_name lease.yourcompany.com;
+
+    root /opt/lcm/app/web/dist;
+    index index.html;
+
+    # Slightly above the app's own 50MB document-upload limit —
+    # set this lower and uploads fail with a confusing 413.
+    client_max_body_size 60m;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        try_files $uri /index.html;
+    }
+}</code></pre>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo ln -s /etc/nginx/sites-available/lcm /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+sudo ufw allow 'Nginx Full'</code></pre>
+      </div>
+      <p>Visit <code class="inline">http://lease.yourcompany.com</code> — the app should load over plain HTTP. That's expected; TLS is next.</p>
+    </section>
+
+    <section id="s10">
+      <div class="step-head"><span class="step-num">10</span><h2>TLS with Let's Encrypt</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d lease.yourcompany.com</code></pre>
+      </div>
+      <p>Answer the prompts (an email for renewal notices, agree to the terms, choose to redirect HTTP → HTTPS). Certbot edits the Nginx file for you — adding the certificate paths and the redirect — and installs a systemd timer that renews automatically.</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo certbot renew --dry-run
+systemctl list-timers | grep certbot</code></pre>
+      </div>
+    </section>
+
+    <section id="s11">
+      <div class="step-head"><span class="step-num">11</span><h2>Lock down the firewall</h2></div>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo ufw status verbose</code></pre>
+      </div>
+      <p>You should see exactly <code class="inline">OpenSSH</code> and <code class="inline">Nginx Full</code> allowed, default-deny for everything else. Port 4000 should not appear anywhere in that list — Node is only ever reached through Nginx's proxy, and the firewall backs that up regardless of what interface it's bound to.</p>
+    </section>
+
+    <section id="s12">
+      <div class="step-head"><span class="step-num">12</span><h2>Backups</h2></div>
+      <p>With <code class="inline">ENABLE_BACKUP_SCHEDULE=true</code> (set in <a href="#s6">§6</a>), the running server itself writes a nightly snapshot — a consistent SQLite copy plus a manifest of every referenced document — to <code class="inline">BACKUP_DIR</code> at 02:15 Asia/Shanghai time, regardless of the VPS's own system clock. Verify it once by hand:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app/server
+sudo -u lcm npm run backup
+ls /opt/lcm/backups</code></pre>
+      </div>
+      <h3>Off-site copy (required before real data goes in)</h3>
+      <p>The project brief calls for an <strong>encrypted, off-site</strong> copy — separate from this VPS and outside China. <code class="inline">rclone</code> with a <code class="inline">crypt</code> remote works with almost any storage provider:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo apt install -y rclone
+rclone config   # create a remote for your chosen storage, then a
+                # second 'crypt' remote wrapping it for encryption</code></pre>
+      </div>
+      <p>Then sync nightly, shortly after the app's own 02:15 job finishes:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag file"><span class="dot"></span>crontab -e (as root or a backup user)</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>0 3 * * * rclone sync /opt/lcm/backups myremote-crypt:lcm-backups --min-age 30m</code></pre>
+      </div>
+      <div class="callout note">
+        <span class="icon">🗓️</span>
+        <div><strong>Retention isn't automatic yet</strong>
+        <p>The app doesn't prune old backup folders on its own. The brief's suggested policy is 30 daily copies plus 12 month-end copies — a simple starting cron for the daily part:</p>
+        <pre style="margin-top:10px"><code>0 4 * * * find /opt/lcm/backups -maxdepth 1 -mtime +30 -exec rm -rf {} \;</code></pre>
+        <p style="margin-top:8px">Exclude month-end folders from that if you want to keep the 12-month-end tier — a manual step for now.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="s13">
+      <div class="step-head"><span class="step-num">13</span><h2>Verify and go live</h2></div>
+      <ul class="checklist" id="verify-checklist" data-storage-key="lcm-deploy-verify">
+        <li><label><input type="checkbox" id="v1"><span><code class="inline">https://lease.yourcompany.com</code> loads the login screen with a valid certificate (padlock, no warnings)</span></label></li>
+        <li><label><input type="checkbox" id="v2"><span>Logged in with the password you set in <a href="#s7">§7</a> — not the seeded default</span></label></li>
+        <li><label><input type="checkbox" id="v3"><span>Created your real Manager / Collector / Viewer accounts with correct property assignments</span></label></li>
+        <li><label><input type="checkbox" id="v4"><span>Uploaded a test document and confirmed it downloads correctly</span></label></li>
+        <li><label><input type="checkbox" id="v5"><span>Switched the UI to Chinese and confirmed it renders correctly</span></label></li>
+        <li><label><input type="checkbox" id="v6"><span>Loaded the app from a China-based network to confirm reachability for staff (per the brief — verify both locations before rollout)</span></label></li>
+        <li><label><input type="checkbox" id="v7"><span>Ran the manual backup once and confirmed files appear under <code class="inline">/opt/lcm/backups</code></span></label></li>
+        <li><label><input type="checkbox" id="v8"><span>Confirmed the off-site sync ran (checked the rclone log or the remote destination)</span></label></li>
+        <li><label><input type="checkbox" id="v9"><span><code class="inline">sudo certbot renew --dry-run</code> succeeded</span></label></li>
+      </ul>
+    </section>
+
+    <section id="redeploy">
+      <h2>Redeploying updates</h2>
+      <p>Run this after every merge you want live. Migrations are safe to run every time — they no-op if there's nothing new to apply.</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app
+sudo -u lcm git pull
+sudo -u lcm npm ci
+sudo -u lcm npm run build:shared
+sudo -u lcm npm run build:server
+sudo -u lcm npm run build:web
+sudo -u lcm npm run migrate
+sudo systemctl restart lcm.service
+curl http://127.0.0.1:4000/api/health</code></pre>
+      </div>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <div class="twrap">
+        <table>
+          <thead><tr><th>Symptom</th><th>Likely cause &amp; fix</th></tr></thead>
+          <tbody>
+            <tr><td>Nginx shows <strong>502 Bad Gateway</strong></td><td><code class="inline">lcm.service</code> isn't running. Check <code class="inline">sudo systemctl status lcm.service</code> and <code class="inline">sudo journalctl -u lcm.service -e</code>.</td></tr>
+            <tr><td><code class="inline">curl 127.0.0.1:4000/api/health</code> refuses the connection</td><td>Check <code class="inline">PORT</code> in <code class="inline">.env</code> matches the port in Nginx's <code class="inline">proxy_pass</code>; check what's actually listening with <code class="inline">ss -tlnp | grep 4000</code>.</td></tr>
+            <tr><td>Document upload fails with <strong>413</strong></td><td><code class="inline">client_max_body_size</code> in the Nginx site file is lower than the app's own upload limit — raise it (§9 uses 60m).</td></tr>
+            <tr><td>Build fails: <em>Cannot find module '@lcm/shared'</em></td><td>Run <code class="inline">npm run build:shared</code> before building <code class="inline">server</code>/<code class="inline">web</code> — the workspace scripts self-heal this automatically as of the current codebase, but a very old checkout may not have that fix.</td></tr>
+            <tr><td>Certbot fails the HTTP-01 challenge</td><td>Either the DNS <code class="inline">A</code> record isn't pointed at this VPS yet, or <code class="inline">ufw</code> isn't allowing port 80 — confirm §9's <code class="inline">ufw allow 'Nginx Full'</code> ran.</td></tr>
+            <tr><td><code class="inline">better-sqlite3</code> fails to build</td><td><code class="inline">sudo apt install -y build-essential python3</code>, then re-run <code class="inline">npm ci</code>.</td></tr>
+            <tr><td>Locked out of SSH after hardening</td><td>Use your VPS provider's web/VNC console to log in as root and revert <code class="inline">/etc/ssh/sshd_config.d/60-hardening.conf</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="security">
+      <h2>Security checklist</h2>
+      <ul class="checklist" id="security-checklist" data-storage-key="lcm-deploy-security">
+        <li><label><input type="checkbox" id="sec1"><span>Root SSH login disabled, password auth disabled — key-only</span></label></li>
+        <li><label><input type="checkbox" id="sec2"><span><code class="inline">ufw</code> enabled, default-deny incoming, only OpenSSH + Nginx Full allowed</span></label></li>
+        <li><label><input type="checkbox" id="sec3"><span><code class="inline">fail2ban</code> running (<code class="inline">systemctl status fail2ban</code>)</span></label></li>
+        <li><label><input type="checkbox" id="sec4"><span><code class="inline">unattended-upgrades</code> enabled for security patches</span></label></li>
+        <li><label><input type="checkbox" id="sec5"><span><code class="inline">.env</code> is mode <code class="inline">600</code>, owned by <code class="inline">lcm</code>, never committed to git</span></label></li>
+        <li><label><input type="checkbox" id="sec6"><span><code class="inline">SESSION_SECRET</code> is a real random value, not left as a placeholder</span></label></li>
+        <li><label><input type="checkbox" id="sec7"><span>Seeded admin password changed via <code class="inline">reset-password</code> before exposing the server publicly</span></label></li>
+        <li><label><input type="checkbox" id="sec8"><span>TLS certificate valid and auto-renewal verified</span></label></li>
+        <li><label><input type="checkbox" id="sec9"><span>Off-site, encrypted backup destination configured and tested</span></label></li>
+      </ul>
+    </section>
+
+    <section id="envref">
+      <h2>Environment variable reference</h2>
+      <div class="twrap">
+        <table>
+          <thead><tr><th>Variable</th><th>Production value used above</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code class="inline">NODE_ENV</code></td><td><code class="inline">production</code></td><td>Enables secure (HTTPS-only) session cookies.</td></tr>
+            <tr><td><code class="inline">PORT</code></td><td><code class="inline">4000</code></td><td>Port the Node process listens on; Nginx proxies to it.</td></tr>
+            <tr><td><code class="inline">WEB_ORIGIN</code></td><td><code class="inline">https://lease.yourcompany.com</code></td><td>Allowed CORS origin. Same-origin in production via Nginx, but keep it correct for defense in depth.</td></tr>
+            <tr><td><code class="inline">SESSION_SECRET</code></td><td>output of <code class="inline">openssl rand -base64 48</code></td><td>Signs session cookies. Rotating it logs out every active session.</td></tr>
+            <tr><td><code class="inline">DATABASE_PATH</code></td><td><code class="inline">/opt/lcm/data/app.db</code></td><td>SQLite database file location.</td></tr>
+            <tr><td><code class="inline">DOCUMENT_STORAGE_DIR</code></td><td><code class="inline">/opt/lcm/documents</code></td><td>Private, non-web-served upload storage.</td></tr>
+            <tr><td><code class="inline">BACKUP_DIR</code></td><td><code class="inline">/opt/lcm/backups</code></td><td>Where nightly snapshots and manifests are written.</td></tr>
+            <tr><td><code class="inline">ENABLE_BACKUP_SCHEDULE</code></td><td><code class="inline">true</code></td><td>Runs the nightly 02:15 Asia/Shanghai backup job inside the server process.</td></tr>
+            <tr><td><code class="inline">SEED_ADMIN_EMAIL</code></td><td>your real email</td><td>Only read once, by <code class="inline">npm run seed</code>.</td></tr>
+            <tr><td><code class="inline">SEED_ADMIN_PASSWORD</code></td><td>a temporary strong password</td><td>Only read once, by <code class="inline">npm run seed</code> — change it immediately via <code class="inline">reset-password</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="cheatsheet">
+      <h2>Command cheat sheet</h2>
+      <div class="twrap">
+        <table>
+          <thead><tr><th>Task</th><th>Command</th></tr></thead>
+          <tbody>
+            <tr><td>Start / stop / restart</td><td><code class="inline">sudo systemctl restart lcm.service</code></td></tr>
+            <tr><td>Follow logs</td><td><code class="inline">sudo journalctl -u lcm.service -f</code></td></tr>
+            <tr><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo -u lcm npm run backup</code></td></tr>
+            <tr><td>Reset a password</td><td><code class="inline">sudo -u lcm npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
+            <tr><td>Test TLS renewal</td><td><code class="inline">sudo certbot renew --dry-run</code></td></tr>
+            <tr><td>Reload Nginx config</td><td><code class="inline">sudo nginx -t && sudo systemctl reload nginx</code></td></tr>
+            <tr><td>Firewall status</td><td><code class="inline">sudo ufw status verbose</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Built for the leasing-contract-management app on Ubuntu 24.04 LTS · Phases 1–4 of the project brief. A root-based, automated alternative to steps 2 onward is at <code class="inline">deploy/vps-deploy.sh</code> in this repository.
+    </footer>
+  </main>
+</div>
+
+<script>
+  (function () {
+    // Copy-to-clipboard on every terminal/code block.
+    document.querySelectorAll(".copy-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var pre = btn.closest(".term").querySelector("pre code");
+        var text = pre ? pre.textContent : "";
+        var done = function () {
+          var original = btn.textContent;
+          btn.textContent = "Copied";
+          setTimeout(function () { btn.textContent = original; }, 1400);
+        };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, done);
+          } else {
+            var ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            done();
+          }
+        } catch (e) {
+          done();
+        }
+      });
+    });
+
+    // Persist checklist state per viewer via localStorage.
+    document.querySelectorAll(".checklist[data-storage-key]").forEach(function (list) {
+      var key = list.getAttribute("data-storage-key");
+      var boxes = list.querySelectorAll('input[type="checkbox"]');
+      var saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(key) || "{}");
+      } catch (e) {
+        saved = {};
+      }
+      boxes.forEach(function (box) {
+        if (saved[box.id]) box.checked = true;
+        box.addEventListener("change", function () {
+          try {
+            var state = JSON.parse(localStorage.getItem(key) || "{}");
+            state[box.id] = box.checked;
+            localStorage.setItem(key, JSON.stringify(state));
+          } catch (e) {
+            /* private-mode or storage disabled: checklist just won't persist */
+          }
+        });
+      });
+    });
+
+    // Mobile "jump to section" select, mirroring the sidebar TOC.
+    var mobileSelect = document.getElementById("mobile-toc-select");
+    if (mobileSelect) {
+      document.querySelectorAll("#toc-list a, .toc-sep + ol a, .toc a").forEach(function () {});
+      var links = document.querySelectorAll(".toc a[href^='#']");
+      links.forEach(function (a) {
+        var opt = document.createElement("option");
+        opt.value = a.getAttribute("href");
+        opt.textContent = a.textContent;
+        mobileSelect.appendChild(opt);
+      });
+      mobileSelect.addEventListener("change", function () {
+        var target = document.querySelector(mobileSelect.value);
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+
+    // Mark sidebar sections visited (light progress affordance).
+    var sectionLinks = document.querySelectorAll(".toc a[href^='#']");
+    if ("IntersectionObserver" in window) {
+      var map = {};
+      sectionLinks.forEach(function (a) {
+        var id = a.getAttribute("href").slice(1);
+        var el = document.getElementById(id);
+        if (el) map[id] = a;
+      });
+      var seen = {};
+      try { seen = JSON.parse(localStorage.getItem("lcm-deploy-seen") || "{}"); } catch (e) {}
+      Object.keys(map).forEach(function (id) { if (seen[id]) map[id].classList.add("done"); });
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            var id = entry.target.id;
+            if (map[id]) map[id].classList.add("done");
+            seen[id] = true;
+            try { localStorage.setItem("lcm-deploy-seen", JSON.stringify(seen)); } catch (e) {}
+          }
+        });
+      }, { rootMargin: "-10% 0px -70% 0px" });
+      Object.keys(map).forEach(function (id) { observer.observe(document.getElementById(id)); });
+    }
+  })();
+</script>
+
+</body></html>
