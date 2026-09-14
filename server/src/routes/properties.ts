@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
+import fs from "node:fs";
 import { db } from "../db/client.js";
-import { properties, units, contractUnits, contracts } from "../db/schema.js";
+import { properties, units, contractUnits, contracts, documents as documentsTable } from "../db/schema.js";
 import { eq, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
@@ -102,6 +103,39 @@ propertiesRouter.patch("/:id", requireRole("admin"), (req, res) => {
   res.json({ property: updated });
 });
 
+propertiesRouter.delete("/:id", requireRole("admin"), (req, res) => {
+  const id = Number(req.params.id);
+  const existing = db.select().from(properties).where(eq(properties.id, id)).get();
+  if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Property not found." } });
+
+  const existingUnits = db.select().from(units).where(eq(units.propertyId, id)).all();
+  if (existingUnits.length > 0) {
+    return res.status(409).json({
+      error: {
+        code: "property_has_units",
+        message: `This property has ${existingUnits.length} unit(s) and cannot be deleted — remove them first, or archive the property instead.`,
+      },
+    });
+  }
+
+  const docs = db.select().from(documentsTable).where(eq(documentsTable.ownerType, "property")).all().filter((d) => d.ownerId === id);
+  db.transaction(() => {
+    for (const doc of docs) {
+      db.delete(documentsTable).where(eq(documentsTable.id, doc.id)).run();
+    }
+    db.delete(properties).where(eq(properties.id, id)).run();
+  });
+  for (const doc of docs) {
+    try {
+      fs.unlinkSync(doc.filePath);
+    } catch {
+      // file already gone — fine, the row is gone either way
+    }
+  }
+  recordAudit({ actorUserId: req.user!.id, action: "property_deleted", entityType: "property", entityId: id, details: { name: existing.name } });
+  res.status(204).send();
+});
+
 const createUnitSchema = z.object({
   unitLabel: z.string().min(1),
   unitType: z.enum(["building", "open_land"]),
@@ -155,4 +189,45 @@ propertiesRouter.patch("/:propertyId/units/:unitId", requireRole("admin", "manag
     .get();
   recordAudit({ actorUserId: req.user!.id, action: "unit_updated", entityType: "unit", entityId: unitId, details: { before: existing, after: updated } });
   res.json({ unit: updated });
+});
+
+propertiesRouter.delete("/:propertyId/units/:unitId", requireRole("admin"), (req, res) => {
+  const propertyId = Number(req.params.propertyId);
+  const unitId = Number(req.params.unitId);
+  const existing = db.select().from(units).where(eq(units.id, unitId)).get();
+  if (!existing || existing.propertyId !== propertyId) {
+    return res.status(404).json({ error: { code: "not_found", message: "Unit not found." } });
+  }
+
+  const referencingContracts = db
+    .select({ contractId: contractUnits.contractId })
+    .from(contractUnits)
+    .where(eq(contractUnits.unitId, unitId))
+    .all();
+  if (referencingContracts.length > 0) {
+    return res.status(409).json({
+      error: {
+        code: "unit_in_use",
+        message: `This unit is used by ${referencingContracts.length} contract(s) and cannot be deleted — mark it unavailable instead.`,
+        details: { contracts: referencingContracts },
+      },
+    });
+  }
+
+  const docs = db.select().from(documentsTable).where(eq(documentsTable.ownerType, "unit")).all().filter((d) => d.ownerId === unitId);
+  db.transaction(() => {
+    for (const doc of docs) {
+      db.delete(documentsTable).where(eq(documentsTable.id, doc.id)).run();
+    }
+    db.delete(units).where(eq(units.id, unitId)).run();
+  });
+  for (const doc of docs) {
+    try {
+      fs.unlinkSync(doc.filePath);
+    } catch {
+      // file already gone — fine, the row is gone either way
+    }
+  }
+  recordAudit({ actorUserId: req.user!.id, action: "unit_deleted", entityType: "unit", entityId: unitId, details: { unitLabel: existing.unitLabel } });
+  res.status(204).send();
 });

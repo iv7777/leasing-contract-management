@@ -13,6 +13,7 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -39,6 +40,13 @@ interface ContractDto {
   versionNumber: number;
   specialTerms: string | null;
 }
+interface BillingRulesDto {
+  dueDay: number;
+  dueMonthOffset: number;
+  latePenaltyEnabled: boolean;
+  latePenaltyDailyRatePermille: string | null;
+  latePenaltyCapFen: number | null;
+}
 interface ContractUnitDto {
   id: number;
   unitId: number;
@@ -60,6 +68,9 @@ interface RateScheduleDto {
   calculationMethod: string;
   amountOrRate: string;
   rateBasis: string;
+  escalationBase: string | null;
+  escalationPercentage: string | null;
+  escalationIntervalMonths: number | null;
 }
 interface ConcessionDto {
   id: number;
@@ -93,6 +104,7 @@ interface AmendmentDto {
   status: "draft" | "pending" | "approved" | "rejected" | "withdrawn";
   baseContractVersion: number;
   supportingDocumentId: number | null;
+  submittedBy: number | null;
 }
 interface ChargeBalanceDto {
   chargeId: number;
@@ -121,6 +133,7 @@ interface DepositTransactionDto {
   amountFen: number;
   transactionDate: string;
   reason: string;
+  reversalOfId: number | null;
 }
 interface DocumentDto {
   id: number;
@@ -153,8 +166,10 @@ export default function ContractDetailPage() {
   const { user } = useAuth();
 
   const [contract, setContract] = useState<ContractDto | null>(null);
+  const [billingRulesInfo, setBillingRulesInfo] = useState<BillingRulesDto | null>(null);
   const [units, setUnits] = useState<ContractUnitDto[]>([]);
   const [streams, setStreams] = useState<PricingStreamDto[]>([]);
+  const [streamUnitLinks, setStreamUnitLinks] = useState<{ pricingStreamId: number; contractUnitId: number }[]>([]);
   const [rates, setRates] = useState<RateScheduleDto[]>([]);
   const [concessions, setConcessions] = useState<ConcessionDto[]>([]);
   const [depositTerms, setDepositTerms] = useState<DepositTermsDto[]>([]);
@@ -192,6 +207,16 @@ export default function ContractDetailPage() {
   const [depositTxnType, setDepositTxnType] = useState("receipt");
   const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream">("rate_change");
   const [amendmentStreamTargetType, setAmendmentStreamTargetType] = useState("unit");
+  const [rejectAmendmentModal, setRejectAmendmentModal] = useState<{ amendmentId: number } | null>(null);
+  const [reverseDepositTxnModal, setReverseDepositTxnModal] = useState<{ depositTxnId: number } | null>(null);
+  const [latePenaltyModal, setLatePenaltyModal] = useState(false);
+  const [latePenaltyEnabled, setLatePenaltyEnabled] = useState(false);
+  const [editUnitModal, setEditUnitModal] = useState<ContractUnitDto | null>(null);
+  const [editStreamModal, setEditStreamModal] = useState<PricingStreamDto | null>(null);
+  const [rateModal, setRateModal] = useState<{ streamId: number; rate?: RateScheduleDto } | null>(null);
+  const [editConcessionModal, setEditConcessionModal] = useState<ConcessionDto | null>(null);
+  const [editDepositModal, setEditDepositModal] = useState<DepositTermsDto | null>(null);
+  const [editDocModal, setEditDocModal] = useState<DocumentDto | null>(null);
   const [unitForm] = Form.useForm();
   const [streamForm] = Form.useForm();
   const [concessionForm] = Form.useForm();
@@ -202,12 +227,23 @@ export default function ContractDetailPage() {
   const [allocateForm] = Form.useForm();
   const [reverseReceiptForm] = Form.useForm();
   const [depositTxnForm] = Form.useForm();
+  const [rejectAmendmentForm] = Form.useForm();
+  const [reverseDepositTxnForm] = Form.useForm();
+  const [latePenaltyForm] = Form.useForm();
+  const [editUnitForm] = Form.useForm();
+  const [editStreamForm] = Form.useForm();
+  const [rateForm] = Form.useForm();
+  const [editConcessionForm] = Form.useForm();
+  const [editDepositForm] = Form.useForm();
+  const [editDocForm] = Form.useForm();
 
   const load = () => {
     void api.get<any>(`/contracts/${id}`).then((r) => {
       setContract(r.contract);
+      setBillingRulesInfo(r.billingRules);
       setUnits(r.units);
       setStreams(r.pricingStreams);
+      setStreamUnitLinks(r.pricingStreamUnits);
       setRates(r.rateSchedule);
       setConcessions(r.concessions);
       setDepositTerms(r.depositTerms);
@@ -306,6 +342,134 @@ export default function ContractDetailPage() {
     }
   };
 
+  const onEditContractUnit = async () => {
+    if (!editUnitModal) return;
+    try {
+      const values = await editUnitForm.validateFields();
+      await api.patch(`/contracts/${id}/units/${editUnitModal.id}`, values);
+      setEditUnitModal(null);
+      editUnitForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteContractUnit = async (contractUnitId: number) => {
+    try {
+      await api.delete(`/contracts/${id}/units/${contractUnitId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onEditStream = async () => {
+    if (!editStreamModal) return;
+    try {
+      const values = await editStreamForm.validateFields();
+      await api.patch(`/contracts/${id}/pricing-streams/${editStreamModal.id}`, values);
+      setEditStreamModal(null);
+      editStreamForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteStream = async (streamId: number) => {
+    try {
+      await api.delete(`/contracts/${id}/pricing-streams/${streamId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onSaveRate = async () => {
+    if (!rateModal) return;
+    try {
+      const values = await rateForm.validateFields();
+      const payload = { ...values, amountOrRate: String(values.amountOrRate) };
+      if (rateModal.rate) {
+        await api.patch(`/contracts/${id}/pricing-streams/${rateModal.streamId}/rate-schedule/${rateModal.rate.id}`, payload);
+      } else {
+        await api.post(`/contracts/${id}/pricing-streams/${rateModal.streamId}/rate-schedule`, payload);
+      }
+      setRateModal(null);
+      rateForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteRate = async (streamId: number, rateId: number) => {
+    try {
+      await api.delete(`/contracts/${id}/pricing-streams/${streamId}/rate-schedule/${rateId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onEditConcession = async () => {
+    if (!editConcessionModal) return;
+    try {
+      const values = await editConcessionForm.validateFields();
+      await api.patch(`/contracts/${id}/concessions/${editConcessionModal.id}`, { ...values, discountPercentage: String(values.discountPercentage) });
+      setEditConcessionModal(null);
+      editConcessionForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteConcession = async (concessionId: number) => {
+    try {
+      await api.delete(`/contracts/${id}/concessions/${concessionId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onEditDepositTerms = async () => {
+    if (!editDepositModal) return;
+    try {
+      const { depositAmountYuan, ...values } = await editDepositForm.validateFields();
+      await api.patch(`/contracts/${id}/deposit-terms/${editDepositModal.id}`, {
+        ...values,
+        fixedAmountFen: depositAmountYuan !== undefined ? Math.round(depositAmountYuan * 100) : undefined,
+      });
+      setEditDepositModal(null);
+      editDepositForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteDepositTerms = async (depositTermId: number) => {
+    try {
+      await api.delete(`/contracts/${id}/deposit-terms/${depositTermId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
   const onGenerate = async () => {
     try {
       const values = await generateForm.validateFields();
@@ -363,6 +527,19 @@ export default function ContractDetailPage() {
     window.open(url, "_blank");
   };
 
+  const onEditDocument = async () => {
+    if (!editDocModal) return;
+    try {
+      const values = await editDocForm.validateFields();
+      await api.patch(`/documents/${editDocModal.id}`, values);
+      setEditDocModal(null);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
   const deleteDocument = async (docId: number) => {
     try {
       await api.delete(`/documents/${docId}`);
@@ -375,9 +552,28 @@ export default function ContractDetailPage() {
 
   const onEditContract = async () => {
     try {
-      const values = await editForm.validateFields();
-      await api.patch(`/contracts/${id}`, values);
+      const { dueDay, dueMonthOffset, ...contractValues } = await editForm.validateFields();
+      await Promise.all([
+        api.patch(`/contracts/${id}`, contractValues),
+        api.patch(`/contracts/${id}/billing-rules`, { dueDay, dueMonthOffset }),
+      ]);
       setEditModal(false);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onSaveLatePenalty = async () => {
+    try {
+      const values = await latePenaltyForm.validateFields();
+      await api.patch(`/contracts/${id}/late-penalty-rules`, {
+        ...values,
+        latePenaltyDailyRatePermille: values.latePenaltyDailyRatePermille !== undefined ? String(values.latePenaltyDailyRatePermille) : undefined,
+        latePenaltyCapFen: values.latePenaltyCapFen !== undefined ? Math.round(values.latePenaltyCapFen * 100) : undefined,
+      });
+      setLatePenaltyModal(false);
       message.success(t("common.save"));
       load();
     } catch (err) {
@@ -540,6 +736,38 @@ export default function ContractDetailPage() {
       handleError(err);
     }
   };
+  const withdrawAmendment = async (amendmentId: number) => {
+    try {
+      await api.post(`/amendments/${amendmentId}/withdraw`);
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+  const onRejectAmendment = async () => {
+    if (!rejectAmendmentModal) return;
+    try {
+      const values = await rejectAmendmentForm.validateFields();
+      await api.post(`/amendments/${rejectAmendmentModal.amendmentId}/reject`, values);
+      setRejectAmendmentModal(null);
+      rejectAmendmentForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+  const onReverseDepositTxn = async () => {
+    if (!reverseDepositTxnModal) return;
+    try {
+      const values = await reverseDepositTxnForm.validateFields();
+      await api.post(`/deposit-transactions/${reverseDepositTxnModal.depositTxnId}/reverse`, values);
+      setReverseDepositTxnModal(null);
+      reverseDepositTxnForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
 
   return (
     <div>
@@ -569,11 +797,26 @@ export default function ContractDetailPage() {
             <Button
               icon={<EditOutlined />}
               onClick={() => {
-                editForm.setFieldsValue(contract);
+                editForm.setFieldsValue({ ...contract, dueDay: billingRulesInfo?.dueDay, dueMonthOffset: billingRulesInfo?.dueMonthOffset });
                 setEditModal(true);
               }}
             >
               {t("contracts.editContract")}
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => {
+                latePenaltyForm.setFieldsValue({
+                  ...billingRulesInfo,
+                  latePenaltyCapFen: billingRulesInfo?.latePenaltyCapFen != null ? billingRulesInfo.latePenaltyCapFen / 100 : undefined,
+                });
+                setLatePenaltyEnabled(billingRulesInfo?.latePenaltyEnabled ?? false);
+                setLatePenaltyModal(true);
+              }}
+            >
+              {t("contracts.latePenaltyRules")}
             </Button>
           )}
           {isDraft && user?.role === "admin" && (
@@ -617,7 +860,32 @@ export default function ContractDetailPage() {
                   renderItem={(u) => {
                     const au = availableUnits.find((x) => x.id === u.unitId);
                     return (
-                      <List.Item>
+                      <List.Item
+                        actions={
+                          canEdit
+                            ? [
+                                <Button
+                                  key="edit"
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => {
+                                    editUnitForm.setFieldsValue(u);
+                                    setEditUnitModal(u);
+                                  }}
+                                />,
+                                <Popconfirm
+                                  key="delete"
+                                  title={t("contracts.confirmDeleteUnit")}
+                                  onConfirm={() => onDeleteContractUnit(u.id)}
+                                  okText={t("common.delete")}
+                                  cancelText={t("common.cancel")}
+                                >
+                                  <Button size="small" danger icon={<DeleteOutlined />} />
+                                </Popconfirm>,
+                              ]
+                            : []
+                        }
+                      >
                         {au ? <Link to={`/properties/${au.propertyId}`}>{au.unitLabel}</Link> : u.unitId} · {u.contractedAreaSqm} sqm ·{" "}
                         {u.effectiveStart}
                         {u.effectiveEnd ? ` → ${u.effectiveEnd}` : ""}
@@ -651,14 +919,81 @@ export default function ContractDetailPage() {
                       key: "method",
                       render: (_: unknown, s: PricingStreamDto) => {
                         const active = rates.filter((r) => r.pricingStreamId === s.id);
-                        return active.map((r) => (
-                          <div key={r.id}>
-                            {t(`contracts.${camel(r.calculationMethod)}`)} — {r.amountOrRate} ({t(`contracts.${camel(r.rateBasis)}`)}) [{r.effectiveStart}
-                            {r.effectiveEnd ? ` → ${r.effectiveEnd}` : ""}]
-                          </div>
-                        ));
+                        return (
+                          <>
+                            {active.map((r) => (
+                              <div key={r.id}>
+                                {t(`contracts.${camel(r.calculationMethod)}`)} — {r.amountOrRate} ({t(`contracts.${camel(r.rateBasis)}`)}) [{r.effectiveStart}
+                                {r.effectiveEnd ? ` → ${r.effectiveEnd}` : ""}]
+                                {canEdit && (
+                                  <>
+                                    {" "}
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      icon={<EditOutlined />}
+                                      onClick={() => {
+                                        rateForm.setFieldsValue(r);
+                                        setRateModal({ streamId: s.id, rate: r });
+                                      }}
+                                    />
+                                    <Popconfirm
+                                      title={t("contracts.confirmDeleteRateTier")}
+                                      onConfirm={() => onDeleteRate(s.id, r.id)}
+                                      okText={t("common.delete")}
+                                      cancelText={t("common.cancel")}
+                                    >
+                                      <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+                                    </Popconfirm>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                            {canEdit && (
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<PlusOutlined />}
+                                onClick={() => setRateModal({ streamId: s.id })}
+                              >
+                                {t("contracts.addRateTier")}
+                              </Button>
+                            )}
+                          </>
+                        );
                       },
                     },
+                    ...(canEdit
+                      ? [
+                          {
+                            title: t("common.actions"),
+                            key: "actions",
+                            render: (_: unknown, s: PricingStreamDto) => (
+                              <Space>
+                                <Button
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => {
+                                    editStreamForm.setFieldsValue({
+                                      ...s,
+                                      contractUnitIds: streamUnitLinks.filter((l) => l.pricingStreamId === s.id).map((l) => l.contractUnitId),
+                                    });
+                                    setEditStreamModal(s);
+                                  }}
+                                />
+                                <Popconfirm
+                                  title={t("contracts.confirmDeleteStream")}
+                                  onConfirm={() => onDeleteStream(s.id)}
+                                  okText={t("common.delete")}
+                                  cancelText={t("common.cancel")}
+                                >
+                                  <Button size="small" danger icon={<DeleteOutlined />} />
+                                </Popconfirm>
+                              </Space>
+                            ),
+                          },
+                        ]
+                      : []),
                   ]}
                 />
               </>
@@ -678,7 +1013,32 @@ export default function ContractDetailPage() {
                   bordered
                   dataSource={concessions}
                   renderItem={(c) => (
-                    <List.Item>
+                    <List.Item
+                      actions={
+                        canEdit
+                          ? [
+                              <Button
+                                key="edit"
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => {
+                                  editConcessionForm.setFieldsValue(c);
+                                  setEditConcessionModal(c);
+                                }}
+                              />,
+                              <Popconfirm
+                                key="delete"
+                                title={t("contracts.confirmDeleteConcession")}
+                                onConfirm={() => onDeleteConcession(c.id)}
+                                okText={t("common.delete")}
+                                cancelText={t("common.cancel")}
+                              >
+                                <Button size="small" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>,
+                            ]
+                          : []
+                      }
+                    >
                       {c.discountPercentage}% · {c.effectiveStart} → {c.effectiveEnd} · {c.reason}
                     </List.Item>
                   )}
@@ -701,7 +1061,35 @@ export default function ContractDetailPage() {
                   dataSource={depositTerms}
                   style={{ marginBottom: 16 }}
                   renderItem={(d) => (
-                    <List.Item>
+                    <List.Item
+                      actions={
+                        canEdit
+                          ? [
+                              <Button
+                                key="edit"
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => {
+                                  editDepositForm.setFieldsValue({
+                                    ...d,
+                                    depositAmountYuan: d.fixedAmountFen != null ? d.fixedAmountFen / 100 : undefined,
+                                  });
+                                  setEditDepositModal(d);
+                                }}
+                              />,
+                              <Popconfirm
+                                key="delete"
+                                title={t("contracts.confirmDeleteDepositTerms")}
+                                onConfirm={() => onDeleteDepositTerms(d.id)}
+                                okText={t("common.delete")}
+                                cancelText={t("common.cancel")}
+                              >
+                                <Button size="small" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>,
+                            ]
+                          : []
+                      }
+                    >
                       {d.requirementType === "fixed" ? yuan(d.fixedAmountFen ?? 0) : d.formulaBasis} · {t("common.active")}: {d.effectiveStart}
                     </List.Item>
                   )}
@@ -726,6 +1114,22 @@ export default function ContractDetailPage() {
                     { title: t("contracts.transactionType"), dataIndex: "transactionType" },
                     { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
                     { title: t("contracts.reason"), dataIndex: "reason" },
+                    {
+                      title: t("common.actions"),
+                      key: "actions",
+                      render: (_: unknown, txn: DepositTransactionDto) => {
+                        const isReversed = depositTxns.some((t) => t.reversalOfId === txn.id);
+                        if (isReversed) return <Tag color="red">{t("contracts.reversed")}</Tag>;
+                        if (txn.transactionType === "reversal") return null;
+                        return (
+                          user?.role === "admin" && (
+                            <Button size="small" danger onClick={() => setReverseDepositTxnModal({ depositTxnId: txn.id })}>
+                              {t("contracts.reverse")}
+                            </Button>
+                          )
+                        );
+                      },
+                    },
                   ]}
                 />
               </>
@@ -871,6 +1275,16 @@ export default function ContractDetailPage() {
                             {t("contracts.approve")}
                           </Button>
                         ),
+                        a.status === "pending" && user?.role === "admin" && (
+                          <Button key="reject" size="small" danger onClick={() => setRejectAmendmentModal({ amendmentId: a.id })}>
+                            {t("contracts.reject")}
+                          </Button>
+                        ),
+                        (a.status === "draft" || a.status === "pending") && (user?.role === "admin" || a.submittedBy === user?.id) && (
+                          <Button key="withdraw" size="small" onClick={() => withdrawAmendment(a.id)}>
+                            {t("contracts.withdraw")}
+                          </Button>
+                        ),
                       ].filter(Boolean)}
                     >
                       <Space direction="vertical" size={0}>
@@ -906,6 +1320,19 @@ export default function ContractDetailPage() {
                         <Button key="dl" type="link" icon={<DownloadOutlined />} onClick={() => downloadDocument(d.id)}>
                           {t("properties.download")}
                         </Button>,
+                        ...(user?.role === "admin" || user?.role === "manager"
+                          ? [
+                              <Button
+                                key="edit"
+                                type="link"
+                                icon={<EditOutlined />}
+                                onClick={() => {
+                                  editDocForm.setFieldsValue(d);
+                                  setEditDocModal(d);
+                                }}
+                              />,
+                            ]
+                          : []),
                         ...(user?.role === "admin"
                           ? [
                               <Popconfirm
@@ -991,6 +1418,35 @@ export default function ContractDetailPage() {
       </Modal>
 
       <Modal
+        title={t("common.edit")}
+        open={!!editDocModal}
+        onCancel={() => setEditDocModal(null)}
+        onOk={onEditDocument}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editDocForm} layout="vertical">
+          <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: "signed_lease", label: t("contracts.signedLease") },
+                { value: "other", label: t("contracts.otherDocumentType") },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="classification" label={t("properties.classification")} rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: "ordinary", label: t("properties.ordinary") },
+                { value: "sensitive", label: t("properties.sensitive") },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
         title={t("contracts.editContract")}
         open={editModal}
         onCancel={() => setEditModal(false)}
@@ -1002,6 +1458,12 @@ export default function ContractDetailPage() {
           <Form.Item name="referenceNumber" label={t("contracts.reference")} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
+          <Form.Item name="landlordPartyId" label={t("contracts.landlord")} rules={[{ required: true }]}>
+            <Select showSearch optionFilterProp="label" options={parties.map((p) => ({ value: p.id, label: p.name }))} />
+          </Form.Item>
+          <Form.Item name="tenantPartyId" label={t("contracts.tenant")} rules={[{ required: true }]}>
+            <Select showSearch optionFilterProp="label" options={parties.map((p) => ({ value: p.id, label: p.name }))} />
+          </Form.Item>
           <Form.Item name="termStart" label={t("contracts.termStart")} rules={[{ required: true }]}>
             <Input placeholder="YYYY-MM-DD" />
           </Form.Item>
@@ -1011,9 +1473,54 @@ export default function ContractDetailPage() {
           <Form.Item name="renewalNoticeDays" label={t("contracts.renewalNoticeDays")}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
+          <Form.Item name="dueDay" label={t("contracts.dueDay")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={1} max={31} />
+          </Form.Item>
+          <Form.Item
+            name="dueMonthOffset"
+            label={
+              <>
+                {t("contracts.dueMonthOffset")} <HelpIcon field="dueMonthOffset" />
+              </>
+            }
+          >
+            <InputNumber style={{ width: "100%" }} min={-3} max={3} />
+          </Form.Item>
           <Form.Item name="specialTerms" label={t("contracts.specialTerms")}>
             <Input.TextArea rows={3} />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.latePenaltyRules")}
+        open={latePenaltyModal}
+        onCancel={() => setLatePenaltyModal(false)}
+        onOk={onSaveLatePenalty}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form
+          form={latePenaltyForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            if (v.latePenaltyEnabled !== undefined) setLatePenaltyEnabled(v.latePenaltyEnabled);
+          }}
+        >
+          <Form.Item name="latePenaltyEnabled" label={t("contracts.latePenaltyEnabled")} valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          {(latePenaltyEnabled || billingRulesInfo?.latePenaltyEnabled) && (
+            <>
+              <Form.Item name="latePenaltyDailyRatePermille" label={t("contracts.latePenaltyDailyRate")} rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} min={0} step={0.1} />
+              </Form.Item>
+              <Form.Item name="latePenaltyCapFen" label={t("contracts.latePenaltyCap")}>
+                <InputNumber style={{ width: "100%" }} min={0} />
+              </Form.Item>
+            </>
+          )}
         </Form>
       </Modal>
 
@@ -1027,6 +1534,31 @@ export default function ContractDetailPage() {
           </Form.Item>
           <Form.Item name="contractedAreaSqm" label={t("contracts.contractedArea")} rules={[{ required: true }]}>
             <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("common.edit")}
+        open={!!editUnitModal}
+        onCancel={() => setEditUnitModal(null)}
+        onOk={onEditContractUnit}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editUnitForm} layout="vertical">
+          <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="effectiveEnd" label={t("contracts.termEnd")}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="contractedAreaSqm" label={t("contracts.contractedArea")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="notes" label={t("contracts.reason")}>
+            <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
       </Modal>
@@ -1092,6 +1624,88 @@ export default function ContractDetailPage() {
         </Form>
       </Modal>
 
+      <Modal
+        title={t("common.edit")}
+        open={!!editStreamModal}
+        onCancel={() => setEditStreamModal(null)}
+        onOk={onEditStream}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+        width={560}
+      >
+        <Form form={editStreamForm} layout="vertical">
+          <Form.Item name="feeType" label={t("contracts.feeType")} rules={[{ required: true }]}>
+            <Select options={feeTypes.map((f) => ({ value: f, label: t(`contracts.${camel(f)}`) }))} />
+          </Form.Item>
+          <Form.Item name="label" label={t("common.name")}>
+            <Input />
+          </Form.Item>
+          <Form.Item
+            name="contractUnitIds"
+            label={
+              <>
+                {t("contracts.units")} <HelpIcon field="pricingTargetUnits" />
+              </>
+            }
+          >
+            <Select mode="multiple" options={units.map((u) => ({ value: u.id, label: availableUnits.find((au) => au.id === u.unitId)?.unitLabel ?? u.unitId }))} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={rateModal?.rate ? t("common.edit") : t("contracts.addRateTier")}
+        open={!!rateModal}
+        onCancel={() => setRateModal(null)}
+        onOk={onSaveRate}
+        okText={rateModal?.rate ? t("common.save") : t("common.create")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={rateForm} layout="vertical">
+          <Form.Item
+            name="calculationMethod"
+            label={
+              <>
+                {t("contracts.calculationMethod")} <HelpIcon field="calculationMethod" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="flat"
+          >
+            <Select
+              options={[
+                { value: "flat", label: t("contracts.flat") },
+                { value: "per_sqm", label: t("contracts.perSqm") },
+                { value: "percentage_escalation", label: t("contracts.percentageEscalation") },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="rateBasis"
+            label={
+              <>
+                {t("contracts.rateBasis")} <HelpIcon field="rateBasis" />
+              </>
+            }
+            rules={[{ required: true }]}
+            initialValue="per_month"
+          >
+            <Select options={rateBases.map((b) => ({ value: b, label: t(`contracts.${camel(b)}`) }))} />
+          </Form.Item>
+          <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="effectiveEnd" label={t("contracts.termEnd")}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
       <Modal title={t("contracts.addConcession")} open={concessionModal} onCancel={() => setConcessionModal(false)} onOk={onAddConcession} okText={t("common.create")} cancelText={t("common.cancel")}>
         <Form form={concessionForm} layout="vertical">
           <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
@@ -1121,6 +1735,42 @@ export default function ContractDetailPage() {
         </Form>
       </Modal>
 
+      <Modal
+        title={t("common.edit")}
+        open={!!editConcessionModal}
+        onCancel={() => setEditConcessionModal(null)}
+        onOk={onEditConcession}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editConcessionForm} layout="vertical">
+          <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
+            <Select allowClear placeholder="All streams" options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
+          </Form.Item>
+          <Form.Item name="effectiveStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="effectiveEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item
+            name="discountPercentage"
+            label={
+              <>
+                {t("contracts.discountPercentage")} <HelpIcon field="concessionDiscount" />
+              </>
+            }
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0} max={100} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="reason" label={t("contracts.reason")}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
       <Modal title={t("contracts.addDepositTerms")} open={depositModal} onCancel={() => setDepositModal(false)} onOk={onSetDeposit} okText={t("common.save")} cancelText={t("common.cancel")}>
         <Form form={depositForm} layout="vertical">
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
@@ -1135,6 +1785,44 @@ export default function ContractDetailPage() {
             }
             rules={[{ required: true }]}
             initialValue="fixed"
+          >
+            <Select
+              options={[
+                { value: "fixed", label: t("contracts.fixedAmount") },
+                { value: "formula", label: "Formula" },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="depositAmountYuan" label={t("contracts.fixedAmount")} tooltip="Enter yuan; stored as fen">
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item name="formulaBasis" label="Formula basis">
+            <Input placeholder="e.g. 2x monthly rent" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("common.edit")}
+        open={!!editDepositModal}
+        onCancel={() => setEditDepositModal(null)}
+        onOk={onEditDepositTerms}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editDepositForm} layout="vertical">
+          <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item
+            name="requirementType"
+            label={
+              <>
+                {t("contracts.calculationMethod")} <HelpIcon field="depositRequirementType" />
+              </>
+            }
+            rules={[{ required: true }]}
           >
             <Select
               options={[
@@ -1212,6 +1900,38 @@ export default function ContractDetailPage() {
         <Form form={reverseReceiptForm} layout="vertical">
           <Form.Item name="reason" label={t("contracts.reversalReason")} rules={[{ required: true }]}>
             <Input.TextArea rows={2} placeholder="e.g. check bounced" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.reject")}
+        open={!!rejectAmendmentModal}
+        onCancel={() => setRejectAmendmentModal(null)}
+        onOk={onRejectAmendment}
+        okText={t("contracts.reject")}
+        okButtonProps={{ danger: true }}
+        cancelText={t("common.cancel")}
+      >
+        <Form form={rejectAmendmentForm} layout="vertical">
+          <Form.Item name="reviewReason" label={t("contracts.reason")} rules={[{ required: true }]}>
+            <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.reverse")}
+        open={!!reverseDepositTxnModal}
+        onCancel={() => setReverseDepositTxnModal(null)}
+        onOk={onReverseDepositTxn}
+        okText={t("contracts.reverse")}
+        okButtonProps={{ danger: true }}
+        cancelText={t("common.cancel")}
+      >
+        <Form form={reverseDepositTxnForm} layout="vertical">
+          <Form.Item name="reason" label={t("contracts.reversalReason")} rules={[{ required: true }]}>
+            <Input.TextArea rows={2} />
           </Form.Item>
         </Form>
       </Modal>

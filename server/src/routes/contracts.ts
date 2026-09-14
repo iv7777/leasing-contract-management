@@ -16,6 +16,7 @@ import {
   receipts,
   depositTransactions,
   units,
+  parties,
   documents as documentsTable,
   amendments,
   contractVersions,
@@ -23,7 +24,7 @@ import {
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getContractPropertyIds, canAccessContract } from "../lib/contractScope.js";
-import { contractUnitBelongsToContract, pricingStreamBelongsToContract } from "../lib/ownership.js";
+import { contractUnitBelongsToContract, pricingStreamBelongsToContract, rateScheduleBelongsToStream } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
@@ -119,6 +120,8 @@ contractsRouter.get("/:id", (req, res) => {
 
 const updateContractSchema = z.object({
   referenceNumber: z.string().min(1).optional(),
+  landlordPartyId: z.number().optional(),
+  tenantPartyId: z.number().optional(),
   termStart: z.string().optional(),
   termEnd: z.string().optional(),
   renewalNoticeDays: z.number().optional(),
@@ -135,6 +138,12 @@ contractsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
 
   const parsed = updateContractSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid contract payload." } });
+
+  for (const partyId of [parsed.data.landlordPartyId, parsed.data.tenantPartyId]) {
+    if (partyId !== undefined && !db.select().from(parties).where(eq(parties.id, partyId)).get()) {
+      return res.status(400).json({ error: { code: "invalid_reference", message: `Party ${partyId} not found.` } });
+    }
+  }
 
   const updated = db
     .update(contracts)
@@ -245,6 +254,53 @@ contractsRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) =
   res.status(201).json({ contractUnit: inserted });
 });
 
+const updateContractUnitSchema = z.object({
+  effectiveStart: z.string().optional(),
+  effectiveEnd: z.string().nullable().optional(),
+  contractedAreaSqm: decimalString.optional(),
+  notes: z.string().nullable().optional(),
+});
+
+contractsRouter.patch("/:id/units/:contractUnitId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const contractUnitId = Number(req.params.contractUnitId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!contractUnitBelongsToContract(contractUnitId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Contract unit not found." } });
+  }
+
+  const parsed = updateContractUnitSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid contract unit payload." } });
+
+  const updated = db.update(contractUnits).set(parsed.data).where(eq(contractUnits.id, contractUnitId)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_updated", entityType: "contract", entityId: contractId });
+  res.json({ contractUnit: updated });
+});
+
+contractsRouter.delete("/:id/units/:contractUnitId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const contractUnitId = Number(req.params.contractUnitId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!contractUnitBelongsToContract(contractUnitId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Contract unit not found." } });
+  }
+
+  db.transaction(() => {
+    // A pricing stream can target this unit directly (pricing_stream_units);
+    // removing the unit from the contract also removes it from whatever it
+    // was individually targeted by — the stream itself is untouched and may
+    // still target other units.
+    db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.contractUnitId, contractUnitId)).run();
+    db.delete(contractUnits).where(eq(contractUnits.id, contractUnitId)).run();
+  });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_removed", entityType: "contract", entityId: contractId });
+  res.status(204).send();
+});
+
 const addPricingStreamSchema = z.object({
   feeType: z.enum(["rent", "management", "electricity_base", "water", "elevator", "other"]),
   targetType: z.enum(["unit", "group", "contract"]),
@@ -291,6 +347,157 @@ contractsRouter.post("/:id/pricing-streams", requireRole("admin", "manager"), (r
   res.status(201).json({ pricingStream: stream, rateSchedule: rate });
 });
 
+const updatePricingStreamSchema = z.object({
+  feeType: z.enum(["rent", "management", "electricity_base", "water", "elevator", "other"]).optional(),
+  targetType: z.enum(["unit", "group", "contract"]).optional(),
+  label: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  contractUnitIds: z.array(z.number()).optional(),
+});
+
+contractsRouter.patch("/:id/pricing-streams/:streamId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const streamId = Number(req.params.streamId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!pricingStreamBelongsToContract(streamId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Pricing stream not found." } });
+  }
+
+  const parsed = updatePricingStreamSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid pricing stream payload." } });
+
+  const { contractUnitIds, ...streamFields } = parsed.data;
+  if (contractUnitIds) {
+    const invalidUnitId = contractUnitIds.find((cuId) => !contractUnitBelongsToContract(cuId, contractId));
+    if (invalidUnitId !== undefined) {
+      return res.status(400).json({ error: { code: "invalid_reference", message: `Contract unit ${invalidUnitId} does not belong to this contract.` } });
+    }
+  }
+
+  const updated = db.transaction(() => {
+    const stream = db.update(pricingStreams).set(streamFields).where(eq(pricingStreams.id, streamId)).returning().get();
+    if (contractUnitIds) {
+      db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
+      for (const contractUnitId of contractUnitIds) {
+        db.insert(pricingStreamUnits).values({ pricingStreamId: streamId, contractUnitId }).run();
+      }
+    }
+    return stream;
+  });
+  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_updated", entityType: "contract", entityId: contractId });
+  res.json({ pricingStream: updated });
+});
+
+contractsRouter.delete("/:id/pricing-streams/:streamId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const streamId = Number(req.params.streamId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!pricingStreamBelongsToContract(streamId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Pricing stream not found." } });
+  }
+
+  // Never silently orphan a concession that specifically targets this stream,
+  // or destroy usage/charge activity — ask the caller to reassign/remove it
+  // first, the same way the whole-contract delete refuses on financial
+  // activity rather than guessing what to do with it.
+  const hasConcession = db.select().from(concessions).where(eq(concessions.pricingStreamId, streamId)).get();
+  if (hasConcession) {
+    return res.status(409).json({ error: { code: "has_dependents", message: "A concession targets this pricing stream — remove or reassign it first." } });
+  }
+  const hasUsage = db.select().from(usageEntries).where(eq(usageEntries.pricingStreamId, streamId)).get();
+  const hasCharges = db.select().from(charges).where(eq(charges.pricingStreamId, streamId)).get();
+  if (hasUsage || hasCharges) {
+    return res.status(409).json({ error: { code: "has_dependents", message: "This pricing stream has usage entries or charges recorded against it." } });
+  }
+
+  db.transaction(() => {
+    db.delete(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).run();
+    db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
+    db.delete(pricingStreams).where(eq(pricingStreams.id, streamId)).run();
+  });
+  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_removed", entityType: "contract", entityId: contractId });
+  res.status(204).send();
+});
+
+const rateScheduleTierSchema = z.object({
+  effectiveStart: z.string(),
+  effectiveEnd: z.string().optional(),
+  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation"]),
+  amountOrRate: decimalString,
+  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month"]),
+  escalationBase: z.enum(["initial", "previous"]).optional(),
+  escalationPercentage: decimalString.optional(),
+  escalationIntervalMonths: z.number().optional(),
+  notes: z.string().optional(),
+});
+
+contractsRouter.post("/:id/pricing-streams/:streamId/rate-schedule", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const streamId = Number(req.params.streamId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!pricingStreamBelongsToContract(streamId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Pricing stream not found." } });
+  }
+
+  const parsed = rateScheduleTierSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid rate schedule payload." } });
+
+  const inserted = db.insert(rateSchedule).values({ pricingStreamId: streamId, ...parsed.data }).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_added", entityType: "contract", entityId: contractId });
+  res.status(201).json({ rateSchedule: inserted });
+});
+
+contractsRouter.patch("/:id/pricing-streams/:streamId/rate-schedule/:rateId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const streamId = Number(req.params.streamId);
+  const rateId = Number(req.params.rateId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!pricingStreamBelongsToContract(streamId, contractId) || !rateScheduleBelongsToStream(rateId, streamId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Rate schedule entry not found." } });
+  }
+
+  // .partial() alone isn't enough for the nullable columns: an edit form
+  // re-submits a previously-null value as null, not as "the field was
+  // omitted", so those must accept null explicitly.
+  const updateRateScheduleTierSchema = rateScheduleTierSchema.partial().extend({
+    effectiveEnd: z.string().nullable().optional(),
+    escalationBase: z.enum(["initial", "previous"]).nullable().optional(),
+    escalationPercentage: decimalString.nullable().optional(),
+    escalationIntervalMonths: z.number().nullable().optional(),
+    notes: z.string().nullable().optional(),
+  });
+  const parsed = updateRateScheduleTierSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid rate schedule payload." } });
+
+  const updated = db.update(rateSchedule).set(parsed.data).where(eq(rateSchedule.id, rateId)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_updated", entityType: "contract", entityId: contractId });
+  res.json({ rateSchedule: updated });
+});
+
+contractsRouter.delete("/:id/pricing-streams/:streamId/rate-schedule/:rateId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const streamId = Number(req.params.streamId);
+  const rateId = Number(req.params.rateId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!pricingStreamBelongsToContract(streamId, contractId) || !rateScheduleBelongsToStream(rateId, streamId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Rate schedule entry not found." } });
+  }
+
+  db.delete(rateSchedule).where(eq(rateSchedule.id, rateId)).run();
+  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_removed", entityType: "contract", entityId: contractId });
+  res.status(204).send();
+});
+
 const addConcessionSchema = z.object({
   pricingStreamId: z.number().nullable(),
   effectiveStart: z.string(),
@@ -316,6 +523,52 @@ contractsRouter.post("/:id/concessions", requireRole("admin", "manager"), (req, 
   res.status(201).json({ concession: inserted });
 });
 
+function concessionBelongsToContract(concessionId: number, contractId: number): boolean {
+  const concession = db.select().from(concessions).where(eq(concessions.id, concessionId)).get();
+  return concession?.contractId === contractId;
+}
+
+// .partial() alone isn't enough for reason: an edit form re-submits a
+// previously-null value as null, not as "the field was omitted", so it must
+// accept null explicitly rather than only "string or absent".
+const updateConcessionSchema = addConcessionSchema.partial().extend({ reason: z.string().nullable().optional() });
+
+contractsRouter.patch("/:id/concessions/:concessionId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const concessionId = Number(req.params.concessionId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!concessionBelongsToContract(concessionId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Concession not found." } });
+  }
+
+  const parsed = updateConcessionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid concession payload." } });
+  if (parsed.data.pricingStreamId != null && !pricingStreamBelongsToContract(parsed.data.pricingStreamId, contractId)) {
+    return res.status(400).json({ error: { code: "invalid_reference", message: "Pricing stream does not belong to this contract." } });
+  }
+
+  const updated = db.update(concessions).set(parsed.data).where(eq(concessions.id, concessionId)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "concession_updated", entityType: "contract", entityId: contractId });
+  res.json({ concession: updated });
+});
+
+contractsRouter.delete("/:id/concessions/:concessionId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const concessionId = Number(req.params.concessionId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!concessionBelongsToContract(concessionId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Concession not found." } });
+  }
+
+  db.delete(concessions).where(eq(concessions.id, concessionId)).run();
+  recordAudit({ actorUserId: req.user!.id, action: "concession_removed", entityType: "contract", entityId: contractId });
+  res.status(204).send();
+});
+
 const depositTermsSchema = z.object({
   effectiveStart: z.string(),
   requirementType: z.enum(["fixed", "formula"]),
@@ -338,6 +591,60 @@ contractsRouter.post("/:id/deposit-terms", requireRole("admin", "manager"), (req
   const inserted = db.insert(depositTerms).values({ contractId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_set", entityType: "contract", entityId: contractId });
   res.status(201).json({ depositTerms: inserted });
+});
+
+function depositTermsBelongToContract(depositTermId: number, contractId: number): boolean {
+  const dt = db.select().from(depositTerms).where(eq(depositTerms.id, depositTermId)).get();
+  return dt?.contractId === contractId;
+}
+
+// General edit of the descriptive/amount fields, distinct from the
+// admin-only waiver-decision route below (waiverMet / waiverEvidenceDocumentId
+// stay reserved for that explicit, evidenced decision). Nullable, not just
+// optional, on every field but the two that are always required: an edit
+// form re-submits a previously-null value as null, not as "the field was
+// omitted".
+const updateDepositTermsSchema = z.object({
+  effectiveStart: z.string().optional(),
+  requirementType: z.enum(["fixed", "formula"]).optional(),
+  fixedAmountFen: z.number().nullable().optional(),
+  formulaBasis: z.string().nullable().optional(),
+  waiverConditionText: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+contractsRouter.patch("/:id/deposit-terms/:depositTermId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const depositTermId = Number(req.params.depositTermId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!depositTermsBelongToContract(depositTermId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Deposit terms not found." } });
+  }
+
+  const parsed = updateDepositTermsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid deposit terms payload." } });
+
+  const updated = db.update(depositTerms).set(parsed.data).where(eq(depositTerms.id, depositTermId)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_updated", entityType: "contract", entityId: contractId });
+  res.json({ depositTerms: updated });
+});
+
+contractsRouter.delete("/:id/deposit-terms/:depositTermId", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const depositTermId = Number(req.params.depositTermId);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+  if (!depositTermsBelongToContract(depositTermId, contractId)) {
+    return res.status(404).json({ error: { code: "not_found", message: "Deposit terms not found." } });
+  }
+
+  db.delete(depositTerms).where(eq(depositTerms.id, depositTermId)).run();
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_removed", entityType: "contract", entityId: contractId });
+  res.status(204).send();
 });
 
 /** Admin-only: a waiver condition that can't be determined from structured
@@ -365,6 +672,27 @@ contractsRouter.patch("/deposit-terms/:depositTermId/waiver-decision", requireRo
     reason: parsed.data.notes,
   });
   res.json({ depositTerms: updated });
+});
+
+const billingRulesSchema = z.object({
+  billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).optional(),
+  periodAnchorDay: z.number().optional(),
+  dueDay: z.number().optional(),
+  dueMonthOffset: z.number().optional(),
+});
+
+contractsRouter.patch("/:id/billing-rules", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.id);
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+
+  const parsed = billingRulesSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid billing rules payload." } });
+
+  const updated = db.update(billingRules).set(parsed.data).where(eq(billingRules.contractId, contractId)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: "billing_rules_updated", entityType: "contract", entityId: contractId });
+  res.json({ billingRules: updated });
 });
 
 const latePenaltySchema = z.object({

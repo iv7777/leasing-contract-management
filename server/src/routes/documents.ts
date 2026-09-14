@@ -137,6 +137,35 @@ documentsRouter.get("/:id/download", (req, res) => {
   res.sendFile(path.resolve(doc.filePath));
 });
 
+const updateDocumentSchema = z.object({
+  docType: z.string().min(1).optional(),
+  classification: z.enum(["ordinary", "sensitive"]).optional(),
+});
+
+documentsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
+  const id = Number(req.params.id);
+  const doc = db.select().from(documents).where(eq(documents.id, id)).get();
+  if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
+
+  const propertyId = ownerPropertyId(doc.ownerType, doc.ownerId);
+  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
+  }
+
+  const parsed = updateDocumentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document payload." } });
+
+  const updated = db.update(documents).set(parsed.data).where(eq(documents.id, id)).returning().get();
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "document_updated",
+    entityType: "document",
+    entityId: id,
+    details: { before: { docType: doc.docType, classification: doc.classification }, after: parsed.data },
+  });
+  res.json({ document: { ...updated, filePath: undefined } });
+});
+
 documentsRouter.delete("/:id", requireRole("admin"), (req, res) => {
   const id = Number(req.params.id);
   const doc = db.select().from(documents).where(eq(documents.id, id)).get();

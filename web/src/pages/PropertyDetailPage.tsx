@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Button,
   Card,
@@ -36,6 +36,7 @@ export default function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [property, setProperty] = useState<PropertyDto | null>(null);
   const [units, setUnits] = useState<UnitDto[]>([]);
   const [unitContracts, setUnitContracts] = useState<
@@ -52,6 +53,8 @@ export default function PropertyDetailPage() {
   const [editPropertyForm] = Form.useForm();
   const [editingUnit, setEditingUnit] = useState<UnitDto | null>(null);
   const [editUnitForm] = Form.useForm();
+  const [editDocModal, setEditDocModal] = useState<DocumentDto | null>(null);
+  const [editDocForm] = Form.useForm();
   const [activeTab, setActiveTab] = useState("units");
   useHelpTopic(`properties.detail.${activeTab}`);
 
@@ -129,6 +132,26 @@ export default function PropertyDetailPage() {
     }
   };
 
+  const onDeleteProperty = async () => {
+    try {
+      await api.delete(`/properties/${id}`);
+      message.success(t("common.deleted"));
+      navigate("/properties");
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  };
+
+  const onDeleteUnit = async (u: UnitDto) => {
+    try {
+      await api.delete(`/properties/${id}/units/${u.id}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  };
+
   const onUploadDocument = async () => {
     if (!pendingFile || uploadingDoc) return;
     setUploadingDoc(true);
@@ -161,6 +184,19 @@ export default function PropertyDetailPage() {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
+  };
+
+  const onEditDocument = async () => {
+    if (!editDocModal) return;
+    try {
+      const values = await editDocForm.validateFields();
+      await api.patch(`/documents/${editDocModal.id}`, values);
+      setEditDocModal(null);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
   };
 
   const deleteDocument = async (docId: number) => {
@@ -199,6 +235,16 @@ export default function PropertyDetailPage() {
               {t("common.edit")}
             </Button>
             <Button onClick={toggleArchived}>{property.archived ? t("common.unarchive") : t("common.archive")}</Button>
+            <Popconfirm
+              title={t("properties.confirmDelete")}
+              onConfirm={onDeleteProperty}
+              okText={t("common.delete")}
+              cancelText={t("common.cancel")}
+            >
+              <Button danger icon={<DeleteOutlined />}>
+                {t("common.delete")}
+              </Button>
+            </Popconfirm>
           </Space>
         )}
       </Space>
@@ -237,7 +283,18 @@ export default function PropertyDetailPage() {
                               <Button key="retire" size="small" onClick={() => toggleUnitRetired(u)}>
                                 {u.availability === "unavailable" ? t("common.unarchive") : t("common.archive")}
                               </Button>,
-                            ]
+                              isAdmin && (
+                                <Popconfirm
+                                  key="delete"
+                                  title={t("properties.confirmDeleteUnit")}
+                                  onConfirm={() => onDeleteUnit(u)}
+                                  okText={t("common.delete")}
+                                  cancelText={t("common.cancel")}
+                                >
+                                  <Button size="small" danger icon={<DeleteOutlined />} />
+                                </Popconfirm>
+                              ),
+                            ].filter(Boolean)
                           : []
                       }
                     >
@@ -285,6 +342,19 @@ export default function PropertyDetailPage() {
                         <Button key="dl" type="link" icon={<DownloadOutlined />} onClick={() => download(d.id)}>
                           {t("properties.download")}
                         </Button>,
+                        ...(canEdit
+                          ? [
+                              <Button
+                                key="edit"
+                                type="link"
+                                icon={<EditOutlined />}
+                                onClick={() => {
+                                  editDocForm.setFieldsValue(d);
+                                  setEditDocModal(d);
+                                }}
+                              />,
+                            ]
+                          : []),
                         ...(isAdmin
                           ? [
                               <Popconfirm
@@ -385,6 +455,30 @@ export default function PropertyDetailPage() {
             rules={[{ required: true }]}
             initialValue="ordinary"
           >
+            <Select
+              options={[
+                { value: "ordinary", label: t("properties.ordinary") },
+                { value: "sensitive", label: t("properties.sensitive") },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("common.edit")}
+        open={!!editDocModal}
+        onCancel={() => setEditDocModal(null)}
+        onOk={onEditDocument}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editDocForm} layout="vertical">
+          <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="classification" label={t("properties.classification")} rules={[{ required: true }]}>
             <Select
               options={[
                 { value: "ordinary", label: t("properties.ordinary") },
