@@ -33,9 +33,7 @@ function csvEscape(value: unknown): string {
   const s = String(value ?? "");
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
-function toCsv(rows: Record<string, unknown>[]): string {
-  if (rows.length === 0) return "";
-  const headers = Object.keys(rows[0]);
+function toCsv(headers: string[], rows: Record<string, unknown>[]): string {
   const lines = [headers.join(","), ...rows.map((r) => headers.map((h) => csvEscape(r[h])).join(","))];
   return lines.join("\n");
 }
@@ -150,6 +148,7 @@ exportsRouter.get("/contracts.csv", (req, res) => {
   const partyMap = new Map(db.select().from(parties).all().map((p) => [p.id, p.name]));
 
   const csv = toCsv(
+    [L.csvReferenceNumber, L.csvLandlord, L.csvTenant, L.csvTermStart, L.csvTermEnd, L.csvStatus, L.csvVersion],
     all.map((c) => ({
       [L.csvReferenceNumber]: c.referenceNumber,
       [L.csvLandlord]: partyMap.get(c.landlordPartyId) ?? "",
@@ -202,5 +201,11 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
   recordAudit({ actorUserId: req.user!.id, action: "contract_ledger_exported_csv", entityType: "contract", entityId: contractId });
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="contract-${contractId}-ledger.csv"`);
-  res.send("﻿" + toCsv(rows));
+  res.send(
+    "﻿" +
+      toCsv(
+        [L.csvServiceStart, L.csvServiceEnd, L.csvFeeType, L.csvDueDate, L.csvBilledYuan, L.csvAllocatedYuan, L.csvBalanceYuan, L.csvOverdueDays],
+        rows,
+      ),
+  );
 });
