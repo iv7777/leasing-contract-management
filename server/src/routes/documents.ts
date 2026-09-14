@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { documents, units } from "../db/schema.js";
+import { documents, units, contracts } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
@@ -135,4 +135,55 @@ documentsRouter.get("/:id/download", (req, res) => {
   recordAudit({ actorUserId: req.user!.id, action: "document_downloaded", entityType: "document", entityId: id });
   res.setHeader("Content-Type", doc.mimeType);
   res.sendFile(path.resolve(doc.filePath));
+});
+
+documentsRouter.delete("/:id", requireRole("admin"), (req, res) => {
+  const id = Number(req.params.id);
+  const doc = db.select().from(documents).where(eq(documents.id, id)).get();
+  if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
+
+  const propertyId = ownerPropertyId(doc.ownerType, doc.ownerId);
+  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
+  }
+
+  // The one invariant worth protecting: activation required a signed lease
+  // on file, so a contract that has left "draft" must never end up with
+  // zero. Everything else (duplicates, other doc types, drafts) is free to
+  // delete — there's no value in a blanket "keep at least one" rule that
+  // blocks cleaning up a mistaken upload just because it's currently the
+  // only file on record.
+  if (doc.ownerType === "contract" && doc.docType === "signed_lease") {
+    const contract = db.select().from(contracts).where(eq(contracts.id, doc.ownerId)).get();
+    if (contract && contract.status !== "draft") {
+      const remainingSignedLeases = db
+        .select()
+        .from(documents)
+        .all()
+        .filter((d) => d.ownerType === "contract" && d.ownerId === doc.ownerId && d.docType === "signed_lease" && d.id !== id);
+      if (remainingSignedLeases.length === 0) {
+        return res.status(409).json({
+          error: {
+            code: "last_signed_lease",
+            message: "This is the only signed lease on file for a contract that is no longer a draft — upload a replacement before deleting it.",
+          },
+        });
+      }
+    }
+  }
+
+  try {
+    fs.unlinkSync(doc.filePath);
+  } catch {
+    // file already gone — fine, we're deleting the row either way
+  }
+  db.delete(documents).where(eq(documents.id, id)).run();
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "document_deleted",
+    entityType: "document",
+    entityId: id,
+    details: { ownerType: doc.ownerType, ownerId: doc.ownerId, docType: doc.docType, checksumSha256: doc.checksumSha256 },
+  });
+  res.status(204).send();
 });

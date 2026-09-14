@@ -17,6 +17,9 @@ import {
   depositTransactions,
   units,
   documents as documentsTable,
+  amendments,
+  contractVersions,
+  usageEntries,
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getContractPropertyIds, canAccessContract } from "../lib/contractScope.js";
@@ -159,29 +162,51 @@ contractsRouter.delete("/:id", requireRole("admin"), (req, res) => {
     return res.status(409).json({ error: { code: "has_financial_activity", message: "This draft has charges, receipts, or deposit transactions and cannot be deleted." } });
   }
 
-  const streamIds = db.select({ id: pricingStreams.id }).from(pricingStreams).where(eq(pricingStreams.contractId, id)).all().map((s) => s.id);
-  for (const streamId of streamIds) {
-    db.delete(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).run();
-    db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
-  }
-  db.delete(pricingStreams).where(eq(pricingStreams.contractId, id)).run();
-  db.delete(concessions).where(eq(concessions.contractId, id)).run();
-  db.delete(depositTerms).where(eq(depositTerms.contractId, id)).run();
-  db.delete(contractUnits).where(eq(contractUnits.contractId, id)).run();
-  db.delete(billingRules).where(eq(billingRules.contractId, id)).run();
-
+  // Docs to unlink from disk once the transaction that removes their rows
+  // has actually committed — never delete the file first, since a failure
+  // partway through the transaction would leave the row referencing a file
+  // that's already gone.
   const docs = db.select().from(documentsTable).where(eq(documentsTable.ownerType, "contract")).all().filter((d) => d.ownerId === id);
+
+  db.transaction(() => {
+    // Change-control history: a draft can still have amendments proposed
+    // against it even before activation (nothing currently requires
+    // "active" first). Not financial activity, so unlike charges/receipts
+    // above we don't block on it — but every row referencing this contract
+    // must be removed, in dependency order, before the contract row itself,
+    // and before the documents loop below (an amendment can point at one of
+    // this contract's own documents as supporting evidence).
+    db.delete(usageEntries).where(eq(usageEntries.contractId, id)).run();
+    db.delete(contractVersions).where(eq(contractVersions.contractId, id)).run();
+    db.delete(amendments).where(eq(amendments.contractId, id)).run();
+
+    const streamIds = db.select({ id: pricingStreams.id }).from(pricingStreams).where(eq(pricingStreams.contractId, id)).all().map((s) => s.id);
+    for (const streamId of streamIds) {
+      db.delete(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).run();
+      db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
+    }
+    db.delete(pricingStreams).where(eq(pricingStreams.contractId, id)).run();
+    db.delete(concessions).where(eq(concessions.contractId, id)).run();
+    db.delete(depositTerms).where(eq(depositTerms.contractId, id)).run();
+    db.delete(contractUnits).where(eq(contractUnits.contractId, id)).run();
+    db.delete(billingRules).where(eq(billingRules.contractId, id)).run();
+
+    for (const doc of docs) {
+      db.delete(documentsTable).where(eq(documentsTable.id, doc.id)).run();
+    }
+
+    db.delete(contracts).where(eq(contracts.id, id)).run();
+    recordAudit({ actorUserId: req.user!.id, action: "contract_deleted", entityType: "contract", entityId: id, details: { referenceNumber: contract.referenceNumber } });
+  });
+
   for (const doc of docs) {
     try {
       fs.unlinkSync(doc.filePath);
     } catch {
-      // file already gone — fine, we're deleting the row either way
+      // file already gone — fine, the row is gone either way
     }
-    db.delete(documentsTable).where(eq(documentsTable.id, doc.id)).run();
   }
 
-  db.delete(contracts).where(eq(contracts.id, id)).run();
-  recordAudit({ actorUserId: req.user!.id, action: "contract_deleted", entityType: "contract", entityId: id, details: { referenceNumber: contract.referenceNumber } });
   res.status(204).send();
 });
 

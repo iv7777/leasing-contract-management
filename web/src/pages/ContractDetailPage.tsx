@@ -10,6 +10,7 @@ import {
   InputNumber,
   List,
   Modal,
+  Popconfirm,
   Select,
   Space,
   Table,
@@ -170,6 +171,7 @@ export default function ContractDetailPage() {
 
   const [docModal, setDocModal] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docForm] = Form.useForm();
   const [editModal, setEditModal] = useState(false);
   const [editForm] = Form.useForm();
@@ -322,7 +324,8 @@ export default function ContractDetailPage() {
   };
 
   const onUploadDocument = async () => {
-    if (!pendingFile) return;
+    if (!pendingFile || uploadingDoc) return;
+    setUploadingDoc(true);
     try {
       const values = await docForm.validateFields();
       const formData = new FormData();
@@ -338,6 +341,8 @@ export default function ContractDetailPage() {
       load();
     } catch (err) {
       handleError(err);
+    } finally {
+      setUploadingDoc(false);
     }
   };
 
@@ -350,6 +355,16 @@ export default function ContractDetailPage() {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
+  };
+
+  const deleteDocument = async (docId: number) => {
+    try {
+      await api.delete(`/documents/${docId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
   };
 
   const onEditContract = async () => {
@@ -853,6 +868,19 @@ export default function ContractDetailPage() {
                         <Button key="dl" type="link" icon={<DownloadOutlined />} onClick={() => downloadDocument(d.id)}>
                           {t("properties.download")}
                         </Button>,
+                        ...(user?.role === "admin"
+                          ? [
+                              <Popconfirm
+                                key="del"
+                                title={t("properties.confirmDeleteDocument")}
+                                onConfirm={() => deleteDocument(d.id)}
+                                okText={t("common.delete")}
+                                cancelText={t("common.cancel")}
+                              >
+                                <Button type="link" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>,
+                            ]
+                          : []),
                       ]}
                     >
                       <Space>
@@ -876,11 +904,16 @@ export default function ContractDetailPage() {
         onOk={onUploadDocument}
         okText={t("common.create")}
         cancelText={t("common.cancel")}
-        okButtonProps={{ disabled: !pendingFile }}
+        confirmLoading={uploadingDoc}
+        okButtonProps={{ disabled: !pendingFile || uploadingDoc }}
+        cancelButtonProps={{ disabled: uploadingDoc }}
+        closable={!uploadingDoc}
+        maskClosable={!uploadingDoc}
       >
         <Form form={docForm} layout="vertical">
           <Form.Item label="File" required>
             <Upload
+              disabled={uploadingDoc}
               beforeUpload={(file) => {
                 setPendingFile(file);
                 return false;

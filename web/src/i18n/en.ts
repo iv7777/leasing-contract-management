@@ -68,6 +68,7 @@ const en = {
     ordinary: "Ordinary",
     sensitive: "Sensitive (Admin only)",
     download: "Download",
+    confirmDeleteDocument: "Delete this document? This cannot be undone.",
   },
   parties: {
     title: "Tenants & Landlords",

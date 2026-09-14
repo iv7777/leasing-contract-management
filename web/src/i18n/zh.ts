@@ -70,6 +70,7 @@ const zh: Translations = {
     ordinary: "普通",
     sensitive: "敏感（仅管理员）",
     download: "下载",
+    confirmDeleteDocument: "删除此文件？此操作不可撤销。",
   },
   parties: {
     title: "租户与业主",

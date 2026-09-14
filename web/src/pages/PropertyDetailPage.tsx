@@ -7,6 +7,7 @@ import {
   Input,
   List,
   Modal,
+  Popconfirm,
   Select,
   Space,
   Tabs,
@@ -15,7 +16,7 @@ import {
   Upload,
   message,
 } from "antd";
-import { PlusOutlined, UploadOutlined, DownloadOutlined, LockOutlined, EditOutlined } from "@ant-design/icons";
+import { PlusOutlined, UploadOutlined, DownloadOutlined, DeleteOutlined, LockOutlined, EditOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PropertyDto, UnitDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
@@ -44,6 +45,7 @@ export default function PropertyDetailPage() {
   const [unitForm] = Form.useForm();
   const [docForm] = Form.useForm();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [editPropertyModal, setEditPropertyModal] = useState(false);
   const [editPropertyForm] = Form.useForm();
   const [editingUnit, setEditingUnit] = useState<UnitDto | null>(null);
@@ -124,19 +126,26 @@ export default function PropertyDetailPage() {
   };
 
   const onUploadDocument = async () => {
-    if (!pendingFile) return;
-    const values = await docForm.validateFields();
-    const formData = new FormData();
-    formData.append("file", pendingFile);
-    formData.append("ownerType", "property");
-    formData.append("ownerId", id!);
-    formData.append("docType", values.docType);
-    formData.append("classification", values.classification);
-    await api.post("/documents", formData);
-    setDocModalOpen(false);
-    docForm.resetFields();
-    setPendingFile(null);
-    load();
+    if (!pendingFile || uploadingDoc) return;
+    setUploadingDoc(true);
+    try {
+      const values = await docForm.validateFields();
+      const formData = new FormData();
+      formData.append("file", pendingFile);
+      formData.append("ownerType", "property");
+      formData.append("ownerId", id!);
+      formData.append("docType", values.docType);
+      formData.append("classification", values.classification);
+      await api.post("/documents", formData);
+      setDocModalOpen(false);
+      docForm.resetFields();
+      setPendingFile(null);
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    } finally {
+      setUploadingDoc(false);
+    }
   };
 
   const download = async (docId: number) => {
@@ -148,6 +157,16 @@ export default function PropertyDetailPage() {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
+  };
+
+  const deleteDocument = async (docId: number) => {
+    try {
+      await api.delete(`/documents/${docId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
   };
 
   if (!property) return <Typography.Text>{t("common.loading")}</Typography.Text>;
@@ -260,6 +279,19 @@ export default function PropertyDetailPage() {
                         <Button key="dl" type="link" icon={<DownloadOutlined />} onClick={() => download(d.id)}>
                           {t("properties.download")}
                         </Button>,
+                        ...(isAdmin
+                          ? [
+                              <Popconfirm
+                                key="del"
+                                title={t("properties.confirmDeleteDocument")}
+                                onConfirm={() => deleteDocument(d.id)}
+                                okText={t("common.delete")}
+                                cancelText={t("common.cancel")}
+                              >
+                                <Button type="link" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>,
+                            ]
+                          : []),
                       ]}
                     >
                       <Space>
@@ -313,11 +345,16 @@ export default function PropertyDetailPage() {
         onOk={onUploadDocument}
         okText={t("common.create")}
         cancelText={t("common.cancel")}
-        okButtonProps={{ disabled: !pendingFile }}
+        confirmLoading={uploadingDoc}
+        okButtonProps={{ disabled: !pendingFile || uploadingDoc }}
+        cancelButtonProps={{ disabled: uploadingDoc }}
+        closable={!uploadingDoc}
+        maskClosable={!uploadingDoc}
       >
         <Form form={docForm} layout="vertical">
           <Form.Item label="File" required>
             <Upload
+              disabled={uploadingDoc}
               beforeUpload={(file) => {
                 setPendingFile(file);
                 return false;
