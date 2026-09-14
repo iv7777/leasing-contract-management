@@ -91,32 +91,53 @@ const depositTermsSchema = z.object({
   notes: z.string().optional(),
 });
 
-const importSchema = z.object({
-  referenceNumber: z.string().min(1),
-  landlord: partySchema,
-  tenant: partySchema,
-  property: z.object({ name: z.string().min(1), nameEn: z.string().optional(), address: z.string().min(1) }),
-  unit: z.object({
-    unitLabel: z.string().min(1),
-    unitType: z.enum(["building", "open_land"]).default("building"),
-    rentableAreaSqm: decimalString,
-  }),
-  termStart: z.string(),
-  termEnd: z.string(),
-  renewalNoticeDays: z.number().default(90),
-  specialTerms: z.string().optional(),
-  contractedAreaSqm: decimalString,
-  billingRules: z.object({
-    billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).default("monthly"),
-    periodAnchorDay: z.number().default(1),
-    dueDay: z.number(),
-    dueMonthOffset: z.number().default(0),
-  }),
-  pricingStreams: z.array(pricingStreamSchema).min(1),
-  concessions: z.array(concessionSchema).default([]),
-  depositTerms: depositTermsSchema.optional(),
-  sourceDocument: z.object({ path: z.string(), docType: z.string().default("signed_lease"), classification: z.enum(["ordinary", "sensitive"]).default("ordinary") }).optional(),
+const unitSchema = z.object({
+  unitLabel: z.string().min(1),
+  unitType: z.enum(["building", "open_land"]).default("building"),
+  rentableAreaSqm: decimalString,
+  // Optional per-unit override for a multi-unit contract; falls back to
+  // rentableAreaSqm when omitted. For the single-unit `unit` field, the
+  // top-level `contractedAreaSqm` is used instead when this is unset.
+  contractedAreaSqm: decimalString.optional(),
 });
+
+const importSchema = z
+  .object({
+    referenceNumber: z.string().min(1),
+    landlord: partySchema,
+    tenant: partySchema,
+    property: z.object({ name: z.string().min(1), nameEn: z.string().optional(), address: z.string().min(1) }),
+    // Single-unit contracts (the common case) use `unit` + top-level
+    // `contractedAreaSqm`. A contract spanning more than one physical space
+    // (e.g. two floors under one lease) uses `units` instead — each entry
+    // may carry its own `contractedAreaSqm`. Exactly one of the two must be
+    // given; `unit` is kept as its own field rather than folded into
+    // `units` so every JSON file generated before this existed keeps working
+    // unchanged.
+    unit: unitSchema.optional(),
+    units: z.array(unitSchema).min(1).optional(),
+    termStart: z.string(),
+    termEnd: z.string(),
+    renewalNoticeDays: z.number().default(90),
+    specialTerms: z.string().optional(),
+    contractedAreaSqm: decimalString.optional(),
+    billingRules: z.object({
+      billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).default("monthly"),
+      periodAnchorDay: z.number().default(1),
+      dueDay: z.number(),
+      dueMonthOffset: z.number().default(0),
+    }),
+    pricingStreams: z.array(pricingStreamSchema).min(1),
+    concessions: z.array(concessionSchema).default([]),
+    depositTerms: depositTermsSchema.optional(),
+    sourceDocument: z.object({ path: z.string(), docType: z.string().default("signed_lease"), classification: z.enum(["ordinary", "sensitive"]).default("ordinary") }).optional(),
+  })
+  .refine((data) => !!data.unit !== !!data.units, {
+    message: "Provide exactly one of `unit` (single-unit contract) or `units` (multi-unit contract).",
+  })
+  .refine((data) => !data.unit || !!data.contractedAreaSqm, {
+    message: "`contractedAreaSqm` is required at the top level when using `unit`.",
+  });
 
 function findOrCreateParty(input: z.infer<typeof partySchema>) {
   const existing = db.select().from(parties).where(and(eq(parties.name, input.name), eq(parties.type, input.type))).get();
@@ -187,7 +208,8 @@ function main() {
     const landlord = findOrCreateParty(data.landlord);
     const tenant = findOrCreateParty(data.tenant);
     const property = findOrCreateProperty(data.property);
-    const unit = findOrCreateUnit(property.id, data.unit);
+
+    const unitsInput = data.units ?? [data.unit!];
 
     const contract = db
       .insert(contracts)
@@ -206,16 +228,26 @@ function main() {
 
     db.insert(billingRules).values({ contractId: contract.id, ...data.billingRules }).run();
 
-    const contractUnit = db
-      .insert(contractUnits)
-      .values({
-        contractId: contract.id,
-        unitId: unit.id,
-        effectiveStart: data.termStart,
-        contractedAreaSqm: data.contractedAreaSqm,
-      })
-      .returning()
-      .get();
+    const contractUnitsCreated = unitsInput.map((unitInput) => {
+      const { contractedAreaSqm, ...unitFields } = unitInput;
+      const unit = findOrCreateUnit(property.id, unitFields);
+      // The top-level `contractedAreaSqm` is a single-unit concept (paired
+      // with the singular `unit` field) — never applied per-entry here, or
+      // a multi-unit contract's combined total would get duplicated onto
+      // every one of its units instead of each keeping its own area.
+      const resolvedContractedAreaSqm = data.units ? (contractedAreaSqm ?? unitInput.rentableAreaSqm) : (data.contractedAreaSqm ?? unitInput.rentableAreaSqm);
+      const contractUnit = db
+        .insert(contractUnits)
+        .values({
+          contractId: contract.id,
+          unitId: unit.id,
+          effectiveStart: data.termStart,
+          contractedAreaSqm: resolvedContractedAreaSqm,
+        })
+        .returning()
+        .get();
+      return contractUnit;
+    });
 
     const streamIdByLabel = new Map<string, number>();
     for (const streamInput of data.pricingStreams) {
@@ -223,7 +255,14 @@ function main() {
       const stream = db.insert(pricingStreams).values({ contractId: contract.id, ...streamFields }).returning().get();
       if (streamFields.label) streamIdByLabel.set(streamFields.label, stream.id);
       if (streamFields.targetType === "unit") {
-        db.insert(pricingStreamUnits).values({ pricingStreamId: stream.id, contractUnitId: contractUnit.id }).run();
+        // A single-unit contract links unambiguously. A multi-unit contract
+        // with no per-stream targeting info links the stream to every unit
+        // it created — right for a combined figure covering all of them
+        // (this contract's "contract"-scoped streams are the more common
+        // case for that, but a "unit"-scoped one falls back to this).
+        for (const contractUnit of contractUnitsCreated) {
+          db.insert(pricingStreamUnits).values({ pricingStreamId: stream.id, contractUnitId: contractUnit.id }).run();
+        }
       }
       for (const rate of rates) {
         db.insert(rateSchedule).values({ pricingStreamId: stream.id, ...rate }).run();
