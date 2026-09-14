@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { appSettings } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
-import { APP_VERSION, BUILD_DATE } from "../lib/buildInfo.js";
+import { APP_VERSION, BUILD_DATE, BUILD_NUMBER } from "../lib/buildInfo.js";
 
 export const systemInfoRouter = Router();
 systemInfoRouter.use(requireAuth);
@@ -19,6 +19,7 @@ systemInfoRouter.get("/", (_req, res) => {
   res.json({
     version: APP_VERSION,
     buildDate: BUILD_DATE,
+    buildNumber: BUILD_NUMBER,
     copyright: settings?.copyrightText ?? "",
   });
 });
@@ -39,5 +40,5 @@ systemInfoRouter.patch("/", requireRole("admin"), (req, res) => {
   recordAudit({ actorUserId: req.user!.id, action: "system_copyright_updated", entityType: "app_settings", entityId: 1 });
 
   const settings = getSettings();
-  res.json({ version: APP_VERSION, buildDate: BUILD_DATE, copyright: settings?.copyrightText ?? "" });
+  res.json({ version: APP_VERSION, buildDate: BUILD_DATE, buildNumber: BUILD_NUMBER, copyright: settings?.copyrightText ?? "" });
 });

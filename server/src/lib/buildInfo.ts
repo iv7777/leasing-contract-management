@@ -26,3 +26,27 @@ function computeBuildDate(): string {
 }
 
 export const BUILD_DATE = computeBuildDate();
+
+/** The build number is simply "how many commits are in this checkout's
+ * history" (git rev-list --count HEAD) — every commit is one more entry in
+ * that count, so it increases automatically with no extra mechanism, no
+ * stored counter to keep in sync, and no separate commit needed to bump it.
+ * Falls back to the BUILD_NUMBER env var, then null (surfaced to the UI as
+ * "unknown"), so a non-git deployment or a shallow clone (which reports only
+ * the commits it fetched) never throws — just deploy from a full clone, as
+ * vps-deploy.sh already does, for an accurate count. */
+function computeBuildNumber(): number | null {
+  try {
+    const repoRoot = path.resolve(process.cwd(), "..");
+    const count = execSync("git rev-list --count HEAD", { cwd: repoRoot, stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim();
+    if (count) return Number(count);
+  } catch {
+    // not a git checkout, git not installed, etc. — fall through
+  }
+  if (process.env.BUILD_NUMBER) return Number(process.env.BUILD_NUMBER);
+  return null;
+}
+
+export const BUILD_NUMBER = computeBuildNumber();

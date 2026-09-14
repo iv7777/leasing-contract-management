@@ -252,6 +252,7 @@ const zh: Translations = {
   dashboard: {
     openReminders: "待处理提醒",
     version: "版本",
+    buildNumber: "构建号",
     built: "构建于",
     editCopyright: "编辑版权信息",
     copyrightText: "版权信息",

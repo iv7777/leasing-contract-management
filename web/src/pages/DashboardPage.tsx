@@ -10,6 +10,7 @@ import { useAuth } from "../auth/AuthContext";
 interface SystemInfo {
   version: string;
   buildDate: string;
+  buildNumber: number | null;
   copyright: string;
 }
 
@@ -69,8 +70,8 @@ export default function DashboardPage() {
 
       {systemInfo && (
         <Typography.Paragraph type="secondary" style={{ marginTop: 24, textAlign: "center" }}>
-          {t("dashboard.version")} {systemInfo.version} · {t("dashboard.built")}{" "}
-          {new Date(systemInfo.buildDate).toLocaleDateString(i18n.language)} · {systemInfo.copyright}
+          {t("dashboard.version")} {systemInfo.version} ({t("dashboard.buildNumber")} {systemInfo.buildNumber ?? "?"}) ·{" "}
+          {t("dashboard.built")} {new Date(systemInfo.buildDate).toLocaleDateString(i18n.language)} · {systemInfo.copyright}
           {user?.role === "admin" && (
             <Button
               type="text"

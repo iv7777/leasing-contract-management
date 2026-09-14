@@ -250,6 +250,7 @@ const en = {
   dashboard: {
     openReminders: "Open reminders",
     version: "Version",
+    buildNumber: "build",
     built: "Built",
     editCopyright: "Edit copyright text",
     copyrightText: "Copyright text",
