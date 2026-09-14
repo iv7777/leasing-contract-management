@@ -15,6 +15,7 @@
     "set-email": "tsx src/db/setEmail.ts",
     "import-contract": "tsx src/db/importContract.ts",
     "backup": "tsx src/jobs/backup.ts",
+    "restore-backup": "tsx src/db/restoreBackup.ts",
     "pretest": "cd .. && npm run build --workspace=shared",
     "test": "tsx --test src/**/*.test.ts"
   },

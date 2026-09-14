@@ -13,6 +13,7 @@ import RemindersPage from "./pages/RemindersPage";
 import OccupancyPage from "./pages/OccupancyPage";
 import UsersPage from "./pages/UsersPage";
 import AuditLogPage from "./pages/AuditLogPage";
+import BackupsPage from "./pages/BackupsPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="/occupancy" element={<OccupancyPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/audit" element={<AuditLogPage />} />
+                <Route path="/backups" element={<BackupsPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppLayout>

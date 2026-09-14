@@ -11,6 +11,7 @@ const en = {
     occupancy: "Occupancy",
     users: "Users",
     audit: "Audit Log",
+    backups: "Backups",
     logout: "Log out",
   },
   login: {
@@ -249,6 +250,29 @@ const en = {
     to: "To",
     applyFilters: "Apply filters",
     system: "System",
+  },
+  backups: {
+    title: "Backups",
+    runNow: "Run backup now",
+    runStarted: "Backup started — this can take a moment for a large database.",
+    runSucceeded: "Backup completed successfully.",
+    id: "ID",
+    startedAt: "Started",
+    completedAt: "Completed",
+    status: "Status",
+    running: "Running",
+    succeeded: "Succeeded",
+    failed: "Failed",
+    documentCount: "Documents referenced",
+    error: "Error",
+    download: "Download",
+    noSnapshot: "No snapshot available",
+    restoreTitle: "Restoring from a backup",
+    restoreBody:
+      "Restoring the database is a server-side operation, not a one-click web action — swapping the live database out from under a running server is risky to do any other way. On the server, run:",
+    restoreCommand: "npm run restore-backup -- <backup ID>",
+    restoreNote:
+      "The script stops to confirm before changing anything, saves a safety copy of the current database first, and prints the commands to stop/start the service around it. Document files are not affected by a database restore — recover those separately from documents.manifest.json in the backup folder if needed.",
   },
 };
 

@@ -12,6 +12,7 @@ import {
   BellOutlined,
   PieChartOutlined,
   AuditOutlined,
+  CloudServerOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -38,6 +39,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { key: "/parties", icon: <TeamOutlined />, label: t("nav.parties") },
     ...(user?.role === "admin" ? [{ key: "/users", icon: <UserOutlined />, label: t("nav.users") }] : []),
     ...(user?.role === "admin" ? [{ key: "/audit", icon: <AuditOutlined />, label: t("nav.audit") }] : []),
+    ...(user?.role === "admin" ? [{ key: "/backups", icon: <CloudServerOutlined />, label: t("nav.backups") }] : []),
   ];
 
   const selectedKey =

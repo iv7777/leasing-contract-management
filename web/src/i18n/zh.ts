@@ -13,6 +13,7 @@ const zh: Translations = {
     occupancy: "出租率",
     users: "用户管理",
     audit: "审计日志",
+    backups: "备份",
     logout: "退出登录",
   },
   login: {
@@ -251,6 +252,28 @@ const zh: Translations = {
     to: "结束日期",
     applyFilters: "应用筛选",
     system: "系统",
+  },
+  backups: {
+    title: "备份",
+    runNow: "立即备份",
+    runStarted: "备份已开始——数据较多时可能需要一些时间。",
+    runSucceeded: "备份已成功完成。",
+    id: "编号",
+    startedAt: "开始时间",
+    completedAt: "完成时间",
+    status: "状态",
+    running: "进行中",
+    succeeded: "成功",
+    failed: "失败",
+    documentCount: "涉及文件数",
+    error: "错误",
+    download: "下载",
+    noSnapshot: "无可用快照",
+    restoreTitle: "从备份恢复",
+    restoreBody: "恢复数据库是服务器端操作，不能通过网页一键完成——在服务运行时直接替换数据库文件风险很高。请在服务器上执行：",
+    restoreCommand: "npm run restore-backup -- <备份编号>",
+    restoreNote:
+      "脚本会在改动前要求手动确认，会先保存当前数据库的安全副本，并会提示需要执行的停止/启动服务命令。此操作不会影响已上传的文件——如需恢复文件，请参考备份目录中的 documents.manifest.json。",
   },
 };
 
