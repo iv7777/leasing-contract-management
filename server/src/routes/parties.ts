@@ -34,8 +34,10 @@ partiesRouter.get("/:id", (req, res) => {
 const createPartySchema = z.object({
   type: z.enum(["company", "individual"]),
   name: z.string().min(1),
-  nameEn: z.string().optional(),
-  contactDetails: z.string().optional(),
+  // nullable because the column is nullable: an edit form re-submits a
+  // previously-null value as null, not as "the field was omitted".
+  nameEn: z.string().nullable().optional(),
+  contactDetails: z.string().nullable().optional(),
 });
 
 partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
@@ -60,8 +62,8 @@ partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
 const updatePartySchema = z.object({
   type: z.enum(["company", "individual"]).optional(),
   name: z.string().min(1).optional(),
-  nameEn: z.string().optional(),
-  contactDetails: z.string().optional(),
+  nameEn: z.string().nullable().optional(),
+  contactDetails: z.string().nullable().optional(),
   archived: z.boolean().optional(),
 });
 

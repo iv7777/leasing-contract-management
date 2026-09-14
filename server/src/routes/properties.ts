@@ -29,7 +29,9 @@ propertiesRouter.get("/:id", (req, res) => {
 
 const createPropertySchema = z.object({
   name: z.string().min(1),
-  nameEn: z.string().optional(),
+  // nullable because the column is nullable: an edit form re-submits a
+  // previously-null value as null, not as "the field was omitted".
+  nameEn: z.string().nullable().optional(),
   address: z.string().min(1),
 });
 

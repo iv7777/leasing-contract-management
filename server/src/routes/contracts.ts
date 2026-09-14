@@ -61,7 +61,7 @@ const createContractSchema = z.object({
   termStart: z.string(),
   termEnd: z.string(),
   renewalNoticeDays: z.number().optional(),
-  specialTerms: z.string().optional(),
+  specialTerms: z.string().nullable().optional(),
   billingRules: z.object({
     billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).default("monthly"),
     periodAnchorDay: z.number().default(1),
@@ -119,7 +119,9 @@ const updateContractSchema = z.object({
   termStart: z.string().optional(),
   termEnd: z.string().optional(),
   renewalNoticeDays: z.number().optional(),
-  specialTerms: z.string().optional(),
+  // nullable because the column is nullable: an edit form re-submits a
+  // previously-null value as null, not as "the field was omitted".
+  specialTerms: z.string().nullable().optional(),
 });
 
 contractsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
