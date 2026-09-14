@@ -805,13 +805,22 @@ sudo npm run migrate
 sudo systemctl restart lcm.service
 curl http://127.0.0.1:4000/api/health</code></pre>
       </div>
-      <p class="root-only">Or, if you deployed with <code class="inline">deploy/vps-deploy.sh</code>, just re-run it — it detects the existing checkout and does all of this for you.</p>
+      <p class="root-only">Or, if you deployed with <code class="inline">deploy/vps-deploy.sh</code>, just re-run it — on an already-installed server this opens a control-panel menu instead of redeploying blindly.</p>
       <div class="callout note root-only">
-        <span class="icon">🔁</span>
-        <div><strong>The script remembers your domain and admin email</strong>
-        <p>On a redeploy you can run it with no arguments at all — <code class="inline">sudo bash vps-deploy.sh -y</code> — and it reuses the domain already configured in Nginx and the admin email already in <code class="inline">.env</code> instead of asking again.</p>
-        <p>Pass a <em>different</em> <code class="inline">DOMAIN</code> and it will warn you and keep serving the existing domain — it never moves Nginx or the TLS certificate to a new domain automatically. To actually migrate domains: point the new domain's DNS at this server first, then by hand update <code class="inline">server_name</code> in the Nginx site file, run <code class="inline">certbot --nginx -d &lt;new-domain&gt;</code>, update <code class="inline">WEB_ORIGIN</code> in <code class="inline">.env</code>, and restart Nginx and <code class="inline">lcm.service</code>.</p>
-        <p>Pass a <em>different</em> <code class="inline">ADMIN_EMAIL</code> and it actually renames the seeded admin's login email (via the same mechanism as <code class="inline">reset-password</code>) and keeps the Let's Encrypt renewal contact in sync — the admin's password is untouched.</p>
+        <span class="icon">🖥️</span>
+        <div><strong>The script is a menu once it's installed</strong>
+        <p>Run <code class="inline">sudo bash vps-deploy.sh</code> interactively on a server that already has the app installed and you get a menu instead of an unattended redeploy:</p>
+        <pre style="margin-top:10px"><code>1) Change the domain and get a new TLS certificate
+2) Check for updates and pull the latest build
+3) Reinstall everything with current settings
+4) Change the admin login email
+5) Reset a user's password
+6) Show service status
+7) Exit</code></pre>
+        <p><strong>Option 2</strong> is the routine "is there anything new" check: it fetches, shows you the commits you're missing, and only pulls/rebuilds/migrates/restarts if you say yes.</p>
+        <p><strong>Option 1</strong> actually migrates the site to a new domain — rewrites the Nginx config, requests a fresh Let's Encrypt certificate for it, and updates <code class="inline">WEB_ORIGIN</code>. It warns (but still lets you proceed) if the new domain's DNS doesn't yet resolve to this server, since the certificate request will fail until it does. The old certificate is left in place unused; the script prints the <code class="inline">certbot delete --cert-name</code> command to remove it once you're sure you don't need it.</p>
+        <p><strong>Option 3</strong> is today's full deploy flow, safe to re-run any time — everything it touches is skipped if already configured.</p>
+        <p>Each menu item is also a direct flag for cron/automation, e.g. <code class="inline">sudo bash vps-deploy.sh --check-update -y</code> or <code class="inline">--change-domain</code>, <code class="inline">--change-admin-email</code>, <code class="inline">--reset-admin-password</code>, <code class="inline">--status</code>. A non-interactive caller (no TTY — cron, CI) with no flag at all keeps the original unattended behavior: a full reinstall using whatever domain/admin email are already on file.</p>
         </div>
       </div>
     </section>
@@ -877,6 +886,8 @@ curl http://127.0.0.1:4000/api/health</code></pre>
         <table>
           <thead><tr><th>Task</th><th>Command</th></tr></thead>
           <tbody>
+            <tr class="root-only"><td>Open the control panel menu</td><td><code class="inline">sudo bash /opt/lcm/app/deploy/vps-deploy.sh</code></td></tr>
+            <tr class="root-only"><td>Check for updates (no prompts)</td><td><code class="inline">sudo bash vps-deploy.sh --check-update -y</code></td></tr>
             <tr><td>Start / stop / restart</td><td><code class="inline">sudo systemctl restart lcm.service</code></td></tr>
             <tr><td>Follow logs</td><td><code class="inline">sudo journalctl -u lcm.service -f</code></td></tr>
             <tr class="svc-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo -u lcm npm run backup</code></td></tr>
