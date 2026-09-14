@@ -72,6 +72,7 @@ const en = {
   users: {
     title: "Users",
     addUser: "Add user",
+    editUser: "Edit user",
     role: "Role",
     admin: "Admin",
     manager: "Manager",
@@ -82,6 +83,10 @@ const en = {
     assignedProperties: "Assigned properties",
     email: "Email",
     password: "Password",
+    resetPassword: "Reset password",
+    newPassword: "New password",
+    cannotDeactivateSelf: "You can't deactivate your own account",
+    cannotChangeOwnRole: "You can't change your own admin role",
   },
   contracts: {
     title: "Contracts",
@@ -201,6 +206,13 @@ const en = {
     units: "Units",
     leased: "Leased",
     available: "Available",
+  },
+  dashboard: {
+    openReminders: "Open reminders",
+    version: "Version",
+    built: "Built",
+    editCopyright: "Edit copyright text",
+    copyrightText: "Copyright text",
   },
 };
 

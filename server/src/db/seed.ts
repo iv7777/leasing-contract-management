@@ -1,5 +1,5 @@
 import { db, sqlite } from "./client.js";
-import { users } from "./schema.js";
+import { users, appSettings } from "./schema.js";
 import { hashPassword } from "../lib/password.js";
 import { eq } from "drizzle-orm";
 
@@ -25,6 +25,14 @@ if (existing) {
     .run();
   console.log(`Seeded admin user: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log("Change this password immediately after first login.");
+}
+
+const existingSettings = db.select().from(appSettings).where(eq(appSettings.id, 1)).get();
+if (!existingSettings) {
+  db.insert(appSettings)
+    .values({ id: 1, copyrightText: `© ${new Date().getFullYear()} Lease Contract Management. All rights reserved.` })
+    .run();
+  console.log("Seeded default app settings (copyright text) — change it from the dashboard any time.");
 }
 
 sqlite.close();

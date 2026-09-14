@@ -74,6 +74,7 @@ const zh: Translations = {
   users: {
     title: "用户管理",
     addUser: "新增用户",
+    editUser: "编辑用户",
     role: "角色",
     admin: "管理员",
     manager: "经理",
@@ -84,6 +85,10 @@ const zh: Translations = {
     assignedProperties: "分配的物业",
     email: "邮箱",
     password: "密码",
+    resetPassword: "重置密码",
+    newPassword: "新密码",
+    cannotDeactivateSelf: "不能停用自己的账户",
+    cannotChangeOwnRole: "不能更改自己的管理员角色",
   },
   contracts: {
     title: "合同",
@@ -203,6 +208,13 @@ const zh: Translations = {
     units: "单元数",
     leased: "已租",
     available: "空置",
+  },
+  dashboard: {
+    openReminders: "待处理提醒",
+    version: "版本",
+    built: "构建于",
+    editCopyright: "编辑版权信息",
+    copyrightText: "版权信息",
   },
 };
 

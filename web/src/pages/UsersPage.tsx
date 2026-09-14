@@ -1,18 +1,24 @@
 import { useEffect, useState } from "react";
-import { Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
-import { PlusOutlined } from "@ant-design/icons";
+import { Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, message } from "antd";
+import { EditOutlined, KeyOutlined, PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PropertyDto, PublicUser, Role } from "@lcm/shared";
 import { ROLES } from "@lcm/shared";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 
 export default function UsersPage() {
   const { t } = useTranslation();
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<PublicUser[]>([]);
   const [properties, setProperties] = useState<PropertyDto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm] = Form.useForm();
+  const [editingUser, setEditingUser] = useState<PublicUser | null>(null);
+  const [editForm] = Form.useForm();
+  const [passwordUser, setPasswordUser] = useState<PublicUser | null>(null);
+  const [passwordForm] = Form.useForm();
 
   const load = () => {
     setLoading(true);
@@ -25,17 +31,61 @@ export default function UsersPage() {
   useEffect(load, []);
 
   const onCreate = async () => {
-    const values = await form.validateFields();
+    const values = await createForm.validateFields();
     await api.post("/users", values);
-    setModalOpen(false);
-    form.resetFields();
+    setCreateOpen(false);
+    createForm.resetFields();
     load();
   };
 
+  const onEdit = async () => {
+    if (!editingUser) return;
+    const values = await editForm.validateFields();
+    try {
+      await api.patch(`/users/${editingUser.id}`, values);
+      message.success(t("common.save"));
+      setEditingUser(null);
+      load();
+    } catch (err) {
+      if (err instanceof ApiError) message.error(err.message);
+      else throw err;
+    }
+  };
+
+  const onSetPassword = async () => {
+    if (!passwordUser) return;
+    const values = await passwordForm.validateFields();
+    try {
+      await api.post(`/users/${passwordUser.id}/set-password`, values);
+      message.success(t("users.resetPassword"));
+      setPasswordUser(null);
+      passwordForm.resetFields();
+    } catch (err) {
+      if (err instanceof ApiError) message.error(err.message);
+      else throw err;
+    }
+  };
+
   const toggleActive = async (u: PublicUser) => {
-    await api.patch(`/users/${u.id}`, { active: !u.active });
-    message.success(u.active ? "User deactivated" : "User activated");
-    load();
+    try {
+      await api.patch(`/users/${u.id}`, { active: !u.active });
+      message.success(u.active ? "User deactivated" : "User activated");
+      load();
+    } catch (err) {
+      if (err instanceof ApiError) message.error(err.message);
+      else throw err;
+    }
+  };
+
+  const openEdit = (u: PublicUser) => {
+    setEditingUser(u);
+    editForm.setFieldsValue({
+      name: u.name,
+      role: u.role,
+      propertyIds: u.propertyIds,
+      canDownloadPdf: u.canDownloadPdf,
+      canPrint: u.canPrint,
+    });
   };
 
   return (
@@ -44,7 +94,7 @@ export default function UsersPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           {t("users.title")}
         </Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
           {t("users.addUser")}
         </Button>
       </Space>
@@ -73,20 +123,38 @@ export default function UsersPage() {
           {
             title: t("common.active"),
             dataIndex: "active",
-            render: (active: boolean, u) => <Switch checked={active} onChange={() => toggleActive(u)} />,
+            render: (active: boolean, u) => {
+              const isSelf = u.id === currentUser?.id;
+              const toggle = <Switch checked={active} disabled={isSelf} onChange={() => toggleActive(u)} />;
+              return isSelf ? <Tooltip title={t("users.cannotDeactivateSelf")}>{toggle}</Tooltip> : toggle;
+            },
+          },
+          {
+            title: t("common.actions"),
+            key: "actions",
+            render: (_: unknown, u) => (
+              <Space>
+                <Tooltip title={t("users.editUser")}>
+                  <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(u)} />
+                </Tooltip>
+                <Tooltip title={t("users.resetPassword")}>
+                  <Button size="small" icon={<KeyOutlined />} onClick={() => setPasswordUser(u)} />
+                </Tooltip>
+              </Space>
+            ),
           },
         ]}
       />
 
       <Modal
         title={t("users.addUser")}
-        open={modalOpen}
-        onCancel={() => setModalOpen(false)}
+        open={createOpen}
+        onCancel={() => setCreateOpen(false)}
         onOk={onCreate}
         okText={t("common.create")}
         cancelText={t("common.cancel")}
       >
-        <Form form={form} layout="vertical">
+        <Form form={createForm} layout="vertical">
           <Form.Item name="name" label={t("common.name")} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
@@ -111,6 +179,65 @@ export default function UsersPage() {
           </Form.Item>
           <Form.Item name="canPrint" label={t("users.canPrint")} valuePropName="checked">
             <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("users.editUser")}
+        open={!!editingUser}
+        onCancel={() => setEditingUser(null)}
+        onOk={onEdit}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item name="name" label={t("common.name")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item
+            name="role"
+            label={t("users.role")}
+            rules={[{ required: true }]}
+            tooltip={editingUser?.id === currentUser?.id ? t("users.cannotChangeOwnRole") : undefined}
+          >
+            <Select
+              disabled={editingUser?.id === currentUser?.id}
+              options={ROLES.map((r) => ({ value: r, label: t(`users.${r}`) }))}
+            />
+          </Form.Item>
+          <Form.Item name="propertyIds" label={t("users.assignedProperties")}>
+            <Select
+              mode="multiple"
+              options={properties.map((p) => ({ value: p.id, label: p.name }))}
+              placeholder={t("users.assignedProperties")}
+            />
+          </Form.Item>
+          <Form.Item name="canDownloadPdf" label={t("users.canDownloadPdf")} valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item name="canPrint" label={t("users.canPrint")} valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("users.resetPassword")}
+        open={!!passwordUser}
+        onCancel={() => {
+          setPasswordUser(null);
+          passwordForm.resetFields();
+        }}
+        onOk={onSetPassword}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={passwordForm} layout="vertical">
+          <Form.Item name="password" label={t("users.newPassword")} rules={[{ required: true, min: 8 }]}>
+            <Input.Password />
           </Form.Item>
         </Form>
       </Modal>

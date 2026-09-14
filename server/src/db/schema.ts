@@ -416,3 +416,14 @@ export const backupRuns = sqliteTable("backup_runs", {
   includedDocumentCount: integer("included_document_count"),
   error: text("error"),
 });
+
+// ---------------------------------------------------------------------------
+// App settings (single row, admin-editable values shown on the dashboard)
+// ---------------------------------------------------------------------------
+
+export const appSettings = sqliteTable("app_settings", {
+  id: integer("id").primaryKey(), // always 1 — a single-row settings table
+  copyrightText: text("copyright_text").notNull(),
+  updatedAt: text("updated_at").notNull().default(nowIso),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
