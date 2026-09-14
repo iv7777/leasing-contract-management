@@ -882,6 +882,12 @@ curl http://127.0.0.1:4000/api/health</code></pre>
 
     <section id="cheatsheet">
       <h2>Command cheat sheet</h2>
+      <div class="callout note">
+        <span class="icon">📄</span>
+        <div><strong>Entering a lease without clicking through the UI</strong>
+        <p>The "add contract" screen is the fastest way to enter a simple lease, but for a scanned contract PDF, hand the file to Claude and ask it to extract the terms into a JSON file matching <code class="inline">server/src/db/importContract.ts</code>'s format — it reads the schema and produces one directly. The script then creates the landlord/tenant/property/unit (reusing any that already exist by name/address, so it's safe to run repeatedly across your whole portfolio) plus every pricing tier, concession, and deposit term in one shot, and can attach the signed PDF and activate the contract too. It also does one thing the "add pricing stream" UI can't: a lease with rent that steps up on pre-agreed future dates writes every rate tier directly, so multi-year escalating rent is fully captured on day one instead of needing manual amendments later.</p>
+        </div>
+      </div>
       <div class="twrap">
         <table>
           <thead><tr><th>Task</th><th>Command</th></tr></thead>
@@ -896,6 +902,8 @@ curl http://127.0.0.1:4000/api/health</code></pre>
             <tr class="root-only"><td>Reset a password</td><td><code class="inline">sudo npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr class="svc-only"><td>Rename a login email</td><td><code class="inline">sudo -u lcm npm run set-email -- &lt;old-email&gt; &lt;new-email&gt;</code></td></tr>
             <tr class="root-only"><td>Rename a login email</td><td><code class="inline">sudo npm run set-email -- &lt;old-email&gt; &lt;new-email&gt;</code></td></tr>
+            <tr class="svc-only"><td>Bulk-import a lease from a JSON file</td><td><code class="inline">sudo -u lcm npm run import-contract -- &lt;file.json&gt; [--activate]</code></td></tr>
+            <tr class="root-only"><td>Bulk-import a lease from a JSON file</td><td><code class="inline">sudo npm run import-contract -- &lt;file.json&gt; [--activate]</code></td></tr>
             <tr><td>Test TLS renewal</td><td><code class="inline">sudo certbot renew --dry-run</code></td></tr>
             <tr><td>Reload Nginx config</td><td><code class="inline">sudo nginx -t && sudo systemctl reload nginx</code></td></tr>
             <tr><td>Firewall status</td><td><code class="inline">sudo ufw status verbose</code></td></tr>
