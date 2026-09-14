@@ -65,6 +65,7 @@ export const parties = sqliteTable("parties", {
   name: text("name").notNull(),
   nameEn: text("name_en"),
   contactDetails: text("contact_details"),
+  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(nowIso),
   updatedAt: text("updated_at").notNull().default(nowIso),
 });

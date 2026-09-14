@@ -16,9 +16,10 @@ import {
   Tabs,
   Tag,
   Typography,
+  Upload,
   message,
 } from "antd";
-import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined } from "@ant-design/icons";
+import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
@@ -118,6 +119,13 @@ interface DepositTransactionDto {
   transactionDate: string;
   reason: string;
 }
+interface DocumentDto {
+  id: number;
+  docType: string;
+  classification: "ordinary" | "sensitive";
+  mimeType: string;
+  uploadedAt: string;
+}
 interface StatementDto {
   periodStart: string;
   periodEnd: string;
@@ -157,7 +165,13 @@ export default function ContractDetailPage() {
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number }[]>([]);
+  const [documents, setDocuments] = useState<DocumentDto[]>([]);
 
+  const [docModal, setDocModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [docForm] = Form.useForm();
+  const [editModal, setEditModal] = useState(false);
+  const [editForm] = Form.useForm();
   const [unitModal, setUnitModal] = useState(false);
   const [streamModal, setStreamModal] = useState(false);
   const [concessionModal, setConcessionModal] = useState(false);
@@ -204,6 +218,7 @@ export default function ContractDetailPage() {
         setDepositBalanceFen(r.balanceFen);
       });
     void api.get<{ amendments: AmendmentDto[] }>(`/contracts/${id}/amendments`).then((r) => setAmendments(r.amendments));
+    void api.get<{ documents: DocumentDto[] }>(`/documents?ownerType=contract&ownerId=${id}`).then((r) => setDocuments(r.documents));
     void api.get<{ parties: PartyDto[] }>("/parties").then((r) => setParties(r.parties));
     void api.get<{ properties: { id: number }[] }>("/properties").then(async (r) => {
       const allUnits = await Promise.all(
@@ -303,6 +318,68 @@ export default function ContractDetailPage() {
     } catch (err) {
       handleError(err);
     }
+  };
+
+  const onUploadDocument = async () => {
+    if (!pendingFile) return;
+    try {
+      const values = await docForm.validateFields();
+      const formData = new FormData();
+      formData.append("file", pendingFile);
+      formData.append("ownerType", "contract");
+      formData.append("ownerId", id!);
+      formData.append("docType", values.docType);
+      formData.append("classification", values.classification);
+      await api.post("/documents", formData);
+      setDocModal(false);
+      docForm.resetFields();
+      setPendingFile(null);
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const downloadDocument = async (docId: number) => {
+    const res = await fetch(`/api/documents/${docId}/download`, { credentials: "include" });
+    if (!res.ok) {
+      message.error(t("common.error"));
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  };
+
+  const onEditContract = async () => {
+    try {
+      const values = await editForm.validateFields();
+      await api.patch(`/contracts/${id}`, values);
+      setEditModal(false);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteContract = () => {
+    Modal.confirm({
+      title: t("contracts.deleteContract"),
+      content: t("contracts.deleteContractConfirm"),
+      okText: t("common.confirm"),
+      okButtonProps: { danger: true },
+      cancelText: t("common.cancel"),
+      onOk: async () => {
+        try {
+          await api.delete(`/contracts/${id}`);
+          message.success(t("contracts.deleteContract"));
+          window.location.href = "/contracts";
+        } catch (err) {
+          handleError(err);
+        }
+      },
+    });
   };
 
   const onProposeAmendment = async () => {
@@ -434,6 +511,22 @@ export default function ContractDetailPage() {
           {isDraft && user?.role === "admin" && (
             <Button icon={<ThunderboltOutlined />} onClick={onActivate}>
               {t("contracts.activate")}
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => {
+                editForm.setFieldsValue(contract);
+                setEditModal(true);
+              }}
+            >
+              {t("contracts.editContract")}
+            </Button>
+          )}
+          {isDraft && user?.role === "admin" && (
+            <Button danger icon={<DeleteOutlined />} onClick={onDeleteContract}>
+              {t("contracts.deleteContract")}
             </Button>
           )}
         </Space>
@@ -732,8 +825,113 @@ export default function ContractDetailPage() {
               </>
             ),
           },
+          {
+            key: "documents",
+            label: t("contracts.documents"),
+            children: (
+              <>
+                {canEdit && (
+                  <Button icon={<UploadOutlined />} onClick={() => setDocModal(true)} style={{ marginBottom: 12 }}>
+                    {t("contracts.uploadDocument")}
+                  </Button>
+                )}
+                <List
+                  bordered
+                  dataSource={documents}
+                  renderItem={(d) => (
+                    <List.Item
+                      actions={[
+                        <Button key="dl" type="link" icon={<DownloadOutlined />} onClick={() => downloadDocument(d.id)}>
+                          {t("properties.download")}
+                        </Button>,
+                      ]}
+                    >
+                      <Space>
+                        {d.classification === "sensitive" && <LockOutlined />}
+                        <Typography.Text>{d.docType === "signed_lease" ? t("contracts.signedLease") : d.docType}</Typography.Text>
+                        {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
+                      </Space>
+                    </List.Item>
+                  )}
+                />
+              </>
+            ),
+          },
         ]}
       />
+
+      <Modal
+        title={t("contracts.uploadDocument")}
+        open={docModal}
+        onCancel={() => setDocModal(false)}
+        onOk={onUploadDocument}
+        okText={t("common.create")}
+        cancelText={t("common.cancel")}
+        okButtonProps={{ disabled: !pendingFile }}
+      >
+        <Form form={docForm} layout="vertical">
+          <Form.Item label="File" required>
+            <Upload
+              beforeUpload={(file) => {
+                setPendingFile(file);
+                return false;
+              }}
+              maxCount={1}
+              accept="image/*,.pdf"
+            >
+              <Button icon={<UploadOutlined />}>Select file</Button>
+            </Upload>
+          </Form.Item>
+          <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]} initialValue="signed_lease">
+            <Select
+              options={[
+                { value: "signed_lease", label: t("contracts.signedLease") },
+                { value: "other", label: t("contracts.otherDocumentType") },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="classification"
+            label={t("properties.classification")}
+            rules={[{ required: true }]}
+            initialValue="ordinary"
+          >
+            <Select
+              options={[
+                { value: "ordinary", label: t("properties.ordinary") },
+                { value: "sensitive", label: t("properties.sensitive") },
+              ]}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.editContract")}
+        open={editModal}
+        onCancel={() => setEditModal(false)}
+        onOk={onEditContract}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item name="referenceNumber" label={t("contracts.reference")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="termStart" label={t("contracts.termStart")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="termEnd" label={t("contracts.termEnd")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="renewalNoticeDays" label={t("contracts.renewalNoticeDays")}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item name="specialTerms" label={t("contracts.specialTerms")}>
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal title={t("contracts.addUnit")} open={unitModal} onCancel={() => setUnitModal(false)} onOk={onAddUnit} okText={t("common.create")} cancelText={t("common.cancel")}>
         <Form form={unitForm} layout="vertical">

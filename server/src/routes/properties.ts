@@ -99,3 +99,34 @@ propertiesRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) 
   recordAudit({ actorUserId: req.user!.id, action: "unit_created", entityType: "unit", entityId: inserted.id });
   res.status(201).json({ unit: inserted });
 });
+
+const updateUnitSchema = z.object({
+  unitLabel: z.string().min(1).optional(),
+  unitType: z.enum(["building", "open_land"]).optional(),
+  rentableAreaSqm: z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number").optional(),
+  availability: z.enum(["vacant", "leased", "unavailable"]).optional(),
+});
+
+propertiesRouter.patch("/:propertyId/units/:unitId", requireRole("admin", "manager"), (req, res) => {
+  const propertyId = Number(req.params.propertyId);
+  const unitId = Number(req.params.unitId);
+  if (!canAccessProperty(req.user!, propertyId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
+  }
+  const existing = db.select().from(units).where(eq(units.id, unitId)).get();
+  if (!existing || existing.propertyId !== propertyId) {
+    return res.status(404).json({ error: { code: "not_found", message: "Unit not found." } });
+  }
+  const parsed = updateUnitSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid unit payload." } });
+  }
+  const updated = db
+    .update(units)
+    .set({ ...parsed.data, updatedAt: new Date().toISOString() })
+    .where(eq(units.id, unitId))
+    .returning()
+    .get();
+  recordAudit({ actorUserId: req.user!.id, action: "unit_updated", entityType: "unit", entityId: unitId, details: { before: existing, after: updated } });
+  res.json({ unit: updated });
+});

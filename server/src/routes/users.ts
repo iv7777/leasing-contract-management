@@ -1,7 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { users, userProperties } from "../db/schema.js";
+import {
+  users,
+  userProperties,
+  auditEvents,
+  documents,
+  receipts,
+  depositTransactions,
+  chargeAdjustments,
+  usageEntries,
+} from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
@@ -161,4 +170,41 @@ usersRouter.post("/:id/set-password", (req, res) => {
   // Never log the password itself, only that a reset happened.
   recordAudit({ actorUserId: req.user!.id, action: "user_password_reset", entityType: "user", entityId: id });
   res.json({ ok: true });
+});
+
+usersRouter.delete("/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const existing = db.select().from(users).where(eq(users.id, id)).get();
+  if (!existing) return res.status(404).json({ error: { code: "not_found", message: "User not found." } });
+
+  if (id === req.user!.id) {
+    return res.status(400).json({ error: { code: "self_modification_blocked", message: "You cannot delete your own account." } });
+  }
+
+  // A user with any real history (logged an audit event, uploaded a
+  // document, recorded a receipt, etc.) can never be hard-deleted without
+  // orphaning that history — deactivate instead. Only a user created by
+  // mistake and never actually used is safe to remove outright.
+  const hasHistory =
+    !!db.select().from(auditEvents).where(eq(auditEvents.actorUserId, id)).get() ||
+    !!db.select().from(documents).where(eq(documents.uploadedBy, id)).get() ||
+    !!db.select().from(receipts).where(eq(receipts.recordedBy, id)).get() ||
+    !!db.select().from(depositTransactions).where(eq(depositTransactions.actorUserId, id)).get() ||
+    !!db.select().from(depositTransactions).where(eq(depositTransactions.approvedBy, id)).get() ||
+    !!db.select().from(chargeAdjustments).where(eq(chargeAdjustments.actorUserId, id)).get() ||
+    !!db.select().from(usageEntries).where(eq(usageEntries.enteredBy, id)).get();
+
+  if (hasHistory) {
+    return res.status(409).json({
+      error: {
+        code: "has_history",
+        message: "This user has recorded activity and cannot be deleted — deactivate the account instead.",
+      },
+    });
+  }
+
+  db.delete(userProperties).where(eq(userProperties.userId, id)).run();
+  db.delete(users).where(eq(users.id, id)).run();
+  recordAudit({ actorUserId: req.user!.id, action: "user_deleted", entityType: "user", entityId: id, details: { email: existing.email } });
+  res.status(204).send();
 });

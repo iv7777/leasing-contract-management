@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import fs from "node:fs";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
@@ -12,6 +13,8 @@ import {
   concessions,
   depositTerms,
   charges,
+  receipts,
+  depositTransactions,
   units,
   documents as documentsTable,
 } from "../db/schema.js";
@@ -109,6 +112,75 @@ contractsRouter.get("/:id", (req, res) => {
     depositTerms: deposits,
     propertyIds: getContractPropertyIds(id),
   });
+});
+
+const updateContractSchema = z.object({
+  referenceNumber: z.string().min(1).optional(),
+  termStart: z.string().optional(),
+  termEnd: z.string().optional(),
+  renewalNoticeDays: z.number().optional(),
+  specialTerms: z.string().optional(),
+});
+
+contractsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
+  const id = Number(req.params.id);
+  const contract = db.select().from(contracts).where(eq(contracts.id, id)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+
+  const parsed = updateContractSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid contract payload." } });
+
+  const updated = db
+    .update(contracts)
+    .set({ ...parsed.data, updatedAt: new Date().toISOString() })
+    .where(eq(contracts.id, id))
+    .returning()
+    .get();
+  recordAudit({ actorUserId: req.user!.id, action: "contract_updated", entityType: "contract", entityId: id, details: { before: contract, after: updated } });
+  res.json({ contract: updated });
+});
+
+contractsRouter.delete("/:id", requireRole("admin"), (req, res) => {
+  const id = Number(req.params.id);
+  const contract = db.select().from(contracts).where(eq(contracts.id, id)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!requireDraft(contract, res)) return;
+
+  // A draft can still have had charges/receipts/deposit activity recorded
+  // against it (nothing here currently requires "active" first) — never
+  // let a delete make financial history vanish.
+  const hasCharges = db.select().from(charges).where(eq(charges.contractId, id)).get();
+  const hasReceipts = db.select().from(receipts).where(eq(receipts.contractId, id)).get();
+  const hasDepositTxns = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, id)).get();
+  if (hasCharges || hasReceipts || hasDepositTxns) {
+    return res.status(409).json({ error: { code: "has_financial_activity", message: "This draft has charges, receipts, or deposit transactions and cannot be deleted." } });
+  }
+
+  const streamIds = db.select({ id: pricingStreams.id }).from(pricingStreams).where(eq(pricingStreams.contractId, id)).all().map((s) => s.id);
+  for (const streamId of streamIds) {
+    db.delete(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).run();
+    db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
+  }
+  db.delete(pricingStreams).where(eq(pricingStreams.contractId, id)).run();
+  db.delete(concessions).where(eq(concessions.contractId, id)).run();
+  db.delete(depositTerms).where(eq(depositTerms.contractId, id)).run();
+  db.delete(contractUnits).where(eq(contractUnits.contractId, id)).run();
+  db.delete(billingRules).where(eq(billingRules.contractId, id)).run();
+
+  const docs = db.select().from(documentsTable).where(eq(documentsTable.ownerType, "contract")).all().filter((d) => d.ownerId === id);
+  for (const doc of docs) {
+    try {
+      fs.unlinkSync(doc.filePath);
+    } catch {
+      // file already gone — fine, we're deleting the row either way
+    }
+    db.delete(documentsTable).where(eq(documentsTable.id, doc.id)).run();
+  }
+
+  db.delete(contracts).where(eq(contracts.id, id)).run();
+  recordAudit({ actorUserId: req.user!.id, action: "contract_deleted", entityType: "contract", entityId: id, details: { referenceNumber: contract.referenceNumber } });
+  res.status(204).send();
 });
 
 // ---------------------------------------------------------------------------

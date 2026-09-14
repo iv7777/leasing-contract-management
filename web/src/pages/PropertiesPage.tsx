@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Form, Grid, Input, List, Modal, Space, Table, Tag, Typography } from "antd";
+import { Button, Card, Form, Grid, Input, List, Modal, Space, Switch, Table, Tag, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +18,7 @@ export default function PropertiesPage() {
 
   const [properties, setProperties] = useState<PropertyDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
 
@@ -32,6 +33,7 @@ export default function PropertiesPage() {
   useEffect(load, []);
 
   const displayName = (p: PropertyDto) => (i18n.language.startsWith("zh") || !p.nameEn ? p.name : p.nameEn);
+  const visibleProperties = showArchived ? properties : properties.filter((p) => !p.archived);
 
   const onCreate = async () => {
     const values = await form.validateFields();
@@ -47,17 +49,23 @@ export default function PropertiesPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           {t("properties.title")}
         </Typography.Title>
-        {user?.role === "admin" && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            {t("properties.addProperty")}
-          </Button>
-        )}
+        <Space>
+          <Space size={4}>
+            <Switch size="small" checked={showArchived} onChange={setShowArchived} />
+            <Typography.Text type="secondary">{t("common.showArchived")}</Typography.Text>
+          </Space>
+          {user?.role === "admin" && (
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+              {t("properties.addProperty")}
+            </Button>
+          )}
+        </Space>
       </Space>
 
       {isMobile ? (
         <List
           loading={loading}
-          dataSource={properties}
+          dataSource={visibleProperties}
           renderItem={(p) => (
             <Card style={{ marginBottom: 12 }} onClick={() => navigate(`/properties/${p.id}`)}>
               <Typography.Text strong>{displayName(p)}</Typography.Text>
@@ -76,7 +84,7 @@ export default function PropertiesPage() {
         <Table
           rowKey="id"
           loading={loading}
-          dataSource={properties}
+          dataSource={visibleProperties}
           onRow={(p) => ({ onClick: () => navigate(`/properties/${p.id}`), style: { cursor: "pointer" } })}
           columns={[
             { title: t("common.name"), dataIndex: "name", render: (_, p) => displayName(p) },

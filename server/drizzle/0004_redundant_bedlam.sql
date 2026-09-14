@@ -1,0 +1,1 @@
+ALTER TABLE `parties` ADD `archived` integer DEFAULT false NOT NULL;

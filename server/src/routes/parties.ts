@@ -57,6 +57,39 @@ partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
   res.status(201).json({ party: inserted });
 });
 
+const updatePartySchema = z.object({
+  type: z.enum(["company", "individual"]).optional(),
+  name: z.string().min(1).optional(),
+  nameEn: z.string().optional(),
+  contactDetails: z.string().optional(),
+  archived: z.boolean().optional(),
+});
+
+partiesRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
+  const id = Number(req.params.id);
+  const existing = db.select().from(parties).where(eq(parties.id, id)).get();
+  if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Party not found." } });
+
+  const parsed = updatePartySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload." } });
+  }
+  const updated = db
+    .update(parties)
+    .set({ ...parsed.data, updatedAt: new Date().toISOString() })
+    .where(eq(parties.id, id))
+    .returning()
+    .get();
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: existing.archived !== updated.archived ? (updated.archived ? "party_archived" : "party_unarchived") : "party_updated",
+    entityType: "party",
+    entityId: id,
+    details: { before: existing, after: updated },
+  });
+  res.json({ party: updated });
+});
+
 const sensitiveDetailsSchema = z.object({
   idType: z.string().optional(),
   idNumber: z.string().optional(),

@@ -43,6 +43,7 @@ export interface PartyDto {
   name: string;
   nameEn: string | null;
   contactDetails: string | null;
+  archived: boolean;
 }
 
 /** Standard API error shape: code is a stable key the frontend maps to a

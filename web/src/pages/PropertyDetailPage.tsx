@@ -15,10 +15,10 @@ import {
   Upload,
   message,
 } from "antd";
-import { PlusOutlined, UploadOutlined, DownloadOutlined, LockOutlined } from "@ant-design/icons";
+import { PlusOutlined, UploadOutlined, DownloadOutlined, LockOutlined, EditOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PropertyDto, UnitDto } from "@lcm/shared";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 interface DocumentDto {
@@ -41,6 +41,10 @@ export default function PropertyDetailPage() {
   const [unitForm] = Form.useForm();
   const [docForm] = Form.useForm();
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [editPropertyModal, setEditPropertyModal] = useState(false);
+  const [editPropertyForm] = Form.useForm();
+  const [editingUnit, setEditingUnit] = useState<UnitDto | null>(null);
+  const [editUnitForm] = Form.useForm();
 
   const load = () => {
     void api
@@ -64,6 +68,51 @@ export default function PropertyDetailPage() {
     setUnitModalOpen(false);
     unitForm.resetFields();
     load();
+  };
+
+  const onEditProperty = async () => {
+    try {
+      const values = await editPropertyForm.validateFields();
+      await api.patch(`/properties/${id}`, values);
+      setEditPropertyModal(false);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  };
+
+  const toggleArchived = async () => {
+    if (!property) return;
+    try {
+      await api.patch(`/properties/${id}`, { archived: !property.archived });
+      message.success(property.archived ? t("common.unarchived") : t("common.archived"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  };
+
+  const onEditUnit = async () => {
+    if (!editingUnit) return;
+    try {
+      const values = await editUnitForm.validateFields();
+      await api.patch(`/properties/${id}/units/${editingUnit.id}`, values);
+      setEditingUnit(null);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  };
+
+  const toggleUnitRetired = async (u: UnitDto) => {
+    try {
+      await api.patch(`/properties/${id}/units/${u.id}`, { availability: u.availability === "unavailable" ? "vacant" : "unavailable" });
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
   };
 
   const onUploadDocument = async () => {
@@ -96,11 +145,32 @@ export default function PropertyDetailPage() {
   if (!property) return <Typography.Text>{t("common.loading")}</Typography.Text>;
 
   const canEdit = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin";
 
   return (
     <div>
-      <Typography.Title level={4}>{displayName}</Typography.Title>
-      <Typography.Paragraph type="secondary">{property.address}</Typography.Paragraph>
+      <Space style={{ width: "100%", justifyContent: "space-between" }}>
+        <div>
+          <Typography.Title level={4} style={{ marginBottom: 0 }}>
+            {displayName} {property.archived && <Tag>{t("common.archived")}</Tag>}
+          </Typography.Title>
+          <Typography.Paragraph type="secondary">{property.address}</Typography.Paragraph>
+        </div>
+        {isAdmin && (
+          <Space>
+            <Button
+              icon={<EditOutlined />}
+              onClick={() => {
+                editPropertyForm.setFieldsValue(property);
+                setEditPropertyModal(true);
+              }}
+            >
+              {t("common.edit")}
+            </Button>
+            <Button onClick={toggleArchived}>{property.archived ? t("common.unarchive") : t("common.archive")}</Button>
+          </Space>
+        )}
+      </Space>
 
       <Tabs
         items={[
@@ -118,7 +188,26 @@ export default function PropertyDetailPage() {
                   bordered
                   dataSource={units}
                   renderItem={(u) => (
-                    <List.Item>
+                    <List.Item
+                      actions={
+                        canEdit
+                          ? [
+                              <Button
+                                key="edit"
+                                size="small"
+                                icon={<EditOutlined />}
+                                onClick={() => {
+                                  editUnitForm.setFieldsValue(u);
+                                  setEditingUnit(u);
+                                }}
+                              />,
+                              <Button key="retire" size="small" onClick={() => toggleUnitRetired(u)}>
+                                {u.availability === "unavailable" ? t("common.unarchive") : t("common.archive")}
+                              </Button>,
+                            ]
+                          : []
+                      }
+                    >
                       <Space direction="vertical" size={0}>
                         <Typography.Text strong>{u.unitLabel}</Typography.Text>
                         <Typography.Text type="secondary">
@@ -235,6 +324,59 @@ export default function PropertyDetailPage() {
                 { value: "sensitive", label: t("properties.sensitive") },
               ]}
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("common.edit")}
+        open={editPropertyModal}
+        onCancel={() => setEditPropertyModal(false)}
+        onOk={onEditProperty}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editPropertyForm} layout="vertical">
+          <Form.Item name="name" label={t("common.name")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="nameEn" label={t("common.nameEn")}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="address" label={t("common.address")} rules={[{ required: true }]}>
+            <Input.TextArea rows={2} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("common.edit")}
+        open={!!editingUnit}
+        onCancel={() => setEditingUnit(null)}
+        onOk={onEditUnit}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editUnitForm} layout="vertical">
+          <Form.Item name="unitLabel" label={t("properties.unitLabel")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="unitType" label={t("properties.unitType")} rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: "building", label: t("properties.building") },
+                { value: "open_land", label: t("properties.openLand") },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item
+            name="rentableAreaSqm"
+            label={t("properties.rentableArea")}
+            rules={[{ required: true, pattern: /^\d+(\.\d+)?$/, message: "Enter a decimal number" }]}
+          >
+            <Input />
           </Form.Item>
         </Form>
       </Modal>

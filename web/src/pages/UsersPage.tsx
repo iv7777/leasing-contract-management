@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, message } from "antd";
-import { EditOutlined, KeyOutlined, PlusOutlined } from "@ant-design/icons";
+import { EditOutlined, KeyOutlined, PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PropertyDto, PublicUser, Role } from "@lcm/shared";
 import { ROLES } from "@lcm/shared";
@@ -77,6 +77,26 @@ export default function UsersPage() {
     }
   };
 
+  const onDelete = (u: PublicUser) => {
+    Modal.confirm({
+      title: t("users.deleteUser"),
+      content: t("users.deleteUserConfirm"),
+      okText: t("common.confirm"),
+      okButtonProps: { danger: true },
+      cancelText: t("common.cancel"),
+      onOk: async () => {
+        try {
+          await api.delete(`/users/${u.id}`);
+          message.success(t("users.deleteUser"));
+          load();
+        } catch (err) {
+          if (err instanceof ApiError) message.error(err.message);
+          else throw err;
+        }
+      },
+    });
+  };
+
   const openEdit = (u: PublicUser) => {
     setEditingUser(u);
     editForm.setFieldsValue({
@@ -141,6 +161,11 @@ export default function UsersPage() {
                 <Tooltip title={t("users.resetPassword")}>
                   <Button size="small" icon={<KeyOutlined />} onClick={() => setPasswordUser(u)} />
                 </Tooltip>
+                {u.id !== currentUser?.id && (
+                  <Tooltip title={t("users.deleteUser")}>
+                    <Button size="small" danger icon={<DeleteOutlined />} onClick={() => onDelete(u)} />
+                  </Tooltip>
+                )}
               </Space>
             ),
           },

@@ -17,6 +17,7 @@ import { depositTransactionsRouter } from "./routes/depositTransactions.js";
 import { reportsRouter } from "./routes/reports.js";
 import { exportsRouter } from "./routes/exports.js";
 import { systemInfoRouter } from "./routes/systemInfo.js";
+import { auditRouter } from "./routes/audit.js";
 import { runBackup } from "./jobs/backup.js";
 
 const app = express();
@@ -60,6 +61,7 @@ app.use("/api", depositTransactionsRouter);
 app.use("/api", reportsRouter);
 app.use("/api", exportsRouter);
 app.use("/api/system-info", systemInfoRouter);
+app.use("/api/audit", auditRouter);
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
