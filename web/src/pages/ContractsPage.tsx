@@ -26,7 +26,8 @@ const statusColor: Record<ContractDto["status"], string> = {
 };
 
 export default function ContractsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const exportLang = i18n.language.startsWith("zh") ? "zh" : "en";
   const { user } = useAuth();
   const navigate = useNavigate();
   const screens = Grid.useBreakpoint();
@@ -68,7 +69,7 @@ export default function ContractsPage() {
           {t("contracts.title")}
         </Typography.Title>
         <Space>
-          <Button icon={<DownloadOutlined />} onClick={() => window.open("/api/contracts.csv", "_blank")}>
+          <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts.csv?lang=${exportLang}`, "_blank")}>
             {t("contracts.exportCsv")}
           </Button>
           {canCreate && (

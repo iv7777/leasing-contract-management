@@ -132,6 +132,16 @@ install_nodejs() {
   echo "node $(node -v) at $NODE_BIN, npm $(npm -v)"
 }
 
+# PDF/CSV contract exports embed this to render Chinese text — pdfkit's
+# built-in fonts have no CJK glyphs at all, so without it Chinese names show
+# as blank boxes. dpkg -s makes this a no-op on every later run.
+ensure_export_fonts() {
+  if ! dpkg -s fonts-wqy-zenhei >/dev/null 2>&1; then
+    log "Installing CJK font for PDF/CSV exports"
+    apt-get install -y fonts-wqy-zenhei
+  fi
+}
+
 fetch_code() {
   log "Fetching application code"
   if [ -d "$APP_CODE_DIR/.git" ]; then
@@ -271,6 +281,7 @@ PLAN
   mkdir -p "$APP_DIR" "$DATA_DIR" "$DOCS_DIR" "$BACKUP_DIR_PATH"
 
   install_nodejs
+  ensure_export_fonts
   fetch_code
   build_app
 
@@ -417,6 +428,7 @@ action_check_update() {
 
   confirm "Pull and update to the latest build now?" || { echo "Skipped."; return 0; }
 
+  ensure_export_fonts
   fetch_code
   build_app
   run_migrations_and_seed

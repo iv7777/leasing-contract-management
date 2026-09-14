@@ -18,6 +18,8 @@ import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
 import { recordAudit } from "../lib/audit.js";
 import { todayInChina } from "@lcm/shared";
+import { useCjkFont } from "../lib/pdfFonts.js";
+import { exportLabels, resolveExportLang } from "../lib/exportLabels.js";
 
 export const exportsRouter = Router();
 exportsRouter.use(requireAuth);
@@ -72,59 +74,63 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
 
   recordAudit({ actorUserId: req.user!.id, action: "contract_pdf_exported", entityType: "contract", entityId: contractId });
 
+  const lang = resolveExportLang(req.query.lang);
+  const L = exportLabels[lang];
+
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${contract.referenceNumber}.pdf"`);
 
   const doc = new PDFDocument({ margin: 50 });
+  useCjkFont(doc); // covers Chinese party/label text even when lang="en"
   doc.pipe(res);
 
-  doc.fontSize(18).text(`Contract Summary — ${contract.referenceNumber}`, { underline: true });
+  doc.fontSize(18).text(`${L.summaryTitle} — ${contract.referenceNumber}`, { underline: true });
   doc.moveDown();
   doc.fontSize(11);
-  doc.text(`Status: ${contract.status}  ·  Version: ${contract.versionNumber}`);
-  doc.text(`Landlord: ${landlord?.name ?? ""}`);
-  doc.text(`Tenant: ${tenant?.name ?? ""}`);
-  doc.text(`Term: ${contract.termStart} to ${contract.termEnd}`);
-  doc.text(`Renewal notice: ${contract.renewalNoticeDays} days`);
+  doc.text(`${L.status}: ${L[contract.status] ?? contract.status}  ·  ${L.version}: ${contract.versionNumber}`);
+  doc.text(`${L.landlord}: ${landlord?.name ?? ""}`);
+  doc.text(`${L.tenant}: ${tenant?.name ?? ""}`);
+  doc.text(`${L.term}: ${contract.termStart} ${L.to} ${contract.termEnd}`);
+  doc.text(`${L.renewalNotice}: ${contract.renewalNoticeDays} ${L.days}`);
   doc.moveDown();
 
-  doc.fontSize(14).text("Units");
+  doc.fontSize(14).text(L.units);
   doc.fontSize(11);
   for (const u of cUnits) {
-    doc.text(`  ${unitLabels.get(u.unitId) ?? u.unitId} — ${u.contractedAreaSqm} sqm, from ${u.effectiveStart}${u.effectiveEnd ? ` to ${u.effectiveEnd}` : ""}`);
+    doc.text(`  ${unitLabels.get(u.unitId) ?? u.unitId} — ${u.contractedAreaSqm} ${L.sqm}, ${L.from} ${u.effectiveStart}${u.effectiveEnd ? ` ${L.to} ${u.effectiveEnd}` : ""}`);
   }
   doc.moveDown();
 
-  doc.fontSize(14).text("Pricing");
+  doc.fontSize(14).text(L.pricing);
   doc.fontSize(11);
   for (const s of streams) {
-    doc.text(`  ${s.label ?? s.feeType} (${s.feeType})`);
+    doc.text(`  ${s.label ?? (L[s.feeType] ?? s.feeType)} (${L[s.feeType] ?? s.feeType})`);
     for (const r of rates.filter((r) => r.pricingStreamId === s.id)) {
-      doc.text(`    ${r.calculationMethod} — ${r.amountOrRate} (${r.rateBasis}), from ${r.effectiveStart}${r.effectiveEnd ? ` to ${r.effectiveEnd}` : ""}`);
+      doc.text(`    ${L[r.calculationMethod] ?? r.calculationMethod} — ${r.amountOrRate} (${L[r.rateBasis] ?? r.rateBasis}), ${L.from} ${r.effectiveStart}${r.effectiveEnd ? ` ${L.to} ${r.effectiveEnd}` : ""}`);
     }
   }
   doc.moveDown();
 
-  doc.fontSize(14).text("Deposit");
+  doc.fontSize(14).text(L.deposit);
   doc.fontSize(11);
   for (const d of deposits) {
-    doc.text(`  ${d.requirementType === "fixed" ? `${((d.fixedAmountFen ?? 0) / 100).toFixed(2)} yuan` : d.formulaBasis}, effective ${d.effectiveStart}`);
+    doc.text(`  ${d.requirementType === "fixed" ? `${((d.fixedAmountFen ?? 0) / 100).toFixed(2)} ${L.yuan}` : d.formulaBasis}, ${L.effective} ${d.effectiveStart}`);
   }
   doc.moveDown();
 
-  doc.fontSize(14).text("Payment ledger");
+  doc.fontSize(14).text(L.paymentLedger);
   doc.fontSize(10);
   for (const { charge, balance } of chargeBalances) {
     doc.text(
-      `  ${charge.serviceStart} – ${charge.serviceEnd}  ${charge.feeType}  billed ${(charge.amountFen / 100).toFixed(2)}  balance ${(balance.balanceFen / 100).toFixed(2)}${balance.isOverdue ? `  OVERDUE ${balance.daysOverdue}d` : ""}`,
+      `  ${charge.serviceStart} – ${charge.serviceEnd}  ${L[charge.feeType] ?? charge.feeType}  ${L.billed} ${(charge.amountFen / 100).toFixed(2)}  ${L.balance} ${(balance.balanceFen / 100).toFixed(2)}${balance.isOverdue ? `  ${L.overdue} ${balance.daysOverdue}${lang === "zh" ? "天" : "d"}` : ""}`,
     );
   }
   doc.moveDown();
 
-  doc.fontSize(14).text("Amendment history");
+  doc.fontSize(14).text(L.amendmentHistory);
   doc.fontSize(10);
   for (const a of amendmentRows) {
-    doc.text(`  ${a.effectiveDate}  ${a.type}  [${a.status}]  ${a.reason}`);
+    doc.text(`  ${a.effectiveDate}  ${a.type}  [${L[a.status] ?? a.status}]  ${a.reason}`);
   }
 
   doc.end();
@@ -138,18 +144,20 @@ exportsRouter.get("/contracts.csv", (req, res) => {
   if (!canDownloadOrPrint(req.user!, "print")) {
     return res.status(403).json({ error: { code: "forbidden", message: "Export is disabled for this account." } });
   }
+  const lang = resolveExportLang(req.query.lang);
+  const L = exportLabels[lang];
   const all = db.select().from(contracts).all().filter((c) => canAccessContract(req.user!, c.id));
   const partyMap = new Map(db.select().from(parties).all().map((p) => [p.id, p.name]));
 
   const csv = toCsv(
     all.map((c) => ({
-      referenceNumber: c.referenceNumber,
-      landlord: partyMap.get(c.landlordPartyId) ?? "",
-      tenant: partyMap.get(c.tenantPartyId) ?? "",
-      termStart: c.termStart,
-      termEnd: c.termEnd,
-      status: c.status,
-      version: c.versionNumber,
+      [L.csvReferenceNumber]: c.referenceNumber,
+      [L.csvLandlord]: partyMap.get(c.landlordPartyId) ?? "",
+      [L.csvTenant]: partyMap.get(c.tenantPartyId) ?? "",
+      [L.csvTermStart]: c.termStart,
+      [L.csvTermEnd]: c.termEnd,
+      [L.csvStatus]: L[c.status] ?? c.status,
+      [L.csvVersion]: c.versionNumber,
     })),
   );
 
@@ -168,6 +176,8 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
     return res.status(403).json({ error: { code: "forbidden", message: "Export is disabled for this account." } });
   }
 
+  const lang = resolveExportLang(req.query.lang);
+  const L = exportLabels[lang];
   const ledger = loadLedgerInputs(contractId);
   const asOfDate = todayInChina();
   const rows = ledger.chargesRaw.map((c) => {
@@ -178,14 +188,14 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
       asOfDate,
     );
     return {
-      serviceStart: c.serviceStart,
-      serviceEnd: c.serviceEnd,
-      feeType: c.feeType,
-      dueDate: c.dueDate,
-      billedYuan: (c.amountFen / 100).toFixed(2),
-      allocatedYuan: (balance.allocatedFen / 100).toFixed(2),
-      balanceYuan: (balance.balanceFen / 100).toFixed(2),
-      overdueDays: balance.daysOverdue,
+      [L.csvServiceStart]: c.serviceStart,
+      [L.csvServiceEnd]: c.serviceEnd,
+      [L.csvFeeType]: L[c.feeType] ?? c.feeType,
+      [L.csvDueDate]: c.dueDate,
+      [L.csvBilledYuan]: (c.amountFen / 100).toFixed(2),
+      [L.csvAllocatedYuan]: (balance.allocatedFen / 100).toFixed(2),
+      [L.csvBalanceYuan]: (balance.balanceFen / 100).toFixed(2),
+      [L.csvOverdueDays]: balance.daysOverdue,
     };
   });
 

@@ -145,7 +145,8 @@ const camel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const exportLang = i18n.language.startsWith("zh") ? "zh" : "en";
   const { user } = useAuth();
 
   const [contract, setContract] = useState<ContractDto | null>(null);
@@ -499,12 +500,12 @@ export default function ContractDetailPage() {
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           <Tag>v{contract.versionNumber}</Tag>
           {(user?.canDownloadPdf || user?.role === "admin" || user?.role === "manager") && (
-            <Button icon={<FilePdfOutlined />} onClick={() => window.open(`/api/contracts/${id}/pdf-summary`, "_blank")}>
+            <Button icon={<FilePdfOutlined />} onClick={() => window.open(`/api/contracts/${id}/pdf-summary?lang=${exportLang}`, "_blank")}>
               {t("contracts.exportPdf")}
             </Button>
           )}
           {(user?.canPrint || user?.role === "admin" || user?.role === "manager") && (
-            <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts/${id}/ledger.csv`, "_blank")}>
+            <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts/${id}/ledger.csv?lang=${exportLang}`, "_blank")}>
               {t("contracts.exportCsv")}
             </Button>
           )}

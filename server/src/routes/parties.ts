@@ -41,7 +41,7 @@ const createPartySchema = z.object({
 partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
   const parsed = createPartySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload." } });
+    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload.", details: parsed.error.flatten() } });
   }
   const inserted = db
     .insert(parties)
@@ -72,7 +72,7 @@ partiesRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
 
   const parsed = updatePartySchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload." } });
+    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload.", details: parsed.error.flatten() } });
   }
   const updated = db
     .update(parties)
