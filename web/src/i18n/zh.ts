@@ -222,6 +222,10 @@ const zh: Translations = {
     rate_change: "费率变更",
     deposit_shortfall: "押金不足",
     overdue_balance: "逾期余额",
+    renewalNoticeMessage: "续租通知期已开启——合同将于 {{termEnd}} 到期（剩余 {{daysLeft}} 天）。",
+    rateChangeMessage: "「{{label}}」的费率将于 {{effectiveStart}} 起变更。",
+    depositShortfallMessage: "押金不足：已收 {{held}}，应收 {{required}}。",
+    overdueBalanceMessage: "账单已逾期 {{days}} 天，余额 {{balance}}（到期日 {{dueDate}}）。",
   },
   occupancy: {
     title: "出租率",

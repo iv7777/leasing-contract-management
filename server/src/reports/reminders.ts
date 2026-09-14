@@ -3,13 +3,17 @@ import { daysBetween, type IsoDate } from "@lcm/shared";
 export type ReminderType = "renewal_notice" | "rate_change" | "deposit_shortfall" | "overdue_balance";
 export type ReminderSeverity = "info" | "warning" | "critical";
 
+/** Money fields here are always fen (integer, matching every other amount
+ * in the system) — the UI is responsible for converting to yuan and
+ * translating the message, the same way charge/receipt amounts are
+ * formatted client-side rather than baked into a pre-rendered string. */
 export interface Reminder {
   contractId: number;
   referenceNumber: string;
   type: ReminderType;
   severity: ReminderSeverity;
-  message: string;
   date: IsoDate;
+  params: Record<string, string | number>;
 }
 
 export interface RateChangeInput {
@@ -60,8 +64,8 @@ export function computeReminders(contracts: ContractReminderInput[], asOfDate: I
         referenceNumber: c.referenceNumber,
         type: "renewal_notice",
         severity: daysLeft <= 30 ? "critical" : "warning",
-        message: `Renewal notice window is open — term ends ${c.termEnd} (${daysLeft} days left).`,
         date: c.termEnd,
+        params: { termEnd: c.termEnd, daysLeft },
       });
     }
 
@@ -72,8 +76,8 @@ export function computeReminders(contracts: ContractReminderInput[], asOfDate: I
           referenceNumber: c.referenceNumber,
           type: "rate_change",
           severity: "info",
-          message: `Rate change for "${rc.pricingStreamLabel}" takes effect ${rc.effectiveStart}.`,
           date: rc.effectiveStart,
+          params: { pricingStreamLabel: rc.pricingStreamLabel, effectiveStart: rc.effectiveStart },
         });
       }
     }
@@ -84,8 +88,8 @@ export function computeReminders(contracts: ContractReminderInput[], asOfDate: I
         referenceNumber: c.referenceNumber,
         type: "deposit_shortfall",
         severity: "warning",
-        message: `Deposit shortfall: holding ${c.depositHeldFen} fen against a required ${c.depositRequiredFen} fen.`,
         date: asOfDate,
+        params: { depositHeldFen: c.depositHeldFen, depositRequiredFen: c.depositRequiredFen },
       });
     }
 
@@ -96,8 +100,8 @@ export function computeReminders(contracts: ContractReminderInput[], asOfDate: I
           referenceNumber: c.referenceNumber,
           type: "overdue_balance",
           severity: cb.daysOverdue >= 30 ? "critical" : "warning",
-          message: `Charge overdue ${cb.daysOverdue} days, balance ${cb.balanceFen} fen (due ${cb.dueDate}).`,
           date: cb.dueDate,
+          params: { daysOverdue: cb.daysOverdue, balanceFen: cb.balanceFen, dueDate: cb.dueDate },
         });
       }
     }

@@ -9,11 +9,12 @@ interface Reminder {
   referenceNumber: string;
   type: "renewal_notice" | "rate_change" | "deposit_shortfall" | "overdue_balance";
   severity: "info" | "warning" | "critical";
-  message: string;
   date: string;
+  params: Record<string, string | number>;
 }
 
 const severityColor: Record<Reminder["severity"], string> = { info: "blue", warning: "orange", critical: "red" };
+const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
 export default function RemindersPage() {
   const { t } = useTranslation();
@@ -27,6 +28,28 @@ export default function RemindersPage() {
       .then((r) => setReminders(r.reminders))
       .finally(() => setLoading(false));
   }, []);
+
+  const describe = (r: Reminder) => {
+    switch (r.type) {
+      case "renewal_notice":
+        return t("reminders.renewalNoticeMessage", { termEnd: r.params.termEnd, daysLeft: r.params.daysLeft });
+      case "rate_change":
+        return t("reminders.rateChangeMessage", { label: r.params.pricingStreamLabel, effectiveStart: r.params.effectiveStart });
+      case "deposit_shortfall":
+        return t("reminders.depositShortfallMessage", {
+          held: yuan(Number(r.params.depositHeldFen)),
+          required: yuan(Number(r.params.depositRequiredFen)),
+        });
+      case "overdue_balance":
+        return t("reminders.overdueBalanceMessage", {
+          days: r.params.daysOverdue,
+          balance: yuan(Number(r.params.balanceFen)),
+          dueDate: r.params.dueDate,
+        });
+      default:
+        return "";
+    }
+  };
 
   return (
     <div>
@@ -43,7 +66,7 @@ export default function RemindersPage() {
                   <Tag color={severityColor[r.severity]}>{t(`reminders.${r.type}`)}</Tag> {r.referenceNumber}
                 </span>
               }
-              description={r.message}
+              description={describe(r)}
             />
           </List.Item>
         )}

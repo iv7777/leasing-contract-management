@@ -220,6 +220,10 @@ const en = {
     rate_change: "Rate change",
     deposit_shortfall: "Deposit shortfall",
     overdue_balance: "Overdue balance",
+    renewalNoticeMessage: "Renewal notice window is open — term ends {{termEnd}} ({{daysLeft}} days left).",
+    rateChangeMessage: 'Rate change for "{{label}}" takes effect {{effectiveStart}}.',
+    depositShortfallMessage: "Deposit shortfall: holding {{held}} against a required {{required}}.",
+    overdueBalanceMessage: "Charge overdue {{days}} days, balance {{balance}} (due {{dueDate}}).",
   },
   occupancy: {
     title: "Occupancy",

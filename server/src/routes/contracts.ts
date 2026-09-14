@@ -180,13 +180,16 @@ contractsRouter.delete("/:id", requireRole("admin"), (req, res) => {
     db.delete(contractVersions).where(eq(contractVersions.contractId, id)).run();
     db.delete(amendments).where(eq(amendments.contractId, id)).run();
 
+    // concessions.pricing_stream_id references pricing_streams.id, so it
+    // must go before the pricing streams themselves are deleted below.
+    db.delete(concessions).where(eq(concessions.contractId, id)).run();
+
     const streamIds = db.select({ id: pricingStreams.id }).from(pricingStreams).where(eq(pricingStreams.contractId, id)).all().map((s) => s.id);
     for (const streamId of streamIds) {
       db.delete(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).run();
       db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
     }
     db.delete(pricingStreams).where(eq(pricingStreams.contractId, id)).run();
-    db.delete(concessions).where(eq(concessions.contractId, id)).run();
     db.delete(depositTerms).where(eq(depositTerms.contractId, id)).run();
     db.delete(contractUnits).where(eq(contractUnits.contractId, id)).run();
     db.delete(billingRules).where(eq(billingRules.contractId, id)).run();

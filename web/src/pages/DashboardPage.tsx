@@ -2,6 +2,7 @@ import { Button, Card, Col, Form, Input, Modal, Row, Statistic, Typography, mess
 import { HomeOutlined, TeamOutlined, BellOutlined, EditOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { PropertyDto, PartyDto } from "@lcm/shared";
 import { useAuth } from "../auth/AuthContext";
@@ -15,6 +16,7 @@ interface SystemInfo {
 export default function DashboardPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [propertyCount, setPropertyCount] = useState<number | null>(null);
   const [partyCount, setPartyCount] = useState<number | null>(null);
   const [reminderCount, setReminderCount] = useState<number | null>(null);
@@ -49,17 +51,17 @@ export default function DashboardPage() {
       </Typography.Paragraph>
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={8}>
-          <Card>
+          <Card hoverable onClick={() => navigate("/properties")}>
             <Statistic title={t("nav.properties")} value={propertyCount ?? undefined} prefix={<HomeOutlined />} loading={propertyCount === null} />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8}>
-          <Card>
+          <Card hoverable onClick={() => navigate("/parties")}>
             <Statistic title={t("nav.parties")} value={partyCount ?? undefined} prefix={<TeamOutlined />} loading={partyCount === null} />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8}>
-          <Card>
+          <Card hoverable onClick={() => navigate("/reminders")}>
             <Statistic title={t("dashboard.openReminders")} value={reminderCount ?? undefined} prefix={<BellOutlined />} loading={reminderCount === null} />
           </Card>
         </Col>
