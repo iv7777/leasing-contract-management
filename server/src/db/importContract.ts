@@ -72,6 +72,11 @@ const pricingStreamSchema = z.object({
   targetType: z.enum(["unit", "group", "contract"]).default("unit"),
   label: z.string().optional(),
   notes: z.string().optional(),
+  // For a multi-unit contract (`units`), a "unit"-scoped stream that should
+  // only price a subset of the units it created — matched against those
+  // units' own unitLabel. Omitted (the common case: one unit, or a stream
+  // that legitimately covers every unit it created) links to all of them.
+  contractUnitLabels: z.array(z.string()).optional(),
   rates: z.array(rateSchema).min(1),
 });
 const concessionSchema = z.object({
@@ -246,21 +251,26 @@ function main() {
         })
         .returning()
         .get();
-      return contractUnit;
+      return { contractUnit, unitLabel: unitInput.unitLabel };
     });
 
     const streamIdByLabel = new Map<string, number>();
     for (const streamInput of data.pricingStreams) {
-      const { rates, ...streamFields } = streamInput;
+      const { rates, contractUnitLabels, ...streamFields } = streamInput;
       const stream = db.insert(pricingStreams).values({ contractId: contract.id, ...streamFields }).returning().get();
       if (streamFields.label) streamIdByLabel.set(streamFields.label, stream.id);
       if (streamFields.targetType === "unit") {
         // A single-unit contract links unambiguously. A multi-unit contract
-        // with no per-stream targeting info links the stream to every unit
-        // it created — right for a combined figure covering all of them
-        // (this contract's "contract"-scoped streams are the more common
-        // case for that, but a "unit"-scoped one falls back to this).
-        for (const contractUnit of contractUnitsCreated) {
+        // targets only the units named in contractUnitLabels, if given —
+        // otherwise (no targeting info) it links to every unit it created,
+        // right for a combined figure covering all of them.
+        const targets = contractUnitLabels
+          ? contractUnitsCreated.filter((c) => contractUnitLabels.includes(c.unitLabel))
+          : contractUnitsCreated;
+        if (contractUnitLabels && targets.length !== contractUnitLabels.length) {
+          throw new Error(`Pricing stream "${streamFields.label ?? streamFields.feeType}" references unknown contractUnitLabels: ${contractUnitLabels.filter((l) => !contractUnitsCreated.some((c) => c.unitLabel === l)).join(", ")}`);
+        }
+        for (const { contractUnit } of targets) {
           db.insert(pricingStreamUnits).values({ pricingStreamId: stream.id, contractUnitId: contractUnit.id }).run();
         }
       }
