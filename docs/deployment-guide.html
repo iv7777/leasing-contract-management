@@ -272,6 +272,28 @@
 
   footer { max-width: 780px; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 13px; }
 
+  /* ---------- Variant toggle (dedicated service account vs root) ---------- */
+  .variant-picker {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 18px; margin-bottom: 40px; box-shadow: var(--shadow);
+  }
+  .variant-picker-label { font-family: "Archivo", sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); }
+  .variant-buttons { display: inline-flex; background: var(--surface-tint); border-radius: 999px; padding: 3px; gap: 2px; }
+  .variant-btn {
+    font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink-soft);
+    background: transparent; border: none; border-radius: 999px; padding: 7px 16px; cursor: pointer;
+  }
+  .variant-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .variant-btn[aria-pressed="true"] { color: #0c1a14; }
+  }
+  :root[data-theme="dark"] .variant-btn[aria-pressed="true"] { color: #0c1a14; }
+  .variant-picker-note { font-size: 13px; color: var(--ink-faint); flex-basis: 100%; }
+  body[data-variant="svc"] .root-only { display: none !important; }
+  body[data-variant="root"] .svc-only { display: none !important; }
+  body:not([data-variant]) .root-only { display: none !important; }
+
   @media (prefers-reduced-motion: no-preference) {
     .copy-btn { transition: color 0.15s, border-color 0.15s; }
   }
@@ -344,6 +366,15 @@
       </div>
     </header>
 
+    <div class="variant-picker" id="variant-picker">
+      <span class="variant-picker-label">Run the app as</span>
+      <div class="variant-buttons" role="group" aria-label="Deployment approach">
+        <button type="button" class="variant-btn" data-set-variant="svc" aria-pressed="true">Dedicated service account</button>
+        <button type="button" class="variant-btn" data-set-variant="root" aria-pressed="false">Root</button>
+      </div>
+      <p class="variant-picker-note">Steps below adjust to match — §3, the systemd unit, and every <code class="inline">sudo -u lcm</code> command change accordingly. This choice doesn't affect §1: whether you SSH in as root or a sudo user is a separate decision, already covered there.</p>
+    </div>
+
     <section id="prereqs">
       <h2>Prerequisites</h2>
       <ul>
@@ -355,7 +386,7 @@
       <div class="callout note">
         <span class="icon">📌</span>
         <div><strong>Placeholders used throughout</strong>
-        <p>Swap these for your own everywhere they appear: domain <code class="inline">lease.yourcompany.com</code>, deploy root <code class="inline">/opt/lcm</code>, service account <code class="inline">lcm</code>, systemd unit <code class="inline">lcm.service</code>, sudo login <code class="inline">deploy</code>.</p></div>
+        <p>Swap these for your own everywhere they appear: domain <code class="inline">lease.yourcompany.com</code>, deploy root <code class="inline">/opt/lcm</code>, service account <code class="inline">lcm</code> (dedicated-account variant only), systemd unit <code class="inline">lcm.service</code>, sudo login <code class="inline">deploy</code>.</p></div>
       </div>
     </section>
 
@@ -420,13 +451,22 @@ npm -v</code></pre>
     </section>
 
     <section id="s3">
-      <div class="step-head"><span class="step-num">03</span><h2>Create the app's service account</h2></div>
-      <p>The app runs as its own unprivileged, no-login system user — never as <code class="inline">deploy</code> or <code class="inline">root</code>.</p>
-      <div class="term">
+      <div class="step-head"><span class="step-num">03</span><h2 class="svc-only">Create the app's service account</h2><h2 class="root-only">Create the directory layout</h2></div>
+      <p class="svc-only">The app runs as its own unprivileged, no-login system user — never as <code class="inline">deploy</code> or <code class="inline">root</code>.</p>
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>sudo useradd --system --home-dir /opt/lcm --create-home --shell /usr/sbin/nologin lcm
 sudo mkdir -p /opt/lcm/{app,data,documents,backups}
 sudo chown -R lcm:lcm /opt/lcm</code></pre>
+      </div>
+      <div class="callout note root-only">
+        <span class="icon">📌</span>
+        <div><strong>Running as root</strong>
+        <p>No dedicated account to create — the app process, and everything under <code class="inline">/opt/lcm</code>, is just owned by root. Every <code class="inline">sudo -u lcm</code> command later in this guide becomes a plain <code class="inline">sudo</code> command; the systemd unit in <a href="#s8">§8</a> runs as <code class="inline">User=root</code>.</p></div>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo mkdir -p /opt/lcm/{app,data,documents,backups}</code></pre>
       </div>
       <div class="twrap">
         <table>
@@ -444,29 +484,44 @@ sudo chown -R lcm:lcm /opt/lcm</code></pre>
 
     <section id="s4">
       <div class="step-head"><span class="step-num">04</span><h2>Get the code onto the server</h2></div>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>sudo -u lcm git clone YOUR_REPO_URL /opt/lcm/app
 cd /opt/lcm/app
 sudo -u lcm git checkout main   # or whichever branch you've decided is production-ready</code></pre>
       </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo git clone YOUR_REPO_URL /opt/lcm/app
+cd /opt/lcm/app
+sudo git checkout main   # or whichever branch you've decided is production-ready</code></pre>
+      </div>
       <div class="callout note">
         <span class="icon">🔑</span>
         <div><strong>Private repository</strong>
-        <p>If the repo isn't public, clone with a token embedded in the URL (<code class="inline">https://&lt;token&gt;@github.com/owner/repo.git</code>) or set up an SSH deploy key for the <code class="inline">lcm</code> user first — either works, since the command above just needs whatever URL you'd normally clone with.</p></div>
+        <p class="svc-only">If the repo isn't public, clone with a token embedded in the URL (<code class="inline">https://&lt;token&gt;@github.com/owner/repo.git</code>) or set up an SSH deploy key for the <code class="inline">lcm</code> user first — either works, since the command above just needs whatever URL you'd normally clone with.</p>
+        <p class="root-only">If the repo isn't public, clone with a token embedded in the URL (<code class="inline">https://&lt;token&gt;@github.com/owner/repo.git</code>) or set up an SSH deploy key for root first — either works, since the command above just needs whatever URL you'd normally clone with.</p></div>
       </div>
     </section>
 
     <section id="s5">
       <div class="step-head"><span class="step-num">05</span><h2>Install dependencies and build</h2></div>
       <p>This is an npm-workspaces monorepo (<code class="inline">shared</code> / <code class="inline">server</code> / <code class="inline">web</code>) — one install at the root covers all three.</p>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>cd /opt/lcm/app
 sudo -u lcm npm ci
 sudo -u lcm npm run build:shared
 sudo -u lcm npm run build:server
 sudo -u lcm npm run build:web</code></pre>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app
+sudo npm ci
+sudo npm run build:shared
+sudo npm run build:server
+sudo npm run build:web</code></pre>
       </div>
       <p><code class="inline">npm ci</code> installs exactly what <code class="inline">package-lock.json</code> pins — the same dependency tree that was tested, not whatever <code class="inline">^</code>-ranges resolve to today. <code class="inline">build:server</code> compiles TypeScript to <code class="inline">server/dist</code>; <code class="inline">build:web</code> produces the static bundle at <code class="inline">web/dist</code> that Nginx will serve directly in <a href="#s9">§9</a>.</p>
       <div class="callout note">
@@ -478,11 +533,17 @@ sudo -u lcm npm run build:web</code></pre>
 
     <section id="s6">
       <div class="step-head"><span class="step-num">06</span><h2>Configure the environment</h2></div>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>sudo -u lcm cp /opt/lcm/app/server/.env.example /opt/lcm/app/server/.env
 openssl rand -base64 48   # copy this value for SESSION_SECRET below
 sudo -u lcm nano /opt/lcm/app/server/.env</code></pre>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo cp /opt/lcm/app/server/.env.example /opt/lcm/app/server/.env
+openssl rand -base64 48   # copy this value for SESSION_SECRET below
+sudo nano /opt/lcm/app/server/.env</code></pre>
       </div>
       <p>Replace its contents with production values:</p>
       <div class="term">
@@ -498,34 +559,45 @@ ENABLE_BACKUP_SCHEDULE=true
 SEED_ADMIN_EMAIL=you@yourcompany.com
 SEED_ADMIN_PASSWORD=&lt;a temporary strong password, changed in the next step&gt;</code></pre>
       </div>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>sudo -u lcm chmod 600 /opt/lcm/app/server/.env</code></pre>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo chmod 600 /opt/lcm/app/server/.env</code></pre>
       </div>
       <p>See the full <a href="#envref">environment variable reference</a> at the end of this guide for what every value does.</p>
     </section>
 
     <section id="s7">
       <div class="step-head"><span class="step-num">07</span><h2>Initialize the database</h2></div>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>cd /opt/lcm/app/server
 sudo -u lcm npm run migrate
 sudo -u lcm npm run seed</code></pre>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app/server
+sudo npm run migrate
+sudo npm run seed</code></pre>
       </div>
       <p>This creates the SQLite schema at <code class="inline">DATABASE_PATH</code> and seeds one Admin user from <code class="inline">SEED_ADMIN_EMAIL</code>/<code class="inline">SEED_ADMIN_PASSWORD</code>.</p>
       <div class="callout danger">
         <span class="icon">🔒</span>
         <div><strong>There is no in-app "change password" yet</strong>
         <p>Neither a self-service nor an admin-reset password flow exists in the UI at this stage of the build. The only way to change a password is this server-side command — run it now, before the app is reachable from the internet in <a href="#s9">§9</a>:</p>
-        <pre style="margin-top:10px"><code>sudo -u lcm npm run reset-password -- you@yourcompany.com "a different, strong password"</code></pre>
+        <pre class="svc-only" style="margin-top:10px"><code>sudo -u lcm npm run reset-password -- you@yourcompany.com "a different, strong password"</code></pre>
+        <pre class="root-only" style="margin-top:10px"><code>sudo npm run reset-password -- you@yourcompany.com "a different, strong password"</code></pre>
         </div>
       </div>
     </section>
 
     <section id="s8">
       <div class="step-head"><span class="step-num">08</span><h2>Run it with systemd</h2></div>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag file"><span class="dot"></span>/etc/systemd/system/lcm.service</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>[Unit]
 Description=Lease Contract Management API
@@ -549,7 +621,31 @@ ReadWritePaths=/opt/lcm/data /opt/lcm/documents /opt/lcm/backups
 [Install]
 WantedBy=multi-user.target</code></pre>
       </div>
-      <p>The <code class="inline">Protect*</code>/<code class="inline">ReadWritePaths</code> lines make the rest of the filesystem read-only to this process — it can only ever write inside the three data directories it actually needs.</p>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag file"><span class="dot"></span>/etc/systemd/system/lcm.service</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>[Unit]
+Description=Lease Contract Management API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lcm/app/server
+EnvironmentFile=/opt/lcm/app/server/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/lcm/data /opt/lcm/documents /opt/lcm/backups
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+      </div>
+      <p class="svc-only">The <code class="inline">Protect*</code>/<code class="inline">ReadWritePaths</code> lines make the rest of the filesystem read-only to this process — it can only ever write inside the three data directories it actually needs.</p>
+      <p class="root-only">The <code class="inline">Protect*</code>/<code class="inline">ReadWritePaths</code> lines are worth keeping even running as root: they're mount-namespace restrictions, not permission checks, so they still make the rest of the filesystem read-only to this process regardless of which user runs it.</p>
       <div class="term">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>sudo systemctl daemon-reload
@@ -632,10 +728,16 @@ systemctl list-timers | grep certbot</code></pre>
     <section id="s12">
       <div class="step-head"><span class="step-num">12</span><h2>Backups</h2></div>
       <p>With <code class="inline">ENABLE_BACKUP_SCHEDULE=true</code> (set in <a href="#s6">§6</a>), the running server itself writes a nightly snapshot — a consistent SQLite copy plus a manifest of every referenced document — to <code class="inline">BACKUP_DIR</code> at 02:15 Asia/Shanghai time, regardless of the VPS's own system clock. Verify it once by hand:</p>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>cd /opt/lcm/app/server
 sudo -u lcm npm run backup
+ls /opt/lcm/backups</code></pre>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app/server
+sudo npm run backup
 ls /opt/lcm/backups</code></pre>
       </div>
       <h3>Off-site copy (required before real data goes in)</h3>
@@ -679,7 +781,7 @@ rclone config   # create a remote for your chosen storage, then a
     <section id="redeploy">
       <h2>Redeploying updates</h2>
       <p>Run this after every merge you want live. Migrations are safe to run every time — they no-op if there's nothing new to apply.</p>
-      <div class="term">
+      <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>cd /opt/lcm/app
 sudo -u lcm git pull
@@ -691,6 +793,19 @@ sudo -u lcm npm run migrate
 sudo systemctl restart lcm.service
 curl http://127.0.0.1:4000/api/health</code></pre>
       </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app
+sudo git pull
+sudo npm ci
+sudo npm run build:shared
+sudo npm run build:server
+sudo npm run build:web
+sudo npm run migrate
+sudo systemctl restart lcm.service
+curl http://127.0.0.1:4000/api/health</code></pre>
+      </div>
+      <p class="root-only">Or, if you deployed with <code class="inline">deploy/vps-deploy.sh</code>, just re-run it — it detects the existing checkout and does all of this for you.</p>
     </section>
 
     <section id="troubleshooting">
@@ -718,7 +833,8 @@ curl http://127.0.0.1:4000/api/health</code></pre>
         <li><label><input type="checkbox" id="sec2"><span><code class="inline">ufw</code> enabled, default-deny incoming, only OpenSSH + Nginx Full allowed</span></label></li>
         <li><label><input type="checkbox" id="sec3"><span><code class="inline">fail2ban</code> running (<code class="inline">systemctl status fail2ban</code>)</span></label></li>
         <li><label><input type="checkbox" id="sec4"><span><code class="inline">unattended-upgrades</code> enabled for security patches</span></label></li>
-        <li><label><input type="checkbox" id="sec5"><span><code class="inline">.env</code> is mode <code class="inline">600</code>, owned by <code class="inline">lcm</code>, never committed to git</span></label></li>
+        <li class="svc-only"><label><input type="checkbox" id="sec5"><span><code class="inline">.env</code> is mode <code class="inline">600</code>, owned by <code class="inline">lcm</code>, never committed to git</span></label></li>
+        <li class="root-only"><label><input type="checkbox" id="sec5root"><span><code class="inline">.env</code> is mode <code class="inline">600</code>, never committed to git</span></label></li>
         <li><label><input type="checkbox" id="sec6"><span><code class="inline">SESSION_SECRET</code> is a real random value, not left as a placeholder</span></label></li>
         <li><label><input type="checkbox" id="sec7"><span>Seeded admin password changed via <code class="inline">reset-password</code> before exposing the server publicly</span></label></li>
         <li><label><input type="checkbox" id="sec8"><span>TLS certificate valid and auto-renewal verified</span></label></li>
@@ -755,8 +871,10 @@ curl http://127.0.0.1:4000/api/health</code></pre>
           <tbody>
             <tr><td>Start / stop / restart</td><td><code class="inline">sudo systemctl restart lcm.service</code></td></tr>
             <tr><td>Follow logs</td><td><code class="inline">sudo journalctl -u lcm.service -f</code></td></tr>
-            <tr><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo -u lcm npm run backup</code></td></tr>
-            <tr><td>Reset a password</td><td><code class="inline">sudo -u lcm npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
+            <tr class="svc-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo -u lcm npm run backup</code></td></tr>
+            <tr class="root-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo npm run backup</code></td></tr>
+            <tr class="svc-only"><td>Reset a password</td><td><code class="inline">sudo -u lcm npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
+            <tr class="root-only"><td>Reset a password</td><td><code class="inline">sudo npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr><td>Test TLS renewal</td><td><code class="inline">sudo certbot renew --dry-run</code></td></tr>
             <tr><td>Reload Nginx config</td><td><code class="inline">sudo nginx -t && sudo systemctl reload nginx</code></td></tr>
             <tr><td>Firewall status</td><td><code class="inline">sudo ufw status verbose</code></td></tr>
@@ -773,6 +891,34 @@ curl http://127.0.0.1:4000/api/health</code></pre>
 
 <script>
   (function () {
+    // Deployment variant toggle: dedicated service account vs running as root.
+    var VARIANT_KEY = "lcm-deploy-variant";
+    var variantButtons = document.querySelectorAll(".variant-btn");
+    function applyVariant(variant) {
+      document.body.setAttribute("data-variant", variant);
+      variantButtons.forEach(function (btn) {
+        btn.setAttribute("aria-pressed", btn.getAttribute("data-set-variant") === variant ? "true" : "false");
+      });
+    }
+    var savedVariant = "svc";
+    try {
+      savedVariant = localStorage.getItem(VARIANT_KEY) || "svc";
+    } catch (e) {
+      savedVariant = "svc";
+    }
+    applyVariant(savedVariant);
+    variantButtons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var variant = btn.getAttribute("data-set-variant");
+        applyVariant(variant);
+        try {
+          localStorage.setItem(VARIANT_KEY, variant);
+        } catch (e) {
+          /* private-mode or storage disabled: choice just won't persist across visits */
+        }
+      });
+    });
+
     // Copy-to-clipboard on every terminal/code block.
     document.querySelectorAll(".copy-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {
