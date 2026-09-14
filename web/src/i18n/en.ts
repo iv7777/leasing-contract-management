@@ -4,6 +4,7 @@ const en = {
   },
   nav: {
     dashboard: "Dashboard",
+    guide: "Guide",
     properties: "Properties",
     parties: "Tenants & Landlords",
     contracts: "Contracts",
@@ -292,6 +293,59 @@ const en = {
     drawerTitle: "Help",
     tipsHeading: "Good to know",
     noContent: "No help topic for this page yet.",
+    guideLinkText: "Read the full guide",
+    guide: {
+      title: "User Guide",
+      body: "The complete guide to how this system works: the core concepts, the main workflow for setting up a lease, a few common day-to-day tasks, and what each role can do. For an explanation of a specific field or page, use the \"?\" help icon instead — this guide is about the bigger picture.",
+      intro: "Read this once to understand how the pieces fit together and the normal order of operations. Use the links below to jump straight to a section.",
+      overview: {
+        heading: "How the system fits together",
+        body: "Everything in this app revolves around a few core entities. A Property is a building or plot of land; each one is divided into Units — the actual spaces that get leased. A Party is any company or individual, acting as a landlord or tenant. A Contract ties a tenant, a landlord, and one or more units together for a specific term, and carries its own Pricing, Deposit terms, and, once it's Active, a running history of Charges, Receipts, Amendments, and Reminders.",
+        entityProperty: "A building or plot of land you manage. Holds one or more Units.",
+        entityParty: "A company or individual — landlord on one contract, tenant on another, or both across different contracts.",
+        entityContract: "The lease itself: which units, which parties, what term. Starts as a draft and must be activated before it can bill anything.",
+        entityPricing: "The recurring charges a contract generates — rent, management fee, utilities — each with its own rate and calculation method.",
+        entityDeposit: "What's required as a security deposit, and the running ledger of what's actually been received, refunded, or applied.",
+        entityCharges: "Generated bills for a given period, produced from the contract's pricing. Receipts are payments applied against them.",
+        entityAmendments: "The only way to change an Active contract — a proposed, approved, then applied change, always with a supporting document behind it.",
+        entityReminders: "Automatically computed flags — an upcoming renewal, a rate change, a deposit shortfall, an overdue balance — that disappear once the underlying issue is resolved.",
+      },
+      workflow: {
+        heading: "Setting up a new lease, start to finish",
+        intro: "This is the normal path for bringing a brand-new lease into the system.",
+        steps:
+          "Add the property (if it isn't already listed) and the specific unit(s) being leased, under Properties.\nAdd the landlord and tenant as parties, if they aren't already on file, under Tenants & Landlords.\nCreate a draft contract under Contracts, linking the tenant and landlord parties and setting the term dates.\nOn the contract, add its unit(s), pricing streams (rent, management fee, etc.) and deposit terms.\nUpload the signed lease document on the contract's Documents tab.\nActivate the contract — this is only possible once a signed lease is attached.\nGenerate charges for the current period, and record receipts as payments come in.\nFrom here on, any change to the contract (a rate change, an added unit, a term change) goes through Propose amendment rather than direct edits.",
+      },
+      commonTasks: {
+        heading: "Common day-to-day tasks",
+        payment: {
+          heading: "Recording a rent payment",
+          steps:
+            "Open the contract and go to its Receipts tab.\nClick Record receipt and enter the amount, date, and payment method.\nUse Allocate to apply the receipt against one or more outstanding charges — a receipt doesn't apply itself automatically.\nIf you don't yet know which charge it covers, leave it unallocated for now; it will show up as an unallocated receipt on the Statement tab until you allocate it.",
+        },
+        rentIncrease: {
+          heading: "Increasing rent on an active contract",
+          steps:
+            "Open the contract and go to its Amendments tab.\nClick Propose amendment, choose \"Change a rate on an existing pricing stream\", and select the pricing stream and its new rate.\nAttach a supporting document (the signed rent-increase agreement or correspondence) — this is required before the amendment can be submitted.\nSubmit the amendment. An Admin's own submissions are auto-approved; a Manager's submission waits for an Admin to approve it.\nOnce approved, the new rate takes effect from the date you specified, and future generated charges use it automatically.",
+        },
+        earlyTermination: {
+          heading: "Handling an early termination",
+          steps:
+            "Open the contract and go to its Amendments tab.\nPropose an amendment that changes the contract's status to Terminated and/or its term end date, with a reason.\nAttach the termination agreement or notice as the supporting document.\nSubmit and get it approved, the same as any other amendment.\nSettle the deposit: use the Deposit tab's transaction ledger to record any refund or deduction against the deposit balance.\nThe system won't generate new charges for a contract once it's no longer Active.",
+        },
+      },
+      roles: {
+        heading: "Roles & permissions",
+        intro: "Every user has one role, which controls what they can see and do. Non-Admin roles can additionally be restricted to specific properties.",
+        canDoHeading: "What they can do",
+        admin: "Full access: manages users, activates contracts and approves amendments, can see sensitive documents, and can restore backups (from the server) or edit system settings.",
+        manager: "Can create and edit contracts, parties, and properties, and propose amendments — but amendments a Manager submits need an Admin's approval before taking effect.",
+        collector: "Focused on collections: can record receipts and deposit transactions, but can't create or change contracts, parties, or properties.",
+        viewer: "Read-only access to whatever they're scoped to see.",
+        assignedPropertiesNote: "Any non-Admin user can be limited to one or more specific properties — they simply won't see contracts, units, or documents tied to any other property. Admins always see everything.",
+      },
+      moreHelp: "For an explanation of a specific field or page, use the \"?\" help icon in the header — it shows help for whatever you're currently looking at.",
+    },
     dashboard: {
       title: "Dashboard",
       body: "A quick snapshot of your portfolio: how many properties and tenants/landlords you have on file, and how many reminders currently need attention. Each tile is a shortcut — click any of them to jump straight to that list.",

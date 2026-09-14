@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import { AppLayout } from "./layout/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
+import GuidePage from "./pages/GuidePage";
 import PropertiesPage from "./pages/PropertiesPage";
 import PropertyDetailPage from "./pages/PropertyDetailPage";
 import ContractsPage from "./pages/ContractsPage";
@@ -39,6 +40,7 @@ export default function App() {
             <AppLayout>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
+                <Route path="/guide" element={<GuidePage />} />
                 <Route path="/properties" element={<PropertiesPage />} />
                 <Route path="/properties/:id" element={<PropertyDetailPage />} />
                 <Route path="/contracts" element={<ContractsPage />} />

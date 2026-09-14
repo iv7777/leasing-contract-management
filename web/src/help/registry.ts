@@ -5,6 +5,7 @@ interface RouteTopic {
 
 // Ordered most-specific first: a detail route must be checked before its list route.
 const routeTopics: RouteTopic[] = [
+  { pattern: /^\/guide$/, topic: "guide" },
   { pattern: /^\/properties\/\d+$/, topic: "properties.detail" },
   { pattern: /^\/properties$/, topic: "properties.list" },
   { pattern: /^\/contracts\/\d+$/, topic: "contracts.detail" },

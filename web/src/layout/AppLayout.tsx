@@ -14,6 +14,7 @@ import {
   AuditOutlined,
   CloudServerOutlined,
   QuestionCircleOutlined,
+  ReadOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -35,6 +36,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const items = [
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
+    { key: "/guide", icon: <ReadOutlined />, label: t("nav.guide") },
     { key: "/properties", icon: <HomeOutlined />, label: t("nav.properties") },
     { key: "/contracts", icon: <FileTextOutlined />, label: t("nav.contracts") },
     { key: "/reminders", icon: <BellOutlined />, label: t("nav.reminders") },
