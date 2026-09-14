@@ -61,10 +61,27 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-if [ -z "$DOMAIN" ]; then
+# Detect what a previous run already configured, so a plain re-run (no env
+# vars, no prompts answered) redeploys the same site instead of asking again.
+EXISTING_DOMAIN=""
+if [ -f "$NGINX_SITE" ]; then
+  EXISTING_DOMAIN="$(grep -oP '(?<=server_name )[^;]+' "$NGINX_SITE" 2>/dev/null | head -1 || true)"
+fi
+EXISTING_ADMIN_EMAIL=""
+if [ -f "$ENV_FILE" ]; then
+  EXISTING_ADMIN_EMAIL="$(grep '^SEED_ADMIN_EMAIL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
+fi
+
+if [ -z "$DOMAIN" ] && [ -n "$EXISTING_DOMAIN" ]; then
+  DOMAIN="$EXISTING_DOMAIN"
+  echo "Reusing existing domain from $NGINX_SITE: $DOMAIN"
+elif [ -z "$DOMAIN" ]; then
   read -rp "Domain this app will be served on (DNS A record must already point here): " DOMAIN
 fi
-if [ -z "$ADMIN_EMAIL" ]; then
+if [ -z "$ADMIN_EMAIL" ] && [ -n "$EXISTING_ADMIN_EMAIL" ]; then
+  ADMIN_EMAIL="$EXISTING_ADMIN_EMAIL"
+  echo "Reusing existing admin email from $ENV_FILE: $ADMIN_EMAIL"
+elif [ -z "$ADMIN_EMAIL" ]; then
   read -rp "Email for the initial admin account and Let's Encrypt renewal notices: " ADMIN_EMAIL
 fi
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-$ADMIN_EMAIL}"
@@ -72,6 +89,24 @@ LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-$ADMIN_EMAIL}"
 if [ -z "$DOMAIN" ] || [ -z "$ADMIN_EMAIL" ]; then
   echo "DOMAIN and ADMIN_EMAIL are both required." >&2
   exit 1
+fi
+
+# This script does not migrate a live domain: Nginx and the TLS certificate
+# stay pointed at whatever is already configured. Warn loudly instead of
+# silently ignoring a DOMAIN that doesn't match, and keep using the domain
+# that's actually live for the rest of this run.
+if [ -n "$EXISTING_DOMAIN" ] && [ "$DOMAIN" != "$EXISTING_DOMAIN" ]; then
+  warn "You passed DOMAIN=$DOMAIN but this server is already configured for $EXISTING_DOMAIN."
+  warn "This script will NOT move Nginx/TLS to the new domain automatically — continuing with $EXISTING_DOMAIN."
+  warn "To actually migrate domains: point the new domain's DNS at this server, then by hand"
+  warn "update server_name in $NGINX_SITE, run 'certbot --nginx -d <new-domain>', update WEB_ORIGIN"
+  warn "in $ENV_FILE, and restart nginx + $SERVICE_NAME.service. See the deployment guide."
+  DOMAIN="$EXISTING_DOMAIN"
+fi
+
+ADMIN_EMAIL_CHANGED=0
+if [ -n "$EXISTING_ADMIN_EMAIL" ] && [ "$ADMIN_EMAIL" != "$EXISTING_ADMIN_EMAIL" ]; then
+  ADMIN_EMAIL_CHANGED=1
 fi
 
 log "Deployment plan"
@@ -85,6 +120,9 @@ cat <<PLAN
   Nginx site          : $NGINX_SITE
   Node.js             : v${NODE_MAJOR}.x
 PLAN
+if [ "$ADMIN_EMAIL_CHANGED" = "1" ]; then
+  echo "  Admin login email  : $EXISTING_ADMIN_EMAIL -> $ADMIN_EMAIL (will be updated)"
+fi
 
 if [ "$ASSUME_YES" != "1" ]; then
   read -rp "Continue? [y/N] " CONFIRM
@@ -172,6 +210,16 @@ log "Running migrations and seeding the admin account"
   npm run migrate
   npm run seed
 )
+
+# A changed ADMIN_EMAIL renames the seeded admin's actual login, not just a
+# future seed default — otherwise "sync the info" would silently do nothing
+# once the account already exists. This only touches the one account that
+# had the old email, and only if the new address isn't already taken.
+if [ "$ADMIN_EMAIL_CHANGED" = "1" ]; then
+  log "Updating admin login email"
+  ( cd "$APP_CODE_DIR/server" && npm run set-email -- "$EXISTING_ADMIN_EMAIL" "$ADMIN_EMAIL" )
+  sed -i "s/^SEED_ADMIN_EMAIL=.*/SEED_ADMIN_EMAIL=$ADMIN_EMAIL/" "$ENV_FILE"
+fi
 
 # ---------------------------------------------------------------------------
 # systemd service (root)
@@ -265,7 +313,12 @@ log "Setting up TLS"
 apt-get install -y certbot python3-certbot-nginx
 
 if grep -q "ssl_certificate" "$NGINX_SITE" 2>/dev/null; then
-  echo "TLS already configured, skipping certbot."
+  echo "TLS already configured, skipping certificate issuance."
+  # Cert issuance is skipped, but the renewal contact email is a cheap,
+  # idempotent account-level update — keep it in sync every run.
+  certbot update_account --email "$LETSENCRYPT_EMAIL" --non-interactive 2>/dev/null \
+    && echo "Let's Encrypt contact email confirmed: $LETSENCRYPT_EMAIL" \
+    || warn "Could not update the Let's Encrypt contact email — check 'certbot update_account' manually."
 else
   certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$LETSENCRYPT_EMAIL" --redirect
 fi
@@ -301,6 +354,8 @@ if [ -n "$NEW_ADMIN_PASSWORD" ]; then
   Change it any time with:
     cd $APP_CODE_DIR/server && npm run reset-password -- $ADMIN_EMAIL "new-password"
 SUMMARY
+elif [ "$ADMIN_EMAIL_CHANGED" = "1" ]; then
+  echo "  Admin login email updated: $EXISTING_ADMIN_EMAIL -> $ADMIN_EMAIL (password unchanged)."
 else
   echo "  Admin credentials are unchanged from a previous run of this script."
 fi

@@ -587,8 +587,8 @@ sudo npm run seed</code></pre>
       <p>This creates the SQLite schema at <code class="inline">DATABASE_PATH</code> and seeds one Admin user from <code class="inline">SEED_ADMIN_EMAIL</code>/<code class="inline">SEED_ADMIN_PASSWORD</code>.</p>
       <div class="callout danger">
         <span class="icon">🔒</span>
-        <div><strong>There is no in-app "change password" yet</strong>
-        <p>Neither a self-service nor an admin-reset password flow exists in the UI at this stage of the build. The only way to change a password is this server-side command — run it now, before the app is reachable from the internet in <a href="#s9">§9</a>:</p>
+        <div><strong>Change the seeded password before going live</strong>
+        <p>The app's Users page can reset any user's password once you're logged in, but you can't log in yet at this stage of the deploy — the server isn't reachable from the internet until <a href="#s9">§9</a>. Change the temporary seeded password now with this server-side command instead:</p>
         <pre class="svc-only" style="margin-top:10px"><code>sudo -u lcm npm run reset-password -- you@yourcompany.com "a different, strong password"</code></pre>
         <pre class="root-only" style="margin-top:10px"><code>sudo npm run reset-password -- you@yourcompany.com "a different, strong password"</code></pre>
         </div>
@@ -806,6 +806,14 @@ sudo systemctl restart lcm.service
 curl http://127.0.0.1:4000/api/health</code></pre>
       </div>
       <p class="root-only">Or, if you deployed with <code class="inline">deploy/vps-deploy.sh</code>, just re-run it — it detects the existing checkout and does all of this for you.</p>
+      <div class="callout note root-only">
+        <span class="icon">🔁</span>
+        <div><strong>The script remembers your domain and admin email</strong>
+        <p>On a redeploy you can run it with no arguments at all — <code class="inline">sudo bash vps-deploy.sh -y</code> — and it reuses the domain already configured in Nginx and the admin email already in <code class="inline">.env</code> instead of asking again.</p>
+        <p>Pass a <em>different</em> <code class="inline">DOMAIN</code> and it will warn you and keep serving the existing domain — it never moves Nginx or the TLS certificate to a new domain automatically. To actually migrate domains: point the new domain's DNS at this server first, then by hand update <code class="inline">server_name</code> in the Nginx site file, run <code class="inline">certbot --nginx -d &lt;new-domain&gt;</code>, update <code class="inline">WEB_ORIGIN</code> in <code class="inline">.env</code>, and restart Nginx and <code class="inline">lcm.service</code>.</p>
+        <p>Pass a <em>different</em> <code class="inline">ADMIN_EMAIL</code> and it actually renames the seeded admin's login email (via the same mechanism as <code class="inline">reset-password</code>) and keeps the Let's Encrypt renewal contact in sync — the admin's password is untouched.</p>
+        </div>
+      </div>
     </section>
 
     <section id="troubleshooting">
@@ -875,6 +883,8 @@ curl http://127.0.0.1:4000/api/health</code></pre>
             <tr class="root-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo npm run backup</code></td></tr>
             <tr class="svc-only"><td>Reset a password</td><td><code class="inline">sudo -u lcm npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr class="root-only"><td>Reset a password</td><td><code class="inline">sudo npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
+            <tr class="svc-only"><td>Rename a login email</td><td><code class="inline">sudo -u lcm npm run set-email -- &lt;old-email&gt; &lt;new-email&gt;</code></td></tr>
+            <tr class="root-only"><td>Rename a login email</td><td><code class="inline">sudo npm run set-email -- &lt;old-email&gt; &lt;new-email&gt;</code></td></tr>
             <tr><td>Test TLS renewal</td><td><code class="inline">sudo certbot renew --dry-run</code></td></tr>
             <tr><td>Reload Nginx config</td><td><code class="inline">sudo nginx -t && sudo systemctl reload nginx</code></td></tr>
             <tr><td>Firewall status</td><td><code class="inline">sudo ufw status verbose</code></td></tr>

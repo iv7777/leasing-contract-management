@@ -81,6 +81,7 @@ export default function UsersPage() {
     setEditingUser(u);
     editForm.setFieldsValue({
       name: u.name,
+      email: u.email,
       role: u.role,
       propertyIds: u.propertyIds,
       canDownloadPdf: u.canDownloadPdf,
@@ -194,6 +195,9 @@ export default function UsersPage() {
       >
         <Form form={editForm} layout="vertical">
           <Form.Item name="name" label={t("common.name")} rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="email" label={t("users.email")} rules={[{ required: true, type: "email" }]}>
             <Input />
           </Form.Item>
           <Form.Item

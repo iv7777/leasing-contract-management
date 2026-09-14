@@ -52,6 +52,10 @@ usersRouter.post("/", (req, res) => {
   }
   const { propertyIds = [], password, ...rest } = parsed.data;
 
+  if (db.select().from(users).where(eq(users.email, rest.email)).get()) {
+    return res.status(409).json({ error: { code: "email_taken", message: "Another user already uses this email." } });
+  }
+
   const inserted = db
     .insert(users)
     .values({
@@ -74,6 +78,7 @@ usersRouter.post("/", (req, res) => {
 
 const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
   role: z.enum(ROLES as [string, ...string[]]).optional(),
   active: z.boolean().optional(),
   canDownloadPdf: z.boolean().optional(),
@@ -100,6 +105,13 @@ usersRouter.patch("/:id", (req, res) => {
     }
     if (parsed.data.role !== undefined && parsed.data.role !== "admin") {
       return res.status(400).json({ error: { code: "self_modification_blocked", message: "You cannot change your own admin role." } });
+    }
+  }
+
+  if (parsed.data.email && parsed.data.email !== existing.email) {
+    const emailTaken = db.select().from(users).where(eq(users.email, parsed.data.email)).get();
+    if (emailTaken) {
+      return res.status(409).json({ error: { code: "email_taken", message: "Another user already uses this email." } });
     }
   }
 
