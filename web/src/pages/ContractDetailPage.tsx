@@ -186,6 +186,8 @@ export default function ContractDetailPage() {
   const [reverseReceiptModal, setReverseReceiptModal] = useState<{ receiptId: number } | null>(null);
   const [depositTxnModal, setDepositTxnModal] = useState(false);
   const [depositTxnType, setDepositTxnType] = useState("receipt");
+  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream">("rate_change");
+  const [amendmentStreamTargetType, setAmendmentStreamTargetType] = useState("unit");
   const [unitForm] = Form.useForm();
   const [streamForm] = Form.useForm();
   const [concessionForm] = Form.useForm();
@@ -401,28 +403,58 @@ export default function ContractDetailPage() {
   const onProposeAmendment = async () => {
     try {
       const values = await amendmentForm.validateFields();
-      const rateChange = values.newAmountOrRate
-        ? {
-            addRateSchedule: [
-              {
-                pricingStreamId: values.pricingStreamId,
-                closePreviousRateScheduleId: rates.filter((r) => r.pricingStreamId === values.pricingStreamId && !r.effectiveEnd)[0]?.id,
+      let changes: Record<string, unknown> = {};
+      if (amendmentKind === "rate_change" && values.newAmountOrRate) {
+        changes = {
+          addRateSchedule: [
+            {
+              pricingStreamId: values.pricingStreamId,
+              closePreviousRateScheduleId: rates.filter((r) => r.pricingStreamId === values.pricingStreamId && !r.effectiveEnd)[0]?.id,
+              effectiveStart: values.effectiveDate,
+              calculationMethod: rates.find((r) => r.pricingStreamId === values.pricingStreamId)?.calculationMethod ?? "flat",
+              amountOrRate: String(values.newAmountOrRate),
+              rateBasis: rates.find((r) => r.pricingStreamId === values.pricingStreamId)?.rateBasis ?? "per_month",
+            },
+          ],
+        };
+      } else if (amendmentKind === "add_unit") {
+        changes = {
+          addUnits: [
+            {
+              unitId: values.amendUnitId,
+              effectiveStart: values.effectiveDate,
+              contractedAreaSqm: String(values.amendContractedAreaSqm),
+            },
+          ],
+        };
+      } else if (amendmentKind === "add_pricing_stream") {
+        changes = {
+          addPricingStreams: [
+            {
+              feeType: values.amendStreamFeeType,
+              targetType: values.amendStreamTargetType,
+              label: values.amendStreamLabel || undefined,
+              contractUnitIds: values.amendStreamTargetType === "unit" ? values.amendStreamContractUnitIds ?? [] : [],
+              initialRate: {
                 effectiveStart: values.effectiveDate,
-                calculationMethod: rates.find((r) => r.pricingStreamId === values.pricingStreamId)?.calculationMethod ?? "flat",
-                amountOrRate: String(values.newAmountOrRate),
-                rateBasis: rates.find((r) => r.pricingStreamId === values.pricingStreamId)?.rateBasis ?? "per_month",
+                calculationMethod: values.amendStreamCalculationMethod,
+                amountOrRate: String(values.amendStreamAmountOrRate),
+                rateBasis: values.amendStreamRateBasis,
               },
-            ],
-          }
-        : {};
+            },
+          ],
+        };
+      }
       await api.post(`/contracts/${id}/amendments`, {
         type: values.type,
         reason: values.reason,
         effectiveDate: values.effectiveDate,
-        changes: rateChange,
+        changes,
+        supportingDocumentId: values.supportingDocumentId || undefined,
       });
       setAmendmentModal(false);
       amendmentForm.resetFields();
+      setAmendmentKind("rate_change");
       load();
     } catch (err) {
       handleError(err);
@@ -1170,8 +1202,26 @@ export default function ContractDetailPage() {
         </Form>
       </Modal>
 
-      <Modal title={t("contracts.proposeAmendment")} open={amendmentModal} onCancel={() => setAmendmentModal(false)} onOk={onProposeAmendment} okText={t("common.create")} cancelText={t("common.cancel")}>
-        <Form form={amendmentForm} layout="vertical">
+      <Modal
+        title={t("contracts.proposeAmendment")}
+        open={amendmentModal}
+        onCancel={() => {
+          setAmendmentModal(false);
+          setAmendmentKind("rate_change");
+        }}
+        onOk={onProposeAmendment}
+        okText={t("common.create")}
+        cancelText={t("common.cancel")}
+        width={560}
+      >
+        <Form
+          form={amendmentForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            if (v.amendmentKind) setAmendmentKind(v.amendmentKind);
+            if (v.amendStreamTargetType) setAmendmentStreamTargetType(v.amendStreamTargetType);
+          }}
+        >
           <Form.Item name="type" label={t("common.name")} rules={[{ required: true }]} initialValue="rent_change">
             <Input />
           </Form.Item>
@@ -1181,12 +1231,93 @@ export default function ContractDetailPage() {
           <Form.Item name="effectiveDate" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
             <Input placeholder="YYYY-MM-DD" />
           </Form.Item>
-          <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
-            <Select allowClear options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
+          <Form.Item
+            name="supportingDocumentId"
+            label={t("contracts.supportingDocument")}
+            extra={t("contracts.supportingDocumentHint")}
+          >
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={documents.map((d) => ({
+                value: d.id,
+                label: `${d.docType === "signed_lease" ? t("contracts.signedLease") : d.docType} (${d.uploadedAt.slice(0, 10)})`,
+              }))}
+            />
           </Form.Item>
-          <Form.Item name="newAmountOrRate" label={`New ${t("contracts.amountOrRate")}`}>
-            <InputNumber style={{ width: "100%" }} min={0} />
+          <Form.Item name="amendmentKind" label={t("contracts.amendmentKind")} initialValue="rate_change">
+            <Select
+              options={[
+                { value: "rate_change", label: t("contracts.amendmentKindRateChange") },
+                { value: "add_unit", label: t("contracts.amendmentKindAddUnit") },
+                { value: "add_pricing_stream", label: t("contracts.amendmentKindAddPricingStream") },
+              ]}
+            />
           </Form.Item>
+
+          {amendmentKind === "rate_change" && (
+            <>
+              <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
+                <Select allowClear options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
+              </Form.Item>
+              <Form.Item name="newAmountOrRate" label={`New ${t("contracts.amountOrRate")}`}>
+                <InputNumber style={{ width: "100%" }} min={0} />
+              </Form.Item>
+            </>
+          )}
+
+          {amendmentKind === "add_unit" && (
+            <>
+              <Form.Item name="amendUnitId" label={t("properties.unitLabel")} rules={[{ required: true }]}>
+                <Select showSearch optionFilterProp="label" options={availableUnits.map((u) => ({ value: u.id, label: u.unitLabel }))} />
+              </Form.Item>
+              <Form.Item name="amendContractedAreaSqm" label={t("contracts.contractedArea")} rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} min={0} />
+              </Form.Item>
+              <Typography.Text type="secondary">{t("contracts.amendAddUnitHint")}</Typography.Text>
+            </>
+          )}
+
+          {amendmentKind === "add_pricing_stream" && (
+            <>
+              <Form.Item name="amendStreamFeeType" label={t("contracts.feeType")} rules={[{ required: true }]} initialValue="rent">
+                <Select options={feeTypes.map((f) => ({ value: f, label: t(`contracts.${camel(f)}`) }))} />
+              </Form.Item>
+              <Form.Item name="amendStreamTargetType" label={t("contracts.calculationMethod")} rules={[{ required: true }]} initialValue="unit">
+                <Select
+                  options={[
+                    { value: "unit", label: t("contracts.units") },
+                    { value: "contract", label: t("contracts.title") },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="amendStreamLabel" label={t("common.name")}>
+                <Input />
+              </Form.Item>
+              {amendmentStreamTargetType === "unit" && (
+                <Form.Item name="amendStreamContractUnitIds" label={t("contracts.units")} rules={[{ required: true }]}>
+                  <Select mode="multiple" options={units.map((u) => ({ value: u.id, label: availableUnits.find((au) => au.id === u.unitId)?.unitLabel ?? u.unitId }))} />
+                </Form.Item>
+              )}
+              <Form.Item name="amendStreamCalculationMethod" label={t("contracts.calculationMethod")} rules={[{ required: true }]} initialValue="flat">
+                <Select
+                  options={[
+                    { value: "flat", label: t("contracts.flat") },
+                    { value: "per_sqm", label: t("contracts.perSqm") },
+                    { value: "percentage_escalation", label: t("contracts.percentageEscalation") },
+                  ]}
+                />
+              </Form.Item>
+              <Form.Item name="amendStreamRateBasis" label={t("contracts.rateBasis")} rules={[{ required: true }]} initialValue="per_month">
+                <Select options={rateBases.map((b) => ({ value: b, label: t(`contracts.${camel(b)}`) }))} />
+              </Form.Item>
+              <Form.Item name="amendStreamAmountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} min={0} />
+              </Form.Item>
+              <Typography.Text type="secondary">{t("contracts.amendAddStreamHint")}</Typography.Text>
+            </>
+          )}
         </Form>
       </Modal>
     </div>
