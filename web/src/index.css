@@ -15,6 +15,20 @@ body {
   display: none;
 }
 
+@keyframes highlight-fade {
+  from {
+    background-color: #fffbcc;
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.row-highlight,
+.row-highlight > td {
+  animation: highlight-fade 2.5s ease-out;
+}
+
 @media (max-width: 767px) {
   .mobile-only {
     display: block;

@@ -41,6 +41,10 @@ const en = {
     unarchived: "Unarchived",
     showArchived: "Show archived",
     delete: "Delete",
+    deleted: "Deleted",
+    viewDetails: "View",
+    relatedContracts: "Related contracts",
+    noneYet: "None yet",
   },
   properties: {
     title: "Properties",
@@ -75,6 +79,8 @@ const en = {
     sensitiveDetails: "Protected identity details",
     idType: "ID type",
     idNumber: "ID / license number",
+    confirmDelete: "Delete this party? This only works if it isn't referenced by any contract — otherwise archive it instead.",
+    inUse: "In use",
   },
   users: {
     title: "Users",

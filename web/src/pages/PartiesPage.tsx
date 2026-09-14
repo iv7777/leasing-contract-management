@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Button, Form, Grid, Input, List, Modal, Select, Space, Switch, Table, Tag, Typography, Card, message } from "antd";
-import { PlusOutlined, EditOutlined } from "@ant-design/icons";
+import { Link, useSearchParams } from "react-router-dom";
+import { Button, Form, Grid, Input, List, Modal, Select, Space, Switch, Table, Tag, Typography, Card, message, Popconfirm } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
@@ -8,13 +9,24 @@ import { useAuth } from "../auth/AuthContext";
 
 const { useBreakpoint } = Grid;
 
+interface ContractSummaryDto {
+  id: number;
+  referenceNumber: string;
+  landlordPartyId: number;
+  tenantPartyId: number;
+  status: "draft" | "active" | "expired" | "terminated";
+}
+
 export default function PartiesPage() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const screens = useBreakpoint();
   const isMobile = !screens.md;
+  const [searchParams] = useSearchParams();
+  const highlightId = Number(searchParams.get("highlight")) || null;
 
   const [parties, setParties] = useState<PartyDto[]>([]);
+  const [contracts, setContracts] = useState<ContractSummaryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -24,13 +36,36 @@ export default function PartiesPage() {
 
   const load = () => {
     setLoading(true);
-    void api
-      .get<{ parties: PartyDto[] }>("/parties")
-      .then((r) => setParties(r.parties))
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get<{ parties: PartyDto[] }>("/parties").then((r) => setParties(r.parties)),
+      api.get<{ contracts: ContractSummaryDto[] }>("/contracts").then((r) => setContracts(r.contracts)),
+    ]).finally(() => setLoading(false));
   };
 
   useEffect(load, []);
+
+  useEffect(() => {
+    if (!highlightId || loading) return;
+    const el = document.querySelector(`[data-row-key="${highlightId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, loading]);
+
+  const relatedContracts = (partyId: number) =>
+    contracts.filter((c) => c.landlordPartyId === partyId || c.tenantPartyId === partyId);
+
+  const relatedContractsList = (partyId: number) => {
+    const related = relatedContracts(partyId);
+    if (related.length === 0) return <Typography.Text type="secondary">{t("common.noneYet")}</Typography.Text>;
+    return (
+      <Space size={4} wrap>
+        {related.map((c) => (
+          <Link key={c.id} to={`/contracts/${c.id}`}>
+            <Tag color={c.status === "active" ? "green" : undefined}>{c.referenceNumber}</Tag>
+          </Link>
+        ))}
+      </Space>
+    );
+  };
 
   const displayName = (p: PartyDto) => (i18n.language.startsWith("zh") || !p.nameEn ? p.name : p.nameEn);
   const visibleParties = showArchived ? parties : parties.filter((p) => !p.archived);
@@ -71,7 +106,18 @@ export default function PartiesPage() {
     }
   };
 
+  const onDelete = async (p: PartyDto) => {
+    try {
+      await api.delete(`/parties/${p.id}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      message.error(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  };
+
   const canCreate = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin";
 
   return (
     <div>
@@ -97,15 +143,34 @@ export default function PartiesPage() {
           loading={loading}
           dataSource={visibleParties}
           renderItem={(p) => (
-            <Card style={{ marginBottom: 12 }}>
+            <Card
+              data-row-key={p.id}
+              className={p.id === highlightId ? "row-highlight" : undefined}
+              style={{ marginBottom: 12 }}
+            >
               <Space style={{ width: "100%", justifyContent: "space-between" }}>
                 <div>
                   <Typography.Text strong>{displayName(p)}</Typography.Text> <Tag>{t(`parties.${p.type}`)}</Tag>
                   {p.archived && <Tag>{t("common.archived")}</Tag>}
                   <br />
                   <Typography.Text type="secondary">{p.contactDetails}</Typography.Text>
+                  <br />
+                  <Typography.Text type="secondary">{t("common.relatedContracts")}: </Typography.Text>
+                  {relatedContractsList(p.id)}
                 </div>
-                {canCreate && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />}
+                <Space>
+                  {canCreate && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />}
+                  {isAdmin && (
+                    <Popconfirm
+                      title={t("parties.confirmDelete")}
+                      onConfirm={() => onDelete(p)}
+                      okText={t("common.delete")}
+                      cancelText={t("common.cancel")}
+                    >
+                      <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  )}
+                </Space>
               </Space>
             </Card>
           )}
@@ -115,10 +180,16 @@ export default function PartiesPage() {
           rowKey="id"
           loading={loading}
           dataSource={visibleParties}
+          rowClassName={(p) => (p.id === highlightId ? "row-highlight" : "")}
           columns={[
             { title: t("common.name"), dataIndex: "name", render: (_, p) => displayName(p) },
             { title: t("parties.type"), dataIndex: "type", render: (v: string) => t(`parties.${v}`) },
             { title: t("parties.contactDetails"), dataIndex: "contactDetails" },
+            {
+              title: t("common.relatedContracts"),
+              key: "relatedContracts",
+              render: (_: unknown, p: PartyDto) => relatedContractsList(p.id),
+            },
             {
               title: t("common.archived"),
               dataIndex: "archived",
@@ -130,12 +201,24 @@ export default function PartiesPage() {
               key: "actions",
               width: 140,
               render: (_: unknown, p: PartyDto) =>
-                canCreate && (
+                (canCreate || isAdmin) && (
                   <Space>
-                    <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />
-                    <Button size="small" onClick={() => toggleArchived(p)}>
-                      {p.archived ? t("common.unarchive") : t("common.archive")}
-                    </Button>
+                    {canCreate && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />}
+                    {canCreate && (
+                      <Button size="small" onClick={() => toggleArchived(p)}>
+                        {p.archived ? t("common.unarchive") : t("common.archive")}
+                      </Button>
+                    )}
+                    {isAdmin && (
+                      <Popconfirm
+                        title={t("parties.confirmDelete")}
+                        onConfirm={() => onDelete(p)}
+                        okText={t("common.delete")}
+                        cancelText={t("common.cancel")}
+                      >
+                        <Button size="small" danger icon={<DeleteOutlined />} />
+                      </Popconfirm>
+                    )}
                   </Space>
                 ),
             },

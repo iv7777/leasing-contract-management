@@ -43,6 +43,10 @@ const zh: Translations = {
     unarchived: "已取消归档",
     showArchived: "显示已归档",
     delete: "删除",
+    deleted: "已删除",
+    viewDetails: "查看",
+    relatedContracts: "相关合同",
+    noneYet: "暂无",
   },
   properties: {
     title: "物业",
@@ -77,6 +81,8 @@ const zh: Translations = {
     sensitiveDetails: "受保护身份信息",
     idType: "证件类型",
     idNumber: "证件/执照号码",
+    confirmDelete: "删除此当事人？仅当未被任何合同引用时才能删除，否则请改为归档。",
+    inUse: "使用中",
   },
   users: {
     title: "用户管理",

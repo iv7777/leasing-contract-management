@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Typography, Card } from "antd";
 import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { PartyDto } from "@lcm/shared";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -50,6 +50,11 @@ export default function ContractsPage() {
   useEffect(load, []);
 
   const partyName = (id: number) => parties.find((p) => p.id === id)?.name ?? id;
+  const partyLink = (id: number) => (
+    <Link to={`/parties?highlight=${id}`} onClick={(e) => e.stopPropagation()}>
+      {partyName(id)}
+    </Link>
+  );
 
   const onCreate = async () => {
     const values = await form.validateFields();
@@ -89,7 +94,7 @@ export default function ContractsPage() {
               <Typography.Text strong>{c.referenceNumber}</Typography.Text> <Tag color={statusColor[c.status]}>{t(`contracts.${c.status}`)}</Tag>
               <br />
               <Typography.Text type="secondary">
-                {partyName(c.tenantPartyId)} · {c.termStart} → {c.termEnd}
+                {partyLink(c.tenantPartyId)} · {c.termStart} → {c.termEnd}
               </Typography.Text>
             </Card>
           )}
@@ -102,7 +107,7 @@ export default function ContractsPage() {
           onRow={(c) => ({ onClick: () => navigate(`/contracts/${c.id}`), style: { cursor: "pointer" } })}
           columns={[
             { title: t("contracts.reference"), dataIndex: "referenceNumber" },
-            { title: t("contracts.tenant"), dataIndex: "tenantPartyId", render: partyName },
+            { title: t("contracts.tenant"), dataIndex: "tenantPartyId", render: (id: number) => partyLink(id) },
             { title: t("contracts.termStart"), dataIndex: "termStart" },
             { title: t("contracts.termEnd"), dataIndex: "termEnd" },
             {

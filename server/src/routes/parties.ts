@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { parties, partySensitiveDetails } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { parties, partySensitiveDetails, contracts } from "../db/schema.js";
+import { eq, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
 
@@ -90,6 +90,32 @@ partiesRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
     details: { before: existing, after: updated },
   });
   res.json({ party: updated });
+});
+
+partiesRouter.delete("/:id", requireRole("admin"), (req, res) => {
+  const id = Number(req.params.id);
+  const existing = db.select().from(parties).where(eq(parties.id, id)).get();
+  if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Party not found." } });
+
+  const referencingContracts = db
+    .select({ id: contracts.id, referenceNumber: contracts.referenceNumber })
+    .from(contracts)
+    .where(or(eq(contracts.landlordPartyId, id), eq(contracts.tenantPartyId, id)))
+    .all();
+  if (referencingContracts.length > 0) {
+    return res.status(409).json({
+      error: {
+        code: "party_in_use",
+        message: `This party is used by ${referencingContracts.length} contract(s) and cannot be deleted — archive it instead.`,
+        details: { contracts: referencingContracts },
+      },
+    });
+  }
+
+  db.delete(partySensitiveDetails).where(eq(partySensitiveDetails.partyId, id)).run();
+  db.delete(parties).where(eq(parties.id, id)).run();
+  recordAudit({ actorUserId: req.user!.id, action: "party_deleted", entityType: "party", entityId: id, details: { name: existing.name } });
+  res.status(204).send();
 });
 
 const sensitiveDetailsSchema = z.object({

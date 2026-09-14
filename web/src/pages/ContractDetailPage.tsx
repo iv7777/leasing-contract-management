@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   Alert,
   Button,
@@ -536,8 +536,12 @@ export default function ContractDetailPage() {
       {!isDraft && <Alert type="info" showIcon message={t("contracts.documentRequired")} style={{ marginBottom: 12 }} />}
 
       <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
-        <Descriptions.Item label={t("contracts.landlord")}>{partyName(contract.landlordPartyId)}</Descriptions.Item>
-        <Descriptions.Item label={t("contracts.tenant")}>{partyName(contract.tenantPartyId)}</Descriptions.Item>
+        <Descriptions.Item label={t("contracts.landlord")}>
+          <Link to={`/parties?highlight=${contract.landlordPartyId}`}>{partyName(contract.landlordPartyId)}</Link>
+        </Descriptions.Item>
+        <Descriptions.Item label={t("contracts.tenant")}>
+          <Link to={`/parties?highlight=${contract.tenantPartyId}`}>{partyName(contract.tenantPartyId)}</Link>
+        </Descriptions.Item>
         <Descriptions.Item label={t("contracts.termStart")}>{contract.termStart}</Descriptions.Item>
         <Descriptions.Item label={t("contracts.termEnd")}>{contract.termEnd}</Descriptions.Item>
       </Descriptions>
@@ -557,12 +561,16 @@ export default function ContractDetailPage() {
                 <List
                   bordered
                   dataSource={units}
-                  renderItem={(u) => (
-                    <List.Item>
-                      {availableUnits.find((au) => au.id === u.unitId)?.unitLabel ?? u.unitId} · {u.contractedAreaSqm} sqm · {u.effectiveStart}
-                      {u.effectiveEnd ? ` → ${u.effectiveEnd}` : ""}
-                    </List.Item>
-                  )}
+                  renderItem={(u) => {
+                    const au = availableUnits.find((x) => x.id === u.unitId);
+                    return (
+                      <List.Item>
+                        {au ? <Link to={`/properties/${au.propertyId}`}>{au.unitLabel}</Link> : u.unitId} · {u.contractedAreaSqm} sqm ·{" "}
+                        {u.effectiveStart}
+                        {u.effectiveEnd ? ` → ${u.effectiveEnd}` : ""}
+                      </List.Item>
+                    );
+                  }}
                 />
               </>
             ),

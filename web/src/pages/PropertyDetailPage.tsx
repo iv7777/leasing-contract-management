@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   Button,
   Card,
@@ -35,6 +35,9 @@ export default function PropertyDetailPage() {
   const { user } = useAuth();
   const [property, setProperty] = useState<PropertyDto | null>(null);
   const [units, setUnits] = useState<UnitDto[]>([]);
+  const [unitContracts, setUnitContracts] = useState<
+    Record<number, { contractId: number; referenceNumber: string; status: string }[]>
+  >({});
   const [documents, setDocuments] = useState<DocumentDto[]>([]);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
@@ -48,10 +51,15 @@ export default function PropertyDetailPage() {
 
   const load = () => {
     void api
-      .get<{ property: PropertyDto; units: UnitDto[] }>(`/properties/${id}`)
+      .get<{
+        property: PropertyDto;
+        units: UnitDto[];
+        unitContracts: Record<number, { contractId: number; referenceNumber: string; status: string }[]>;
+      }>(`/properties/${id}`)
       .then((r) => {
         setProperty(r.property);
         setUnits(r.units);
+        setUnitContracts(r.unitContracts ?? {});
       });
     void api
       .get<{ documents: DocumentDto[] }>(`/documents?ownerType=property&ownerId=${id}`)
@@ -214,6 +222,18 @@ export default function PropertyDetailPage() {
                           {t(`properties.${u.unitType === "building" ? "building" : "openLand"}`)} · {u.rentableAreaSqm} sqm ·{" "}
                           {t(`properties.${u.availability}`)}
                         </Typography.Text>
+                        <Space size={4} wrap>
+                          <Typography.Text type="secondary">{t("common.relatedContracts")}:</Typography.Text>
+                          {(unitContracts[u.id] ?? []).length === 0 ? (
+                            <Typography.Text type="secondary">{t("common.noneYet")}</Typography.Text>
+                          ) : (
+                            (unitContracts[u.id] ?? []).map((c) => (
+                              <Link key={c.contractId} to={`/contracts/${c.contractId}`}>
+                                <Tag color={c.status === "active" ? "green" : undefined}>{c.referenceNumber}</Tag>
+                              </Link>
+                            ))
+                          )}
+                        </Space>
                       </Space>
                     </List.Item>
                   )}

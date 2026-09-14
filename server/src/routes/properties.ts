@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { properties, units } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { properties, units, contractUnits, contracts } from "../db/schema.js";
+import { eq, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
 
@@ -24,7 +24,31 @@ propertiesRouter.get("/:id", (req, res) => {
     return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
   }
   const propertyUnits = db.select().from(units).where(eq(units.propertyId, id)).all();
-  res.json({ property, units: propertyUnits });
+
+  const unitIds = propertyUnits.map((u) => u.id);
+  const unitContracts: Record<number, { contractId: number; referenceNumber: string; status: string }[]> = {};
+  if (unitIds.length > 0) {
+    const coverage = db
+      .select({
+        unitId: contractUnits.unitId,
+        contractId: contracts.id,
+        referenceNumber: contracts.referenceNumber,
+        status: contracts.status,
+      })
+      .from(contractUnits)
+      .innerJoin(contracts, eq(contractUnits.contractId, contracts.id))
+      .where(inArray(contractUnits.unitId, unitIds))
+      .all();
+    for (const row of coverage) {
+      (unitContracts[row.unitId] ??= []).push({
+        contractId: row.contractId,
+        referenceNumber: row.referenceNumber,
+        status: row.status,
+      });
+    }
+  }
+
+  res.json({ property, units: propertyUnits, unitContracts });
 });
 
 const createPropertySchema = z.object({
