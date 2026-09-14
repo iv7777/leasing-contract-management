@@ -539,11 +539,11 @@ export default function ContractDetailPage() {
 
   return (
     <div>
-      <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
+      <Space wrap style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
+        <Typography.Title level={4} style={{ margin: 0, flexShrink: 0 }}>
           {contract.referenceNumber}
         </Typography.Title>
-        <Space>
+        <Space wrap>
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           <Tag>v{contract.versionNumber}</Tag>
           {(user?.canDownloadPdf || user?.role === "admin" || user?.role === "manager") && (
@@ -1261,7 +1261,7 @@ export default function ContractDetailPage() {
               <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
                 <Select allowClear options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
               </Form.Item>
-              <Form.Item name="newAmountOrRate" label={`New ${t("contracts.amountOrRate")}`}>
+              <Form.Item name="newAmountOrRate" label={t("contracts.newAmountOrRate")}>
                 <InputNumber style={{ width: "100%" }} min={0} />
               </Form.Item>
             </>

@@ -153,6 +153,7 @@ const zh: Translations = {
     perYear: "按年",
     perSqmPerMonth: "每平方米/月",
     amountOrRate: "金额/费率（元）",
+    newAmountOrRate: "新的金额/费率（元）",
     concessions: "优惠/减免",
     addConcession: "新增减免",
     discountPercentage: "折扣百分比",

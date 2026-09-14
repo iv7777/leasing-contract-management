@@ -151,6 +151,7 @@ const en = {
     perYear: "Per year",
     perSqmPerMonth: "Per sqm / month",
     amountOrRate: "Amount / rate (yuan)",
+    newAmountOrRate: "New amount / rate (yuan)",
     concessions: "Concessions",
     addConcession: "Add concession",
     discountPercentage: "Discount %",
