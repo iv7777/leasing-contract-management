@@ -101,9 +101,23 @@ export default function ContractsPage() {
           onClose={() => navigate("/contracts")}
           style={{ marginBottom: 16 }}
           message={
-            <>
-              {t("contracts.filteredByParty", { name: partyName(filterPartyId) })} · <Link to="/contracts">{t("contracts.clearFilter")}</Link>
-            </>
+            <Space direction="vertical" size={4}>
+              <span>
+                {t("contracts.filteredByParty", { name: partyName(filterPartyId) })} · <Link to="/contracts">{t("contracts.clearFilter")}</Link>
+              </span>
+              <Space size={8}>
+                <Typography.Text type="secondary">{t("contracts.filterBy")}:</Typography.Text>
+                <Select
+                  size="small"
+                  style={{ minWidth: 220 }}
+                  showSearch
+                  optionFilterProp="label"
+                  value={filterPartyId}
+                  options={parties.map((p) => ({ value: p.id, label: p.name }))}
+                  onChange={(val) => navigate(`/contracts?partyId=${val}`)}
+                />
+              </Space>
+            </Space>
           }
         />
       )}

@@ -251,6 +251,7 @@ const en = {
     exportPdf: "Export PDF summary",
     exportCsv: "Export CSV",
     filteredByParty: "Showing contracts for {{name}}",
+    filterBy: "Filtered by",
     clearFilter: "Clear filter",
   },
   reminders: {

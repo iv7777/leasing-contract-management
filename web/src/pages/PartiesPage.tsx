@@ -53,13 +53,17 @@ export default function PartiesPage() {
   const relatedContracts = (partyId: number) =>
     contracts.filter((c) => c.landlordPartyId === partyId || c.tenantPartyId === partyId);
 
-  const relatedContractsSummary = (partyId: number) => {
+  const relatedContractsList = (partyId: number) => {
     const related = relatedContracts(partyId);
     if (related.length === 0) return <Typography.Text type="secondary">{t("common.noneYet")}</Typography.Text>;
     return (
-      <Link to={`/contracts?partyId=${partyId}`} onClick={(e) => e.stopPropagation()}>
-        <Tag color="blue">{t("common.relatedContractsCount", { count: related.length })}</Tag>
-      </Link>
+      <Space size={4} wrap>
+        {related.map((c) => (
+          <Link key={c.id} to={`/contracts/${c.id}`} onClick={(e) => e.stopPropagation()}>
+            <Tag color={c.status === "active" ? "green" : undefined}>{c.referenceNumber}</Tag>
+          </Link>
+        ))}
+      </Space>
     );
   };
 
@@ -162,7 +166,7 @@ export default function PartiesPage() {
                   <Typography.Text type="secondary">{p.contactDetails}</Typography.Text>
                   <br />
                   <Typography.Text type="secondary">{t("common.relatedContracts")}: </Typography.Text>
-                  {relatedContractsSummary(p.id)}
+                  {relatedContractsList(p.id)}
                 </div>
                 <Space>
                   {canCreate && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />}
@@ -194,7 +198,8 @@ export default function PartiesPage() {
             {
               title: t("common.relatedContracts"),
               key: "relatedContracts",
-              render: (_: unknown, p: PartyDto) => relatedContractsSummary(p.id),
+              width: 260,
+              render: (_: unknown, p: PartyDto) => relatedContractsList(p.id),
             },
             {
               title: t("common.archived"),
