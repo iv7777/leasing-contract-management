@@ -27,6 +27,9 @@ export interface GenerateResult {
 export function generateChargesForContractMonth(contractId: number, periodStart: IsoDate, periodEnd: IsoDate): GenerateResult {
   const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
   if (!contract) throw new Error(`Contract ${contractId} not found`);
+  if (periodStart > contract.termEnd) {
+    throw new Error(`Contract ${contractId} ends ${contract.termEnd}; cannot generate charges for a period starting ${periodStart}.`);
+  }
 
   const rules = db.select().from(billingRules).where(eq(billingRules.contractId, contractId)).get();
   if (!rules) throw new Error(`Contract ${contractId} has no billing rules configured`);

@@ -201,6 +201,8 @@ const zh: Translations = {
     amendmentKindAddPricingStream: "新增一个计价项",
     amendAddUnitHint: "此操作会将物业下已有的一个单元关联到本合同。如需为其设置费率，请在本次变更获批后，再另行发起一次变更来新增针对该单元的计价项。",
     amendAddStreamHint: "只能选择本合同已有的单元。如果您在另一份变更中刚新增了单元，需等该变更获批后，此处才能选择该单元。",
+    amendmentKindTerminate: "提前终止合同",
+    amendTerminateHint: "上方的生效日期即为终止日期。获批后，合同状态将变为已终止，到期日将设为该日期，并且当前所有仍在租的单元也会在该日期结束，此后不会再生成任何账单。请记得之后前往押金页面处理押金结算。",
     submit: "提交",
     approve: "批准",
     reject: "驳回",

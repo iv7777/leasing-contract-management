@@ -216,7 +216,7 @@ export default function ContractDetailPage() {
   const [reverseReceiptModal, setReverseReceiptModal] = useState<{ receiptId: number } | null>(null);
   const [depositTxnModal, setDepositTxnModal] = useState(false);
   const [depositTxnType, setDepositTxnType] = useState("receipt");
-  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream">("rate_change");
+  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream" | "terminate">("rate_change");
   const [amendmentStreamTargetType, setAmendmentStreamTargetType] = useState("unit");
   const [rejectAmendmentModal, setRejectAmendmentModal] = useState<{ amendmentId: number } | null>(null);
   const [reverseDepositTxnModal, setReverseDepositTxnModal] = useState<{ depositTxnId: number } | null>(null);
@@ -697,6 +697,11 @@ export default function ContractDetailPage() {
               },
             },
           ],
+        };
+      } else if (amendmentKind === "terminate") {
+        changes = {
+          contract: { status: "terminated", termEnd: values.effectiveDate },
+          endUnits: units.filter((u) => !u.effectiveEnd || u.effectiveEnd > values.effectiveDate).map((u) => ({ contractUnitId: u.id, effectiveEnd: values.effectiveDate })),
         };
       }
       await api.post(`/contracts/${id}/amendments`, {
@@ -2251,6 +2256,7 @@ export default function ContractDetailPage() {
                 { value: "rate_change", label: t("contracts.amendmentKindRateChange") },
                 { value: "add_unit", label: t("contracts.amendmentKindAddUnit") },
                 { value: "add_pricing_stream", label: t("contracts.amendmentKindAddPricingStream") },
+                { value: "terminate", label: t("contracts.amendmentKindTerminate") },
               ]}
             />
           </Form.Item>
@@ -2317,6 +2323,8 @@ export default function ContractDetailPage() {
               <Typography.Text type="secondary">{t("contracts.amendAddStreamHint")}</Typography.Text>
             </>
           )}
+
+          {amendmentKind === "terminate" && <Typography.Text type="secondary">{t("contracts.amendTerminateHint")}</Typography.Text>}
         </Form>
       </Modal>
     </div>
