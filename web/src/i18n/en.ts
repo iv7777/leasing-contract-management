@@ -252,6 +252,7 @@ const en = {
     exportCsv: "Export CSV",
     filteredByParty: "Showing contracts for {{name}}",
     filterBy: "Filtered by",
+    allParties: "All parties",
     clearFilter: "Clear filter",
   },
   reminders: {

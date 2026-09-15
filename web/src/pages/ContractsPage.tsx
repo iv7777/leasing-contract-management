@@ -93,6 +93,20 @@ export default function ContractsPage() {
         </Space>
       </Space>
 
+      <Space style={{ marginBottom: 16 }}>
+        <Typography.Text type="secondary">{t("contracts.filterBy")}:</Typography.Text>
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          placeholder={t("contracts.allParties")}
+          style={{ minWidth: 220 }}
+          value={filterPartyId ?? undefined}
+          options={parties.map((p) => ({ value: p.id, label: p.name }))}
+          onChange={(val) => navigate(val ? `/contracts?partyId=${val}` : "/contracts")}
+        />
+      </Space>
+
       {filterPartyId && (
         <Alert
           type="info"
@@ -101,23 +115,9 @@ export default function ContractsPage() {
           onClose={() => navigate("/contracts")}
           style={{ marginBottom: 16 }}
           message={
-            <Space direction="vertical" size={4}>
-              <span>
-                {t("contracts.filteredByParty", { name: partyName(filterPartyId) })} · <Link to="/contracts">{t("contracts.clearFilter")}</Link>
-              </span>
-              <Space size={8}>
-                <Typography.Text type="secondary">{t("contracts.filterBy")}:</Typography.Text>
-                <Select
-                  size="small"
-                  style={{ minWidth: 220 }}
-                  showSearch
-                  optionFilterProp="label"
-                  value={filterPartyId}
-                  options={parties.map((p) => ({ value: p.id, label: p.name }))}
-                  onChange={(val) => navigate(`/contracts?partyId=${val}`)}
-                />
-              </Space>
-            </Space>
+            <>
+              {t("contracts.filteredByParty", { name: partyName(filterPartyId) })} · <Link to="/contracts">{t("contracts.clearFilter")}</Link>
+            </>
           }
         />
       )}

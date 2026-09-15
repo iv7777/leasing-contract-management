@@ -192,7 +192,12 @@ export default function PartiesPage() {
           dataSource={visibleParties}
           rowClassName={(p) => (p.id === highlightId ? "row-highlight" : "")}
           columns={[
-            { title: t("common.name"), dataIndex: "name", render: (_, p) => displayName(p) },
+            {
+              title: t("common.name"),
+              dataIndex: "name",
+              ellipsis: false,
+              render: (_, p) => <div style={{ minWidth: 150 }}>{displayName(p)}</div>,
+            },
             { title: t("parties.type"), dataIndex: "type", render: (v: string) => t(`parties.${v}`) },
             { title: t("parties.contactDetails"), dataIndex: "contactDetails" },
             {

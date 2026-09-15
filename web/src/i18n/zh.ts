@@ -254,6 +254,7 @@ const zh: Translations = {
     exportCsv: "导出CSV",
     filteredByParty: "仅显示与「{{name}}」相关的合同",
     filterBy: "筛选条件",
+    allParties: "全部往来方",
     clearFilter: "清除筛选",
   },
   reminders: {
