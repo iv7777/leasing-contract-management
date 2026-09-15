@@ -62,7 +62,7 @@ export default function PartiesPage() {
           <Link key={c.id} to={`/contracts/${c.id}`} onClick={(e) => e.stopPropagation()} style={{ display: "block", width: "100%" }}>
             <Tag
               color={c.status === "active" ? "green" : undefined}
-              style={{ display: "block", width: "100%", whiteSpace: "normal", wordBreak: "break-all", textAlign: "center", boxSizing: "border-box" }}
+              style={{ display: "block", width: "100%", minWidth: 100, whiteSpace: "normal", wordBreak: "break-all", textAlign: "center", boxSizing: "border-box" }}
             >
               {c.referenceNumber}
             </Tag>
