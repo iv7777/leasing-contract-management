@@ -71,6 +71,16 @@ interface RateScheduleDto {
   escalationBase: string | null;
   escalationPercentage: string | null;
   escalationIntervalMonths: number | null;
+  unit: string | null;
+}
+interface UsageEntryDto {
+  id: number;
+  pricingStreamId: number;
+  serviceStart: string;
+  serviceEnd: string;
+  quantity: string;
+  unit: string;
+  source: string | null;
 }
 interface ConcessionDto {
   id: number;
@@ -156,7 +166,7 @@ interface StatementDto {
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
 const feeTypes = ["rent", "management", "electricity_base", "water", "elevator", "other"] as const;
-const rateBases = ["per_month", "per_quarter", "per_year", "per_sqm_per_month"] as const;
+const rateBases = ["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"] as const;
 const camel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 
 export default function ContractDetailPage() {
@@ -171,6 +181,7 @@ export default function ContractDetailPage() {
   const [streams, setStreams] = useState<PricingStreamDto[]>([]);
   const [streamUnitLinks, setStreamUnitLinks] = useState<{ pricingStreamId: number; contractUnitId: number }[]>([]);
   const [rates, setRates] = useState<RateScheduleDto[]>([]);
+  const [usageEntries, setUsageEntries] = useState<UsageEntryDto[]>([]);
   const [concessions, setConcessions] = useState<ConcessionDto[]>([]);
   const [depositTerms, setDepositTerms] = useState<DepositTermsDto[]>([]);
   const [charges, setCharges] = useState<ChargeDto[]>([]);
@@ -214,6 +225,8 @@ export default function ContractDetailPage() {
   const [editUnitModal, setEditUnitModal] = useState<ContractUnitDto | null>(null);
   const [editStreamModal, setEditStreamModal] = useState<PricingStreamDto | null>(null);
   const [rateModal, setRateModal] = useState<{ streamId: number; rate?: RateScheduleDto } | null>(null);
+  const [usageEntryModal, setUsageEntryModal] = useState(false);
+  const [editUsageEntryModal, setEditUsageEntryModal] = useState<UsageEntryDto | null>(null);
   const [editConcessionModal, setEditConcessionModal] = useState<ConcessionDto | null>(null);
   const [editDepositModal, setEditDepositModal] = useState<DepositTermsDto | null>(null);
   const [editDocModal, setEditDocModal] = useState<DocumentDto | null>(null);
@@ -233,6 +246,8 @@ export default function ContractDetailPage() {
   const [editUnitForm] = Form.useForm();
   const [editStreamForm] = Form.useForm();
   const [rateForm] = Form.useForm();
+  const [usageEntryForm] = Form.useForm();
+  const [editUsageEntryForm] = Form.useForm();
   const [editConcessionForm] = Form.useForm();
   const [editDepositForm] = Form.useForm();
   const [editDocForm] = Form.useForm();
@@ -248,6 +263,7 @@ export default function ContractDetailPage() {
       setConcessions(r.concessions);
       setDepositTerms(r.depositTerms);
     });
+    void api.get<{ usageEntries: UsageEntryDto[] }>(`/contracts/${id}/usage-entries`).then((r) => setUsageEntries(r.usageEntries));
     void api.get<{ charges: ChargeDto[] }>(`/contracts/${id}/charges`).then((r) => setCharges(r.charges));
     void api
       .get<{ chargeBalances: ChargeBalanceDto[]; receipts: ReceiptDto[]; receiptBalances: ReceiptBalanceDto[] }>(`/contracts/${id}/ledger`)
@@ -280,6 +296,7 @@ export default function ContractDetailPage() {
   const isDraft = contract.status === "draft";
   const canEdit = (user?.role === "admin" || user?.role === "manager") && isDraft;
   const canPropose = user?.role === "admin" || user?.role === "manager";
+  const canManageUsage = user?.role === "admin" || user?.role === "manager";
   const partyName = (pid: number) => parties.find((p) => p.id === pid)?.name ?? pid;
 
   const handleError = (err: unknown) => {
@@ -301,11 +318,11 @@ export default function ContractDetailPage() {
   const onAddStream = async () => {
     try {
       const values = await streamForm.validateFields();
-      const { effectiveStart, calculationMethod, amountOrRate, rateBasis, contractUnitIds, ...rest } = values;
+      const { effectiveStart, calculationMethod, amountOrRate, rateBasis, unit, contractUnitIds, ...rest } = values;
       await api.post(`/contracts/${id}/pricing-streams`, {
         ...rest,
         contractUnitIds,
-        initialRate: { effectiveStart, calculationMethod, amountOrRate: String(amountOrRate), rateBasis },
+        initialRate: { effectiveStart, calculationMethod, amountOrRate: String(amountOrRate), rateBasis, unit },
       });
       setStreamModal(false);
       streamForm.resetFields();
@@ -412,6 +429,43 @@ export default function ContractDetailPage() {
   const onDeleteRate = async (streamId: number, rateId: number) => {
     try {
       await api.delete(`/contracts/${id}/pricing-streams/${streamId}/rate-schedule/${rateId}`);
+      message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onAddUsageEntry = async () => {
+    try {
+      const values = await usageEntryForm.validateFields();
+      await api.post(`/contracts/${id}/usage-entries`, { ...values, quantity: String(values.quantity) });
+      setUsageEntryModal(false);
+      usageEntryForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onEditUsageEntry = async () => {
+    if (!editUsageEntryModal) return;
+    try {
+      const values = await editUsageEntryForm.validateFields();
+      await api.patch(`/usage-entries/${editUsageEntryModal.id}`, { ...values, quantity: String(values.quantity) });
+      setEditUsageEntryModal(null);
+      editUsageEntryForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onDeleteUsageEntry = async (usageEntryId: number) => {
+    try {
+      await api.delete(`/usage-entries/${usageEntryId}`);
       message.success(t("common.deleted"));
       load();
     } catch (err) {
@@ -923,7 +977,8 @@ export default function ContractDetailPage() {
                           <>
                             {active.map((r) => (
                               <div key={r.id}>
-                                {t(`contracts.${camel(r.calculationMethod)}`)} — {r.amountOrRate} ({t(`contracts.${camel(r.rateBasis)}`)}) [{r.effectiveStart}
+                                {t(`contracts.${camel(r.calculationMethod)}`)} — {r.amountOrRate} ({t(`contracts.${camel(r.rateBasis)}`)}
+                                {r.unit ? ` / ${r.unit}` : ""}) [{r.effectiveStart}
                                 {r.effectiveEnd ? ` → ${r.effectiveEnd}` : ""}]
                                 {canEdit && (
                                   <>
@@ -998,6 +1053,75 @@ export default function ContractDetailPage() {
                 />
               </>
             ),
+          },
+          {
+            key: "usage",
+            label: t("contracts.usageEntries"),
+            children: (() => {
+              const meteredStreams = streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"));
+              const streamLabel = (streamId: number) => {
+                const s = streams.find((x) => x.id === streamId);
+                return s ? s.label ?? t(`contracts.${camel(s.feeType)}`) : streamId;
+              };
+              return (
+                <>
+                  {canManageUsage && (
+                    <Button
+                      icon={<PlusOutlined />}
+                      disabled={meteredStreams.length === 0}
+                      onClick={() => setUsageEntryModal(true)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {t("contracts.addUsageEntry")}
+                    </Button>
+                  )}
+                  {canManageUsage && meteredStreams.length === 0 && (
+                    <Typography.Paragraph type="secondary">{t("contracts.usageEntryNoMeteredStreams")}</Typography.Paragraph>
+                  )}
+                  <Table
+                    rowKey="id"
+                    size="small"
+                    dataSource={usageEntries}
+                    pagination={false}
+                    columns={[
+                      { title: t("contracts.usageEntryStream"), key: "stream", render: (_: unknown, u: UsageEntryDto) => streamLabel(u.pricingStreamId) },
+                      { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
+                      { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
+                      { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}` },
+                      { title: t("contracts.usageEntrySource"), dataIndex: "source" },
+                      ...(canManageUsage
+                        ? [
+                            {
+                              title: t("common.actions"),
+                              key: "actions",
+                              render: (_: unknown, u: UsageEntryDto) => (
+                                <Space>
+                                  <Button
+                                    size="small"
+                                    icon={<EditOutlined />}
+                                    onClick={() => {
+                                      editUsageEntryForm.setFieldsValue(u);
+                                      setEditUsageEntryModal(u);
+                                    }}
+                                  />
+                                  <Popconfirm
+                                    title={t("contracts.confirmDeleteUsageEntry")}
+                                    onConfirm={() => onDeleteUsageEntry(u.id)}
+                                    okText={t("common.delete")}
+                                    cancelText={t("common.cancel")}
+                                  >
+                                    <Button size="small" danger icon={<DeleteOutlined />} />
+                                  </Popconfirm>
+                                </Space>
+                              ),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </>
+              );
+            })(),
           },
           {
             key: "concessions",
@@ -1600,6 +1724,7 @@ export default function ContractDetailPage() {
                 { value: "flat", label: t("contracts.flat") },
                 { value: "per_sqm", label: t("contracts.perSqm") },
                 { value: "percentage_escalation", label: t("contracts.percentageEscalation") },
+                { value: "metered", label: t("contracts.metered") },
               ]}
             />
           </Form.Item>
@@ -1617,6 +1742,15 @@ export default function ContractDetailPage() {
           </Form.Item>
           <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.calculationMethod !== cur.calculationMethod}>
+            {() =>
+              streamForm.getFieldValue("calculationMethod") === "metered" && (
+                <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
+                  <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
+                </Form.Item>
+              )
+            }
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
             <Input placeholder="YYYY-MM-DD" />
@@ -1679,6 +1813,7 @@ export default function ContractDetailPage() {
                 { value: "flat", label: t("contracts.flat") },
                 { value: "per_sqm", label: t("contracts.perSqm") },
                 { value: "percentage_escalation", label: t("contracts.percentageEscalation") },
+                { value: "metered", label: t("contracts.metered") },
               ]}
             />
           </Form.Item>
@@ -1697,11 +1832,83 @@ export default function ContractDetailPage() {
           <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.calculationMethod !== cur.calculationMethod}>
+            {() =>
+              rateForm.getFieldValue("calculationMethod") === "metered" && (
+                <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
+                  <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
+                </Form.Item>
+              )
+            }
+          </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
             <Input placeholder="YYYY-MM-DD" />
           </Form.Item>
           <Form.Item name="effectiveEnd" label={t("contracts.termEnd")}>
             <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.addUsageEntry")}
+        open={usageEntryModal}
+        onCancel={() => setUsageEntryModal(false)}
+        onOk={onAddUsageEntry}
+        okText={t("common.create")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={usageEntryForm} layout="vertical">
+          <Form.Item name="pricingStreamId" label={t("contracts.usageEntryStream")} rules={[{ required: true }]}>
+            <Select
+              options={streams
+                .filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"))
+                .map((s) => ({ value: s.id, label: s.label ?? t(`contracts.${camel(s.feeType)}`) }))}
+            />
+          </Form.Item>
+          <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="serviceEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
+            <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
+          </Form.Item>
+          <Form.Item name="source" label={t("contracts.usageEntrySource")}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("common.edit")}
+        open={!!editUsageEntryModal}
+        onCancel={() => setEditUsageEntryModal(null)}
+        onOk={onEditUsageEntry}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Form form={editUsageEntryForm} layout="vertical">
+          <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="serviceEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
+            <Input placeholder="YYYY-MM-DD" />
+          </Form.Item>
+          <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0} />
+          </Form.Item>
+          <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
+            <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
+          </Form.Item>
+          <Form.Item name="source" label={t("contracts.usageEntrySource")}>
+            <Input />
           </Form.Item>
         </Form>
       </Modal>

@@ -113,21 +113,81 @@ function totalAreaAt(input: ChargeEngineInput, streamId: number, date: IsoDate):
  * free-rent/discount concessions by splitting into sub-periods and prorating
  * on actual calendar days; final rounding to fen happens once per charge
  * line, not per sub-period. */
+export interface GenerateChargeLinesResult {
+  lines: ChargeLine[];
+  skippedMissingUsage: number[]; // pricingStreamIds skipped for lack of a matching usage entry
+}
+
 export function generateChargeLines(
   input: ChargeEngineInput,
   periodStart: IsoDate,
   periodEnd: IsoDate,
-): ChargeLine[] {
+): GenerateChargeLinesResult {
   const [py, pm] = periodStart.split("-").map(Number);
   const monthLength = daysInMonth(py, pm);
 
   const dueDate = computeDueDate(periodStart, input.billingRules);
 
   const lines: ChargeLine[] = [];
+  const skippedMissingUsage: number[] = [];
 
   for (const stream of input.pricingStreams) {
     const streamRates = input.rateSchedule.filter((r) => r.pricingStreamId === stream.id);
     const streamConcessions = input.concessions.filter((c) => c.pricingStreamId === null || c.pricingStreamId === stream.id);
+
+    const rateAtStart = findRateAt(streamRates, stream.id, periodStart);
+    if (rateAtStart?.calculationMethod === "metered") {
+      const usage = input.usageEntries.find(
+        (u) => u.pricingStreamId === stream.id && u.serviceStart === periodStart && u.serviceEnd === periodEnd,
+      );
+      if (!usage) {
+        skippedMissingUsage.push(stream.id);
+        continue;
+      }
+
+      const pricePerUnit = new Decimal(rateAtStart.amountOrRate);
+      const quantity = new Decimal(usage.quantity);
+      const rawAmount = pricePerUnit.times(quantity);
+
+      const concession = findConcessionAt(streamConcessions, stream.id, periodStart);
+      const afterConcession = concession
+        ? rawAmount.times(new Decimal(1).minus(new Decimal(concession.discountPercentage).dividedBy(100)))
+        : rawAmount;
+
+      lines.push({
+        pricingStreamId: stream.id,
+        feeType: stream.feeType,
+        serviceStart: periodStart,
+        serviceEnd: periodEnd,
+        dueDate,
+        amountFen: yuanToFen(afterConcession),
+        snapshot: {
+          subperiods: [
+            {
+              start: periodStart,
+              end: periodEnd,
+              rateScheduleId: rateAtStart.id,
+              calculationMethod: rateAtStart.calculationMethod,
+              rateBasis: rateAtStart.rateBasis,
+              baseRate: rateAtStart.amountOrRate,
+              effectiveRate: pricePerUnit.toFixed(4),
+              areaSqm: null,
+              daysInSubperiod: daysBetween(periodStart, periodEnd) + 1,
+              daysInMonth: monthLength,
+              monthlyEquivalent: rawAmount.toFixed(4),
+              proratedAmount: rawAmount.toFixed(4),
+              concessionDiscountPercentage: concession?.discountPercentage ?? null,
+              concessionReason: concession?.reason ?? null,
+              amountAfterConcession: afterConcession.toFixed(4),
+              quantity: quantity.toFixed(4),
+              unit: rateAtStart.unit,
+            },
+          ],
+          totalBeforeRounding: afterConcession.toFixed(4),
+        },
+      });
+      continue;
+    }
 
     const boundaries = [
       ...streamRates.map((r) => r.effectiveStart),
@@ -161,6 +221,10 @@ export function generateChargeLines(
         case "per_sqm_per_month":
           monthlyEquivalent = effectiveRate.times(areaSqm!);
           break;
+        case "per_unit":
+          // per_unit only applies to "metered" rates, which are handled in
+          // their own branch above and never reach this sub-period loop.
+          throw new Error(`Unexpected per_unit rate basis outside the metered branch (rate schedule ${rate.id})`);
       }
 
       const daysInSub = daysBetween(subStart, subEnd) + 1;
@@ -205,7 +269,7 @@ export function generateChargeLines(
     });
   }
 
-  return lines;
+  return { lines, skippedMissingUsage };
 }
 
 /** "25th of the prior month" == dueDay 25, dueMonthOffset -1 from the

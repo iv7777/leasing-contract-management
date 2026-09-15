@@ -13,6 +13,7 @@ function baseInput(overrides: Partial<ChargeEngineInput> = {}): ChargeEngineInpu
     rateSchedule: [],
     concessions: [],
     billingRules,
+    usageEntries: [],
     ...overrides,
   };
 }
@@ -32,12 +33,12 @@ test("two floors with different per-sqm rates produce separate correct lines and
       { pricingStreamId: 11, contractUnitId: 2 },
     ],
     rateSchedule: [
-      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "per_sqm", amountOrRate: "30", rateBasis: "per_sqm_per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
-      { id: 101, pricingStreamId: 11, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "per_sqm", amountOrRate: "45", rateBasis: "per_sqm_per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "per_sqm", amountOrRate: "30", rateBasis: "per_sqm_per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
+      { id: 101, pricingStreamId: 11, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "per_sqm", amountOrRate: "45", rateBasis: "per_sqm_per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
     ],
   });
 
-  const lines = generateChargeLines(input, "2026-03-01", "2026-03-31");
+  const { lines } = generateChargeLines(input, "2026-03-01", "2026-03-31");
   assert.equal(lines.length, 2);
 
   const floor1 = lines.find((l) => l.pricingStreamId === 10)!;
@@ -55,13 +56,13 @@ test("mid-month rent increase splits and prorates correctly at the effective dat
     pricingStreams: [{ id: 10, feeType: "rent", targetType: "unit" }],
     pricingStreamUnits: [{ pricingStreamId: 10, contractUnitId: 1 }],
     rateSchedule: [
-      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: "2026-04-15", calculationMethod: "flat", amountOrRate: "10000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
-      { id: 101, pricingStreamId: 10, effectiveStart: "2026-04-16", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "12000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: "2026-04-15", calculationMethod: "flat", amountOrRate: "10000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
+      { id: 101, pricingStreamId: 10, effectiveStart: "2026-04-16", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "12000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
     ],
   });
 
   // April has 30 days; old rate covers days 1-15 (15 days), new rate covers 16-30 (15 days).
-  const lines = generateChargeLines(input, "2026-04-01", "2026-04-30");
+  const { lines } = generateChargeLines(input, "2026-04-01", "2026-04-30");
   assert.equal(lines.length, 1);
   const line = lines[0];
   assert.equal(line.snapshot.subperiods.length, 2);
@@ -86,6 +87,7 @@ test("percentage escalation compounds correctly at each interval and rounds to y
     escalationBase: "initial",
     escalationPercentage: "5",
     escalationIntervalMonths: 12,
+    unit: null,
   };
 
   assert.equal(computeEscalatedRate(rate, "2024-06-01").toFixed(2), "10000.00"); // year 1, no tier yet
@@ -105,15 +107,15 @@ test("free rent waives rent but management fee remains payable", () => {
       { pricingStreamId: 11, contractUnitId: 1 },
     ],
     rateSchedule: [
-      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "10000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
-      { id: 101, pricingStreamId: 11, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "800", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "10000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
+      { id: 101, pricingStreamId: 11, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "800", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
     ],
     concessions: [
       { pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: "2026-01-31", discountPercentage: "100", reason: "Free rent month" },
     ],
   });
 
-  const lines = generateChargeLines(input, "2026-01-01", "2026-01-31");
+  const { lines } = generateChargeLines(input, "2026-01-01", "2026-01-31");
   const rentLine = lines.find((l) => l.pricingStreamId === 10)!;
   const mgmtLine = lines.find((l) => l.pricingStreamId === 11)!;
 
@@ -127,12 +129,46 @@ test("repeated generation for the same period is idempotent at the data level (s
     pricingStreams: [{ id: 10, feeType: "rent", targetType: "unit" }],
     pricingStreamUnits: [{ pricingStreamId: 10, contractUnitId: 1 }],
     rateSchedule: [
-      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "10000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null },
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "10000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
     ],
   });
-  const a = generateChargeLines(input, "2026-02-01", "2026-02-28");
-  const b = generateChargeLines(input, "2026-02-01", "2026-02-28");
+  const a = generateChargeLines(input, "2026-02-01", "2026-02-28").lines;
+  const b = generateChargeLines(input, "2026-02-01", "2026-02-28").lines;
   assert.deepEqual(a, b);
+});
+
+test("metered stream: charges price-per-unit times the matching usage entry's quantity", () => {
+  const input = baseInput({
+    pricingStreams: [{ id: 10, feeType: "electricity_base", targetType: "unit" }],
+    rateSchedule: [
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "metered", amountOrRate: "1.2", rateBasis: "per_unit", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: "kWh" },
+    ],
+    usageEntries: [
+      { pricingStreamId: 10, serviceStart: "2026-03-01", serviceEnd: "2026-03-31", quantity: "500" },
+    ],
+  });
+
+  const { lines, skippedMissingUsage } = generateChargeLines(input, "2026-03-01", "2026-03-31");
+  assert.equal(skippedMissingUsage.length, 0);
+  assert.equal(lines.length, 1);
+  const line = lines[0];
+  assert.equal(line.amountFen, 500 * 1.2 * 100); // 500 kWh * 1.2 yuan = 600 yuan = 60,000 fen
+  assert.equal(line.snapshot.subperiods[0].quantity, "500.0000");
+  assert.equal(line.snapshot.subperiods[0].unit, "kWh");
+});
+
+test("metered stream: skips the stream (does not throw) when no usage entry matches the period", () => {
+  const input = baseInput({
+    pricingStreams: [{ id: 10, feeType: "electricity_base", targetType: "unit" }],
+    rateSchedule: [
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "metered", amountOrRate: "1.2", rateBasis: "per_unit", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: "kWh" },
+    ],
+    usageEntries: [],
+  });
+
+  const { lines, skippedMissingUsage } = generateChargeLines(input, "2026-03-01", "2026-03-31");
+  assert.equal(lines.length, 0);
+  assert.deepEqual(skippedMissingUsage, [10]);
 });
 
 test("computeDueDate: 25th of the prior month, with short-month fallback", () => {

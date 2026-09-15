@@ -181,10 +181,11 @@ export default function PartiesPage() {
           loading={loading}
           dataSource={visibleParties}
           rowClassName={(p) => (p.id === highlightId ? "row-highlight" : "")}
+          scroll={{ x: true }}
           columns={[
-            { title: t("common.name"), dataIndex: "name", render: (_, p) => displayName(p) },
-            { title: t("parties.type"), dataIndex: "type", render: (v: string) => t(`parties.${v}`) },
-            { title: t("parties.contactDetails"), dataIndex: "contactDetails" },
+            { title: t("common.name"), dataIndex: "name", width: 200, render: (_, p) => displayName(p) },
+            { title: t("parties.type"), dataIndex: "type", width: 120, render: (v: string) => t(`parties.${v}`) },
+            { title: t("parties.contactDetails"), dataIndex: "contactDetails", width: 200 },
             {
               title: t("common.relatedContracts"),
               key: "relatedContracts",

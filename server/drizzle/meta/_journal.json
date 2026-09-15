@@ -36,6 +36,13 @@
       "when": 1789379419084,
       "tag": "0004_redundant_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789458880019,
+      "tag": "0005_add_metered_rate_schedule",
+      "breakpoints": true
     }
   ]
 }

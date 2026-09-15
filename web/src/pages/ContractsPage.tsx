@@ -17,6 +17,7 @@ interface ContractDto {
   termEnd: string;
   status: "draft" | "active" | "expired" | "terminated";
   versionNumber: number;
+  unitLabels: string[];
 }
 
 const statusColor: Record<ContractDto["status"], string> = {
@@ -97,6 +98,12 @@ export default function ContractsPage() {
               <Typography.Text type="secondary">
                 {partyLink(c.tenantPartyId)} · {c.termStart} → {c.termEnd}
               </Typography.Text>
+              {c.unitLabels.length > 0 && (
+                <>
+                  <br />
+                  <Typography.Text type="secondary">{c.unitLabels.join(", ")}</Typography.Text>
+                </>
+              )}
             </Card>
           )}
         />
@@ -109,6 +116,11 @@ export default function ContractsPage() {
           columns={[
             { title: t("contracts.reference"), dataIndex: "referenceNumber" },
             { title: t("contracts.tenant"), dataIndex: "tenantPartyId", render: (id: number) => partyLink(id) },
+            {
+              title: t("contracts.units"),
+              dataIndex: "unitLabels",
+              render: (labels: string[]) => labels.join(", ") || "—",
+            },
             { title: t("contracts.termStart"), dataIndex: "termStart" },
             { title: t("contracts.termEnd"), dataIndex: "termEnd" },
             {

@@ -9,6 +9,7 @@ import {
   concessions,
   billingRules,
   charges,
+  usageEntries,
 } from "../db/schema.js";
 import { generateChargeLines } from "./chargeEngine.js";
 import type { IsoDate } from "@lcm/shared";
@@ -16,6 +17,7 @@ import type { IsoDate } from "@lcm/shared";
 export interface GenerateResult {
   created: number;
   skippedExisting: number;
+  skippedMissingUsage: number;
 }
 
 /** Loads a contract's approved/effective terms and generates charges for one
@@ -38,8 +40,9 @@ export function generateChargesForContractMonth(contractId: number, periodStart:
     ? db.select().from(rateSchedule).all().filter((r) => streams.some((s) => s.id === r.pricingStreamId))
     : [];
   const concessionRows = db.select().from(concessions).where(eq(concessions.contractId, contractId)).all();
+  const usageRows = db.select().from(usageEntries).where(eq(usageEntries.contractId, contractId)).all();
 
-  const lines = generateChargeLines(
+  const { lines, skippedMissingUsage } = generateChargeLines(
     {
       contractUnits: cUnits.map((u) => ({
         id: u.id,
@@ -60,6 +63,7 @@ export function generateChargesForContractMonth(contractId: number, periodStart:
         escalationBase: r.escalationBase,
         escalationPercentage: r.escalationPercentage,
         escalationIntervalMonths: r.escalationIntervalMonths,
+        unit: r.unit,
       })),
       concessions: concessionRows.map((c) => ({
         pricingStreamId: c.pricingStreamId,
@@ -69,6 +73,12 @@ export function generateChargesForContractMonth(contractId: number, periodStart:
         reason: c.reason,
       })),
       billingRules: { dueDay: rules.dueDay, dueMonthOffset: rules.dueMonthOffset },
+      usageEntries: usageRows.map((u) => ({
+        pricingStreamId: u.pricingStreamId,
+        serviceStart: u.serviceStart,
+        serviceEnd: u.serviceEnd,
+        quantity: u.quantity,
+      })),
     },
     periodStart,
     periodEnd,
@@ -110,5 +120,5 @@ export function generateChargesForContractMonth(contractId: number, periodStart:
     created++;
   }
 
-  return { created, skippedExisting };
+  return { created, skippedExisting, skippedMissingUsage: skippedMissingUsage.length };
 }

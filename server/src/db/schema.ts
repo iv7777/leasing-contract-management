@@ -214,17 +214,21 @@ export const rateSchedule = sqliteTable("rate_schedule", {
   effectiveStart: text("effective_start").notNull(),
   effectiveEnd: text("effective_end"),
   calculationMethod: text("calculation_method", {
-    enum: ["flat", "per_sqm", "percentage_escalation"],
+    enum: ["flat", "per_sqm", "percentage_escalation", "metered"],
   }).notNull(),
   // Decimal yuan as text — exact precision, converted to fen only at charge time.
+  // For "metered" this is the price per unit (e.g. yuan per kWh), paired with `unit` below.
   amountOrRate: text("amount_or_rate").notNull(),
   rateBasis: text("rate_basis", {
-    enum: ["per_month", "per_quarter", "per_year", "per_sqm_per_month"],
+    enum: ["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"],
   }).notNull(),
-  // percentage_escalation fields (null for flat/per_sqm)
+  // percentage_escalation fields (null for flat/per_sqm/metered)
   escalationBase: text("escalation_base", { enum: ["initial", "previous"] }),
   escalationPercentage: text("escalation_percentage"),
   escalationIntervalMonths: integer("escalation_interval_months"),
+  // metered only: the unit amountOrRate is priced per (e.g. "kWh", "ton") —
+  // null for every other calculationMethod.
+  unit: text("unit"),
   notes: text("notes"),
 }, (t) => ({
   streamIdx: index("rate_schedule_stream_idx").on(t.pricingStreamId),

@@ -1,0 +1,1 @@
+ALTER TABLE `rate_schedule` ADD `unit` text;

@@ -55,7 +55,23 @@ function requireDraft(contract: typeof contracts.$inferSelect, res: import("expr
 contractsRouter.get("/", (req, res) => {
   const all = db.select().from(contracts).all();
   const visible = all.filter((c) => canAccessContract(req.user!, c.id));
-  res.json({ contracts: visible });
+
+  const cUnitRows = db.select().from(contractUnits).all();
+  const unitIds = Array.from(new Set(cUnitRows.map((cu) => cu.unitId)));
+  const unitById = new Map(
+    (unitIds.length ? db.select().from(units).all().filter((u) => unitIds.includes(u.id)) : []).map((u) => [u.id, u]),
+  );
+
+  const unitLabelsByContract: Record<number, string[]> = {};
+  for (const cu of cUnitRows) {
+    const unit = unitById.get(cu.unitId);
+    if (!unit) continue;
+    (unitLabelsByContract[cu.contractId] ??= []).push(unit.unitLabel);
+  }
+
+  res.json({
+    contracts: visible.map((c) => ({ ...c, unitLabels: unitLabelsByContract[c.id] ?? [] })),
+  });
 });
 
 const createContractSchema = z.object({
@@ -309,12 +325,13 @@ const addPricingStreamSchema = z.object({
   initialRate: z.object({
     effectiveStart: z.string(),
     effectiveEnd: z.string().optional(),
-    calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation"]),
+    calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
     amountOrRate: decimalString,
-    rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month"]),
+    rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
     escalationBase: z.enum(["initial", "previous"]).optional(),
     escalationPercentage: decimalString.optional(),
     escalationIntervalMonths: z.number().optional(),
+    unit: z.string().optional(),
   }),
 });
 
@@ -426,12 +443,13 @@ contractsRouter.delete("/:id/pricing-streams/:streamId", requireRole("admin", "m
 const rateScheduleTierSchema = z.object({
   effectiveStart: z.string(),
   effectiveEnd: z.string().optional(),
-  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation"]),
+  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
   amountOrRate: decimalString,
-  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month"]),
+  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
   escalationBase: z.enum(["initial", "previous"]).optional(),
   escalationPercentage: decimalString.optional(),
   escalationIntervalMonths: z.number().optional(),
+  unit: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -472,6 +490,7 @@ contractsRouter.patch("/:id/pricing-streams/:streamId/rate-schedule/:rateId", re
     escalationBase: z.enum(["initial", "previous"]).nullable().optional(),
     escalationPercentage: decimalString.nullable().optional(),
     escalationIntervalMonths: z.number().nullable().optional(),
+    unit: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
   });
   const parsed = updateRateScheduleTierSchema.safeParse(req.body);
@@ -820,6 +839,7 @@ contractsRouter.get("/:id/escalation-preview/:rateScheduleId", (req, res) => {
       escalationBase: rate.escalationBase,
       escalationPercentage: rate.escalationPercentage,
       escalationIntervalMonths: rate.escalationIntervalMonths,
+      unit: rate.unit,
     },
     10,
   );
