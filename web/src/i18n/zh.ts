@@ -150,7 +150,7 @@ const zh: Translations = {
     feeType: "费用类型",
     rent: "租金",
     management: "管理费",
-    electricityBase: "电费（基础）",
+    electricityBase: "电费",
     water: "水费",
     elevator: "电梯费",
     other: "其他",

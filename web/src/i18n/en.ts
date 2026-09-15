@@ -148,7 +148,7 @@ const en = {
     feeType: "Fee type",
     rent: "Rent",
     management: "Management",
-    electricityBase: "Electricity (base)",
+    electricityBase: "Electricity",
     water: "Water",
     elevator: "Elevator",
     other: "Other",
