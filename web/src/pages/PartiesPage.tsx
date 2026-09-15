@@ -57,12 +57,12 @@ export default function PartiesPage() {
     const related = relatedContracts(partyId);
     if (related.length === 0) return <Typography.Text type="secondary">{t("common.noneYet")}</Typography.Text>;
     return (
-      <Space size={4} wrap>
+      <Space direction="vertical" size={4} style={{ width: "100%" }}>
         {related.map((c) => (
-          <Link key={c.id} to={`/contracts/${c.id}`} onClick={(e) => e.stopPropagation()}>
+          <Link key={c.id} to={`/contracts/${c.id}`} onClick={(e) => e.stopPropagation()} style={{ display: "block", width: "100%" }}>
             <Tag
               color={c.status === "active" ? "green" : undefined}
-              style={{ width: 110, whiteSpace: "normal", wordBreak: "break-all", textAlign: "center" }}
+              style={{ display: "block", width: "100%", whiteSpace: "normal", wordBreak: "break-all", textAlign: "center", boxSizing: "border-box" }}
             >
               {c.referenceNumber}
             </Tag>
@@ -202,30 +202,29 @@ export default function PartiesPage() {
               title: t("common.name"),
               dataIndex: "name",
               ellipsis: false,
-              width: 90,
-              render: (_, p) => <div style={{ width: 90, wordBreak: "break-all" }}>{displayName(p)}</div>,
+              render: (_, p) => <div style={{ minWidth: 90, wordBreak: "break-all" }}>{displayName(p)}</div>,
             },
-            { title: t("parties.type"), dataIndex: "type", render: (v: string) => t(`parties.${v}`) },
+            { title: t("parties.type"), dataIndex: "type", width: 90, render: (v: string) => t(`parties.${v}`) },
             {
               title: t("parties.contactDetails"),
               dataIndex: "contactDetails",
-              width: 90,
-              render: (v: string) => <div style={{ width: 90, wordBreak: "break-all" }}>{v}</div>,
+              render: (v: string) => <div style={{ minWidth: 90, wordBreak: "break-all" }}>{v}</div>,
             },
             {
               title: t("common.relatedContracts"),
               key: "relatedContracts",
-              width: 120,
               render: (_: unknown, p: PartyDto) => relatedContractsList(p.id),
             },
             {
               title: t("common.archived"),
               dataIndex: "archived",
+              width: 90,
               render: (archived: boolean) => (archived ? <Tag>{t("common.archived")}</Tag> : null),
             },
             {
               title: t("common.actions"),
               key: "actions",
+              width: 90,
               render: (_: unknown, p: PartyDto) =>
                 (canCreate || isAdmin) && (
                   <Space size={4}>
