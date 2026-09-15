@@ -137,10 +137,11 @@ export default function UsersPage() {
           {
             title: t("users.assignedProperties"),
             dataIndex: "propertyIds",
-            render: (ids: number[], u) =>
-              u.role === "admin"
-                ? "—"
-                : ids.map((id) => properties.find((p) => p.id === id)?.name ?? id).join(", "),
+            render: (ids: number[], u) => (
+              <div style={{ minWidth: 200, wordBreak: "break-word" }}>
+                {u.role === "admin" ? "—" : ids.map((id) => properties.find((p) => p.id === id)?.name ?? id).join(", ")}
+              </div>
+            ),
           },
           {
             title: t("common.active"),
