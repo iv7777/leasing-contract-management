@@ -60,7 +60,12 @@ export default function PartiesPage() {
       <Space size={4} wrap>
         {related.map((c) => (
           <Link key={c.id} to={`/contracts/${c.id}`} onClick={(e) => e.stopPropagation()}>
-            <Tag color={c.status === "active" ? "green" : undefined}>{c.referenceNumber}</Tag>
+            <Tag
+              color={c.status === "active" ? "green" : undefined}
+              style={{ width: 110, whiteSpace: "normal", wordBreak: "break-all", textAlign: "center" }}
+            >
+              {c.referenceNumber}
+            </Tag>
           </Link>
         ))}
       </Space>
@@ -188,6 +193,7 @@ export default function PartiesPage() {
       ) : (
         <Table
           rowKey="id"
+          size="small"
           loading={loading}
           dataSource={visibleParties}
           rowClassName={(p) => (p.id === highlightId ? "row-highlight" : "")}
@@ -196,14 +202,20 @@ export default function PartiesPage() {
               title: t("common.name"),
               dataIndex: "name",
               ellipsis: false,
-              render: (_, p) => <div style={{ minWidth: 150 }}>{displayName(p)}</div>,
+              width: 90,
+              render: (_, p) => <div style={{ width: 90, wordBreak: "break-all" }}>{displayName(p)}</div>,
             },
             { title: t("parties.type"), dataIndex: "type", render: (v: string) => t(`parties.${v}`) },
-            { title: t("parties.contactDetails"), dataIndex: "contactDetails" },
+            {
+              title: t("parties.contactDetails"),
+              dataIndex: "contactDetails",
+              width: 90,
+              render: (v: string) => <div style={{ width: 90, wordBreak: "break-all" }}>{v}</div>,
+            },
             {
               title: t("common.relatedContracts"),
               key: "relatedContracts",
-              width: 260,
+              width: 120,
               render: (_: unknown, p: PartyDto) => relatedContractsList(p.id),
             },
             {
