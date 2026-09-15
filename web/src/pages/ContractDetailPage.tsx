@@ -28,6 +28,7 @@ import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useHelpTopic } from "../help/HelpContext";
 import { HelpIcon } from "../help/HelpIcon";
+import DateField from "../components/DateField";
 
 interface ContractDto {
   id: number;
@@ -1594,10 +1595,10 @@ export default function ContractDetailPage() {
             <Select showSearch optionFilterProp="label" options={parties.map((p) => ({ value: p.id, label: p.name }))} />
           </Form.Item>
           <Form.Item name="termStart" label={t("contracts.termStart")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="termEnd" label={t("contracts.termEnd")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="renewalNoticeDays" label={t("contracts.renewalNoticeDays")}>
             <InputNumber style={{ width: "100%" }} min={0} />
@@ -1659,7 +1660,7 @@ export default function ContractDetailPage() {
             <Select options={availableUnits.map((u) => ({ value: u.id, label: u.unitLabel }))} />
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="contractedAreaSqm" label={t("contracts.contractedArea")} rules={[{ required: true }]}>
             <Input />
@@ -1678,10 +1679,10 @@ export default function ContractDetailPage() {
       >
         <Form form={editUnitForm} layout="vertical">
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="effectiveEnd" label={t("contracts.termEnd")}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="contractedAreaSqm" label={t("contracts.contractedArea")} rules={[{ required: true }]}>
             <Input />
@@ -1758,7 +1759,7 @@ export default function ContractDetailPage() {
             }
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
         </Form>
       </Modal>
@@ -1847,10 +1848,10 @@ export default function ContractDetailPage() {
             }
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="effectiveEnd" label={t("contracts.termEnd")}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
         </Form>
       </Modal>
@@ -1873,10 +1874,10 @@ export default function ContractDetailPage() {
             />
           </Form.Item>
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="serviceEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
@@ -1901,10 +1902,10 @@ export default function ContractDetailPage() {
       >
         <Form form={editUsageEntryForm} layout="vertical">
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="serviceEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
@@ -1924,10 +1925,10 @@ export default function ContractDetailPage() {
             <Select allowClear placeholder="All streams" options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="effectiveEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item
             name="discountPercentage"
@@ -1961,10 +1962,10 @@ export default function ContractDetailPage() {
             <Select allowClear placeholder="All streams" options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="effectiveEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item
             name="discountPercentage"
@@ -1986,7 +1987,7 @@ export default function ContractDetailPage() {
       <Modal title={t("contracts.addDepositTerms")} open={depositModal} onCancel={() => setDepositModal(false)} onOk={onSetDeposit} okText={t("common.save")} cancelText={t("common.cancel")}>
         <Form form={depositForm} layout="vertical">
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item
             name="requirementType"
@@ -2025,7 +2026,7 @@ export default function ContractDetailPage() {
       >
         <Form form={editDepositForm} layout="vertical">
           <Form.Item name="effectiveStart" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item
             name="requirementType"
@@ -2063,7 +2064,7 @@ export default function ContractDetailPage() {
       <Modal title={t("contracts.recordReceipt")} open={receiptModal} onCancel={() => setReceiptModal(false)} onOk={onRecordReceipt} okText={t("common.create")} cancelText={t("common.cancel")}>
         <Form form={receiptForm} layout="vertical">
           <Form.Item name="receivedDate" label={t("contracts.receivedDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="amountFen" label={`${t("contracts.amount")} (yuan)`} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
@@ -2181,7 +2182,7 @@ export default function ContractDetailPage() {
             />
           </Form.Item>
           <Form.Item name="transactionDate" label={t("contracts.transactionDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="amountFen" label={`${t("contracts.amount")} (yuan)`} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
@@ -2233,7 +2234,7 @@ export default function ContractDetailPage() {
             <Input.TextArea rows={2} />
           </Form.Item>
           <Form.Item name="effectiveDate" label={t("contracts.effectiveDate")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item
             name="supportingDocumentId"

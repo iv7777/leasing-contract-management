@@ -7,6 +7,7 @@ import type { PartyDto } from "@lcm/shared";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { HelpIcon } from "../help/HelpIcon";
+import DateField from "../components/DateField";
 
 interface ContractDto {
   id: number;
@@ -187,10 +188,10 @@ export default function ContractsPage() {
             <Select options={parties.map((p) => ({ value: p.id, label: p.name }))} />
           </Form.Item>
           <Form.Item name="termStart" label={t("contracts.termStart")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="termEnd" label={t("contracts.termEnd")} rules={[{ required: true }]}>
-            <Input placeholder="YYYY-MM-DD" />
+            <DateField />
           </Form.Item>
           <Form.Item name="dueDay" label={t("contracts.dueDay")} rules={[{ required: true }]} initialValue={25}>
             <InputNumber min={1} max={31} style={{ width: "100%" }} />

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, Select, Space, Table, Tag, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import DateField from "../components/DateField";
 
 interface AuditEventDto {
   id: number;
@@ -69,8 +70,8 @@ export default function AuditLogPage() {
           options={entityTypes.map((e) => ({ value: e, label: e }))}
         />
         <Input placeholder={t("audit.entityId")} style={{ width: 120 }} value={entityId} onChange={(e) => setEntityId(e.target.value)} />
-        <Input placeholder={`${t("audit.from")} (YYYY-MM-DD)`} style={{ width: 160 }} value={from} onChange={(e) => setFrom(e.target.value)} />
-        <Input placeholder={`${t("audit.to")} (YYYY-MM-DD)`} style={{ width: 160 }} value={to} onChange={(e) => setTo(e.target.value)} />
+        <DateField placeholder={t("audit.from")} style={{ width: 160 }} value={from || undefined} onChange={(v) => setFrom(v ?? "")} allowClear />
+        <DateField placeholder={t("audit.to")} style={{ width: 160 }} value={to || undefined} onChange={(v) => setTo(v ?? "")} allowClear />
         <Button type="primary" onClick={applyFilters}>
           {t("audit.applyFilters")}
         </Button>

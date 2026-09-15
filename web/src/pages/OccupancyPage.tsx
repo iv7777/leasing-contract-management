@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Card, Col, Row, Statistic, Typography, Input, Space } from "antd";
+import { Card, Col, Row, Statistic, Typography, Space } from "antd";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import DateField from "../components/DateField";
 
 interface OccupancySummary {
   totalAreaSqm: string;
@@ -58,7 +59,7 @@ export default function OccupancyPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           {t("occupancy.title")}
         </Typography.Title>
-        <Input placeholder="YYYY-MM-DD" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: 160 }} />
+        <DateField value={date || undefined} onChange={(v) => setDate(v ?? "")} style={{ width: 160 }} allowClear />
       </Space>
       {report && (
         <Row gutter={16}>
