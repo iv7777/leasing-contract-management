@@ -181,7 +181,7 @@ export default function PartiesPage() {
           loading={loading}
           dataSource={visibleParties}
           rowClassName={(p) => (p.id === highlightId ? "row-highlight" : "")}
-          scroll={{ x: true }}
+          scroll={{ x: "max-content" }}
           columns={[
             { title: t("common.name"), dataIndex: "name", width: 200, render: (_, p) => displayName(p) },
             { title: t("parties.type"), dataIndex: "type", width: 120, render: (v: string) => t(`parties.${v}`) },
