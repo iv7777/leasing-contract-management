@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Spin } from "antd";
+import type { Role } from "@lcm/shared";
 import { useAuth } from "./auth/AuthContext";
 import { AppLayout } from "./layout/AppLayout";
 import LoginPage from "./pages/LoginPage";
@@ -29,6 +30,12 @@ function RequireAuth({ children }: { children: JSX.Element }) {
   return children;
 }
 
+function RequireRole({ roles, children }: { roles: Role[]; children: JSX.Element }) {
+  const { user } = useAuth();
+  if (!user || !roles.includes(user.role)) return <Navigate to="/" replace />;
+  return children;
+}
+
 export default function App() {
   return (
     <Routes>
@@ -48,9 +55,30 @@ export default function App() {
                 <Route path="/parties" element={<PartiesPage />} />
                 <Route path="/reminders" element={<RemindersPage />} />
                 <Route path="/occupancy" element={<OccupancyPage />} />
-                <Route path="/users" element={<UsersPage />} />
-                <Route path="/audit" element={<AuditLogPage />} />
-                <Route path="/backups" element={<BackupsPage />} />
+                <Route
+                  path="/users"
+                  element={
+                    <RequireRole roles={["admin"]}>
+                      <UsersPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/audit"
+                  element={
+                    <RequireRole roles={["admin"]}>
+                      <AuditLogPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/backups"
+                  element={
+                    <RequireRole roles={["admin"]}>
+                      <BackupsPage />
+                    </RequireRole>
+                  }
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppLayout>
