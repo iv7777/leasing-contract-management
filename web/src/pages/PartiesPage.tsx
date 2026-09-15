@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Button, Form, Grid, Input, List, Modal, Select, Space, Switch, Table, Tag, Typography, Card, message, Popconfirm } from "antd";
-import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { Button, Dropdown, Form, Grid, Input, List, Modal, Select, Space, Switch, Table, Tag, Typography, Card, message, Popconfirm } from "antd";
+import { PlusOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
@@ -53,17 +53,13 @@ export default function PartiesPage() {
   const relatedContracts = (partyId: number) =>
     contracts.filter((c) => c.landlordPartyId === partyId || c.tenantPartyId === partyId);
 
-  const relatedContractsList = (partyId: number) => {
+  const relatedContractsSummary = (partyId: number) => {
     const related = relatedContracts(partyId);
     if (related.length === 0) return <Typography.Text type="secondary">{t("common.noneYet")}</Typography.Text>;
     return (
-      <Space size={4} wrap>
-        {related.map((c) => (
-          <Link key={c.id} to={`/contracts/${c.id}`}>
-            <Tag color={c.status === "active" ? "green" : undefined}>{c.referenceNumber}</Tag>
-          </Link>
-        ))}
-      </Space>
+      <Link to={`/contracts?partyId=${partyId}`} onClick={(e) => e.stopPropagation()}>
+        <Tag color="blue">{t("common.relatedContractsCount", { count: related.length })}</Tag>
+      </Link>
     );
   };
 
@@ -116,6 +112,16 @@ export default function PartiesPage() {
     }
   };
 
+  const confirmDelete = (p: PartyDto) => {
+    Modal.confirm({
+      title: t("parties.confirmDelete"),
+      okText: t("common.delete"),
+      okButtonProps: { danger: true },
+      cancelText: t("common.cancel"),
+      onOk: () => onDelete(p),
+    });
+  };
+
   const canCreate = user?.role === "admin" || user?.role === "manager";
   const isAdmin = user?.role === "admin";
 
@@ -156,7 +162,7 @@ export default function PartiesPage() {
                   <Typography.Text type="secondary">{p.contactDetails}</Typography.Text>
                   <br />
                   <Typography.Text type="secondary">{t("common.relatedContracts")}: </Typography.Text>
-                  {relatedContractsList(p.id)}
+                  {relatedContractsSummary(p.id)}
                 </div>
                 <Space>
                   {canCreate && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />}
@@ -181,44 +187,48 @@ export default function PartiesPage() {
           loading={loading}
           dataSource={visibleParties}
           rowClassName={(p) => (p.id === highlightId ? "row-highlight" : "")}
-          scroll={{ x: "max-content" }}
           columns={[
-            { title: t("common.name"), dataIndex: "name", width: 200, render: (_, p) => displayName(p) },
-            { title: t("parties.type"), dataIndex: "type", width: 120, render: (v: string) => t(`parties.${v}`) },
-            { title: t("parties.contactDetails"), dataIndex: "contactDetails", width: 200 },
+            { title: t("common.name"), dataIndex: "name", render: (_, p) => displayName(p) },
+            { title: t("parties.type"), dataIndex: "type", render: (v: string) => t(`parties.${v}`) },
+            { title: t("parties.contactDetails"), dataIndex: "contactDetails" },
             {
               title: t("common.relatedContracts"),
               key: "relatedContracts",
-              render: (_: unknown, p: PartyDto) => relatedContractsList(p.id),
+              render: (_: unknown, p: PartyDto) => relatedContractsSummary(p.id),
             },
             {
               title: t("common.archived"),
               dataIndex: "archived",
-              width: 100,
               render: (archived: boolean) => (archived ? <Tag>{t("common.archived")}</Tag> : null),
             },
             {
               title: t("common.actions"),
               key: "actions",
-              width: 140,
               render: (_: unknown, p: PartyDto) =>
                 (canCreate || isAdmin) && (
-                  <Space>
+                  <Space size={4}>
                     {canCreate && <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(p)} />}
-                    {canCreate && (
-                      <Button size="small" onClick={() => toggleArchived(p)}>
-                        {p.archived ? t("common.unarchive") : t("common.archive")}
-                      </Button>
-                    )}
-                    {isAdmin && (
-                      <Popconfirm
-                        title={t("parties.confirmDelete")}
-                        onConfirm={() => onDelete(p)}
-                        okText={t("common.delete")}
-                        cancelText={t("common.cancel")}
+                    {(canCreate || isAdmin) && (
+                      <Dropdown
+                        menu={{
+                          items: [
+                            canCreate && {
+                              key: "archive",
+                              label: p.archived ? t("common.unarchive") : t("common.archive"),
+                              onClick: () => toggleArchived(p),
+                            },
+                            isAdmin && {
+                              key: "delete",
+                              label: t("common.delete"),
+                              danger: true,
+                              icon: <DeleteOutlined />,
+                              onClick: () => confirmDelete(p),
+                            },
+                          ].filter((item) => !!item),
+                        }}
                       >
-                        <Button size="small" danger icon={<DeleteOutlined />} />
-                      </Popconfirm>
+                        <Button size="small" icon={<MoreOutlined />} />
+                      </Dropdown>
                     )}
                   </Space>
                 ),

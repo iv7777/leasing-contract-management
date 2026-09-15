@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Typography, Card } from "antd";
+import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Typography, Card } from "antd";
 import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { PartyDto } from "@lcm/shared";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -32,6 +32,8 @@ export default function ContractsPage() {
   const exportLang = i18n.language.startsWith("zh") ? "zh" : "en";
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const filterPartyId = Number(searchParams.get("partyId")) || null;
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
 
@@ -57,6 +59,10 @@ export default function ContractsPage() {
       {partyName(id)}
     </Link>
   );
+
+  const visibleContracts = filterPartyId
+    ? contracts.filter((c) => c.landlordPartyId === filterPartyId || c.tenantPartyId === filterPartyId)
+    : contracts;
 
   const onCreate = async () => {
     const values = await form.validateFields();
@@ -87,10 +93,25 @@ export default function ContractsPage() {
         </Space>
       </Space>
 
+      {filterPartyId && (
+        <Alert
+          type="info"
+          showIcon
+          closable
+          onClose={() => navigate("/contracts")}
+          style={{ marginBottom: 16 }}
+          message={
+            <>
+              {t("contracts.filteredByParty", { name: partyName(filterPartyId) })} · <Link to="/contracts">{t("contracts.clearFilter")}</Link>
+            </>
+          }
+        />
+      )}
+
       {isMobile ? (
         <List
           loading={loading}
-          dataSource={contracts}
+          dataSource={visibleContracts}
           renderItem={(c) => (
             <Card style={{ marginBottom: 12 }} onClick={() => navigate(`/contracts/${c.id}`)}>
               <Typography.Text strong>{c.referenceNumber}</Typography.Text> <Tag color={statusColor[c.status]}>{t(`contracts.${c.status}`)}</Tag>
@@ -111,7 +132,7 @@ export default function ContractsPage() {
         <Table
           rowKey="id"
           loading={loading}
-          dataSource={contracts}
+          dataSource={visibleContracts}
           onRow={(c) => ({ onClick: () => navigate(`/contracts/${c.id}`), style: { cursor: "pointer" } })}
           columns={[
             { title: t("contracts.reference"), dataIndex: "referenceNumber" },

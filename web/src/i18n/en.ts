@@ -46,6 +46,8 @@ const en = {
     deleted: "Deleted",
     viewDetails: "View",
     relatedContracts: "Related contracts",
+    relatedContractsCount_one: "{{count}} contract",
+    relatedContractsCount_other: "{{count}} contracts",
     noneYet: "None yet",
   },
   properties: {
@@ -248,6 +250,8 @@ const en = {
     viewStatement: "View statement",
     exportPdf: "Export PDF summary",
     exportCsv: "Export CSV",
+    filteredByParty: "Showing contracts for {{name}}",
+    clearFilter: "Clear filter",
   },
   reminders: {
     title: "Reminders",

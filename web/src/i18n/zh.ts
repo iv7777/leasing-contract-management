@@ -48,6 +48,8 @@ const zh: Translations = {
     deleted: "已删除",
     viewDetails: "查看",
     relatedContracts: "相关合同",
+    relatedContractsCount_one: "{{count}} 份合同",
+    relatedContractsCount_other: "{{count}} 份合同",
     noneYet: "暂无",
   },
   properties: {
@@ -250,6 +252,8 @@ const zh: Translations = {
     viewStatement: "查看对账单",
     exportPdf: "导出PDF摘要",
     exportCsv: "导出CSV",
+    filteredByParty: "仅显示与「{{name}}」相关的合同",
+    clearFilter: "清除筛选",
   },
   reminders: {
     title: "提醒",
