@@ -15,7 +15,7 @@ import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
 import { hashPassword } from "../lib/password.js";
-import { ROLES } from "@lcm/shared";
+import { ROLES, LOCALES } from "@lcm/shared";
 
 export const usersRouter = Router();
 usersRouter.use(requireAuth, requireRole("admin"));
@@ -51,6 +51,7 @@ const createUserSchema = z.object({
   role: z.enum(ROLES as [string, ...string[]]),
   canDownloadPdf: z.boolean().optional(),
   canPrint: z.boolean().optional(),
+  preferredLocale: z.enum(LOCALES as [string, ...string[]]).optional(),
   propertyIds: z.array(z.number()).optional(),
 });
 
@@ -70,6 +71,7 @@ usersRouter.post("/", (req, res) => {
     .values({
       ...rest,
       role: rest.role as (typeof users.$inferInsert)["role"],
+      preferredLocale: rest.preferredLocale as (typeof users.$inferInsert)["preferredLocale"] | undefined,
       passwordHash: hashPassword(password),
       canDownloadPdf: rest.canDownloadPdf ?? false,
       canPrint: rest.canPrint ?? false,
@@ -92,6 +94,7 @@ const updateUserSchema = z.object({
   active: z.boolean().optional(),
   canDownloadPdf: z.boolean().optional(),
   canPrint: z.boolean().optional(),
+  preferredLocale: z.enum(LOCALES as [string, ...string[]]).optional(),
   propertyIds: z.array(z.number()).optional(),
 });
 
@@ -127,7 +130,12 @@ usersRouter.patch("/:id", (req, res) => {
   const { propertyIds, ...fields } = parsed.data;
   const updated = db
     .update(users)
-    .set({ ...fields, role: fields.role as (typeof users.$inferInsert)["role"] | undefined, updatedAt: new Date().toISOString() })
+    .set({
+      ...fields,
+      role: fields.role as (typeof users.$inferInsert)["role"] | undefined,
+      preferredLocale: fields.preferredLocale as (typeof users.$inferInsert)["preferredLocale"] | undefined,
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(users.id, id))
     .returning()
     .get();

@@ -2,7 +2,9 @@ export type Role = "admin" | "manager" | "collector" | "viewer";
 
 export const ROLES: Role[] = ["admin", "manager", "collector", "viewer"];
 
-export type Locale = "en" | "zh";
+export type Locale = "en" | "zh" | "auto";
+
+export const LOCALES: Locale[] = ["en", "zh", "auto"];
 
 export type DocumentClassification = "ordinary" | "sensitive";
 

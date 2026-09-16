@@ -100,6 +100,10 @@ const en = {
     viewer: "Viewer",
     canDownloadPdf: "Can download PDFs",
     canPrint: "Can print / export",
+    preferredLanguage: "Preferred language",
+    localeEn: "English",
+    localeZh: "中文",
+    localeAuto: "Auto (browser default)",
     assignedProperties: "Assigned properties",
     email: "Email",
     password: "Password",
@@ -520,6 +524,8 @@ const en = {
         "Restricts this user to only see contracts, units, and documents tied to these specific properties. Admins always see everything and this field is ignored for them.",
       userPermissions:
         "These two toggles are independent of role: they control whether this user can download PDF contract summaries and export/print data, regardless of what their role otherwise allows.",
+      preferredLanguage:
+        "The UI language this user sees automatically at login. \"Auto\" leaves it to their browser's own language instead of forcing one — each user can also change their own language anytime from the globe icon in the header, which updates this setting for them.",
     },
   },
 };

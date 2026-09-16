@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "../db/client.js";
 import { users, userProperties } from "../db/schema.js";
 import { eq } from "drizzle-orm";
-import type { Role } from "@lcm/shared";
+import type { Role, Locale } from "@lcm/shared";
 
 export interface AuthedUser {
   id: number;
@@ -12,7 +12,7 @@ export interface AuthedUser {
   active: boolean;
   canDownloadPdf: boolean;
   canPrint: boolean;
-  preferredLocale: "en" | "zh";
+  preferredLocale: Locale;
   propertyIds: number[];
 }
 

@@ -102,6 +102,10 @@ const zh: Translations = {
     viewer: "查看者",
     canDownloadPdf: "可下载PDF",
     canPrint: "可打印/导出",
+    preferredLanguage: "首选语言",
+    localeEn: "English",
+    localeZh: "中文",
+    localeAuto: "自动（跟随浏览器）",
     assignedProperties: "分配的物业",
     email: "邮箱",
     password: "密码",
@@ -521,6 +525,8 @@ const zh: Translations = {
         "将该用户限制为只能看到与所选物业相关的合同、单元和文件。管理员始终可查看全部内容，此设置对管理员不生效。",
       userPermissions:
         "这两个开关独立于角色设置：用于控制该用户是否可以下载PDF合同摘要、导出/打印数据，不受其角色本身权限的影响。",
+      preferredLanguage:
+        "该用户登录后自动显示的界面语言。选择「自动」则不强制指定语言，而是跟随其浏览器的语言设置——用户也可以随时通过页面顶部的地球图标自行切换语言，切换后会自动更新此设置。",
     },
   },
 };

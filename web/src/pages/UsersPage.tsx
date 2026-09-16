@@ -3,7 +3,7 @@ import { Button, Form, Input, Modal, Select, Space, Switch, Table, Tag, Tooltip,
 import { EditOutlined, KeyOutlined, PlusOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import type { PropertyDto, PublicUser, Role } from "@lcm/shared";
-import { ROLES } from "@lcm/shared";
+import { ROLES, LOCALES } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { HelpIcon } from "../help/HelpIcon";
@@ -107,6 +107,7 @@ export default function UsersPage() {
       propertyIds: u.propertyIds,
       canDownloadPdf: u.canDownloadPdf,
       canPrint: u.canPrint,
+      preferredLocale: u.preferredLocale,
     });
   };
 
@@ -196,6 +197,17 @@ export default function UsersPage() {
             <Select options={ROLES.map((r) => ({ value: r, label: t(`users.${r}`) }))} />
           </Form.Item>
           <Form.Item
+            name="preferredLocale"
+            label={
+              <>
+                {t("users.preferredLanguage")} <HelpIcon field="preferredLanguage" />
+              </>
+            }
+            initialValue="auto"
+          >
+            <Select options={LOCALES.map((l) => ({ value: l, label: t(`users.locale${l[0].toUpperCase()}${l.slice(1)}`) }))} />
+          </Form.Item>
+          <Form.Item
             name="propertyIds"
             label={
               <>
@@ -252,6 +264,16 @@ export default function UsersPage() {
               disabled={editingUser?.id === currentUser?.id}
               options={ROLES.map((r) => ({ value: r, label: t(`users.${r}`) }))}
             />
+          </Form.Item>
+          <Form.Item
+            name="preferredLocale"
+            label={
+              <>
+                {t("users.preferredLanguage")} <HelpIcon field="preferredLanguage" />
+              </>
+            }
+          >
+            <Select options={LOCALES.map((l) => ({ value: l, label: t(`users.locale${l[0].toUpperCase()}${l.slice(1)}`) }))} />
           </Form.Item>
           <Form.Item
             name="propertyIds"

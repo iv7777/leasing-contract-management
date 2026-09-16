@@ -16,7 +16,7 @@ export const users = sqliteTable("users", {
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   canDownloadPdf: integer("can_download_pdf", { mode: "boolean" }).notNull().default(false),
   canPrint: integer("can_print", { mode: "boolean" }).notNull().default(false),
-  preferredLocale: text("preferred_locale", { enum: ["en", "zh"] }).notNull().default("en"),
+  preferredLocale: text("preferred_locale", { enum: ["en", "zh", "auto"] }).notNull().default("en"),
   createdAt: text("created_at").notNull().default(nowIso),
   updatedAt: text("updated_at").notNull().default(nowIso),
 }, (t) => ({

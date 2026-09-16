@@ -18,6 +18,7 @@ import {
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import type { Locale } from "@lcm/shared";
 import { useAuth } from "../auth/AuthContext";
 import { HelpDrawer } from "../help/HelpDrawer";
 
@@ -26,7 +27,7 @@ const { useBreakpoint } = Grid;
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user, logout, setLocale } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const screens = useBreakpoint();
@@ -57,10 +58,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const languageMenu = {
     items: [
-      { key: "en", label: "English" },
-      { key: "zh", label: "中文" },
+      { key: "en", label: t("users.localeEn") },
+      { key: "zh", label: t("users.localeZh") },
+      { key: "auto", label: t("users.localeAuto") },
     ],
-    onClick: ({ key }: { key: string }) => void i18n.changeLanguage(key),
+    onClick: ({ key }: { key: string }) => void setLocale(key as Locale),
   };
 
   const nav = (
