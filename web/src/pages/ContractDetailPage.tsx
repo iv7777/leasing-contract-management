@@ -660,15 +660,17 @@ export default function ContractDetailPage() {
       const values = await amendmentForm.validateFields();
       let changes: Record<string, unknown> = {};
       if (amendmentKind === "rate_change" && values.newAmountOrRate) {
+        const currentRate = rates.find((r) => r.pricingStreamId === values.pricingStreamId && !r.effectiveEnd);
         changes = {
           addRateSchedule: [
             {
               pricingStreamId: values.pricingStreamId,
-              closePreviousRateScheduleId: rates.filter((r) => r.pricingStreamId === values.pricingStreamId && !r.effectiveEnd)[0]?.id,
+              closePreviousRateScheduleId: currentRate?.id,
               effectiveStart: values.effectiveDate,
-              calculationMethod: rates.find((r) => r.pricingStreamId === values.pricingStreamId)?.calculationMethod ?? "flat",
+              calculationMethod: currentRate?.calculationMethod ?? "flat",
               amountOrRate: String(values.newAmountOrRate),
-              rateBasis: rates.find((r) => r.pricingStreamId === values.pricingStreamId)?.rateBasis ?? "per_month",
+              rateBasis: currentRate?.rateBasis ?? "per_month",
+              unit: currentRate?.calculationMethod === "metered" ? values.amendRateUnit : undefined,
             },
           ],
         };
@@ -695,6 +697,7 @@ export default function ContractDetailPage() {
                 calculationMethod: values.amendStreamCalculationMethod,
                 amountOrRate: String(values.amendStreamAmountOrRate),
                 rateBasis: values.amendStreamRateBasis,
+                unit: values.amendStreamCalculationMethod === "metered" ? values.amendStreamUnit : undefined,
               },
             },
           ],
@@ -2270,6 +2273,23 @@ export default function ContractDetailPage() {
               <Form.Item name="newAmountOrRate" label={t("contracts.newAmountOrRate")}>
                 <InputNumber style={{ width: "100%" }} min={0} />
               </Form.Item>
+              <Form.Item noStyle shouldUpdate={(prev, cur) => prev.pricingStreamId !== cur.pricingStreamId}>
+                {({ getFieldValue }) => {
+                  const currentRate = rates.find((r) => r.pricingStreamId === getFieldValue("pricingStreamId") && !r.effectiveEnd);
+                  return (
+                    currentRate?.calculationMethod === "metered" && (
+                      <Form.Item
+                        name="amendRateUnit"
+                        label={t("contracts.meteredUnit")}
+                        rules={[{ required: true }]}
+                        initialValue={currentRate.unit ?? undefined}
+                      >
+                        <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
+                      </Form.Item>
+                    )
+                  );
+                }}
+              </Form.Item>
             </>
           )}
 
@@ -2312,6 +2332,7 @@ export default function ContractDetailPage() {
                     { value: "flat", label: t("contracts.flat") },
                     { value: "per_sqm", label: t("contracts.perSqm") },
                     { value: "percentage_escalation", label: t("contracts.percentageEscalation") },
+                    { value: "metered", label: t("contracts.metered") },
                   ]}
                 />
               </Form.Item>
@@ -2320,6 +2341,15 @@ export default function ContractDetailPage() {
               </Form.Item>
               <Form.Item name="amendStreamAmountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]}>
                 <InputNumber style={{ width: "100%" }} min={0} />
+              </Form.Item>
+              <Form.Item noStyle shouldUpdate={(prev, cur) => prev.amendStreamCalculationMethod !== cur.amendStreamCalculationMethod}>
+                {({ getFieldValue }) =>
+                  getFieldValue("amendStreamCalculationMethod") === "metered" && (
+                    <Form.Item name="amendStreamUnit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
+                      <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
+                    </Form.Item>
+                  )
+                }
               </Form.Item>
               <Typography.Text type="secondary">{t("contracts.amendAddStreamHint")}</Typography.Text>
             </>
