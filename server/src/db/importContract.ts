@@ -59,12 +59,13 @@ const partySchema = z.object({
 const rateSchema = z.object({
   effectiveStart: z.string(),
   effectiveEnd: z.string().optional(),
-  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation"]),
+  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
   amountOrRate: decimalString,
-  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month"]),
+  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
   escalationBase: z.enum(["initial", "previous"]).optional(),
   escalationPercentage: decimalString.optional(),
   escalationIntervalMonths: z.number().optional(),
+  unit: z.string().optional(),
   notes: z.string().optional(),
 });
 const pricingStreamSchema = z.object({
