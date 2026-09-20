@@ -713,7 +713,7 @@ run_menu() {
   7) Show service status
   8) Exit
 MENU
-    read -rp "Choose an option [1-8]: " choice
+    read -rp "Choose an option [1-8, or Enter to exit]: " choice
     case "$choice" in
       1) action_change_domain || warn "Domain change did not complete." ;;
       2) action_check_update || warn "Update check did not complete." ;;
@@ -722,7 +722,7 @@ MENU
       5) action_reset_admin_password || warn "Password reset did not complete." ;;
       6) action_restore_backup || warn "Restore did not complete." ;;
       7) action_show_status || true ;;
-      8) echo "Bye."; exit 0 ;;
+      8|"") echo "Bye."; exit 0 ;;
       *) echo "Invalid option." ;;
     esac
   done
