@@ -22,6 +22,7 @@
 #     --change-domain             point the app at a new domain + new TLS cert
 #     --change-admin-email        rename the admin's login email
 #     --reset-admin-password      set a new password for a user
+#     --restore-backup            pick a backup and restore the database from it
 #     --status                    service/health/TLS summary
 #     --menu                      force the menu even without a TTY
 #     -y / --yes                  don't ask for confirmation
@@ -59,6 +60,7 @@ for arg in "$@"; do
     --change-domain) ACTION="change-domain" ;;
     --change-admin-email) ACTION="change-admin-email" ;;
     --reset-admin-password) ACTION="reset-admin-password" ;;
+    --restore-backup) ACTION="restore-backup" ;;
     --status) ACTION="status" ;;
     --menu) ACTION="menu" ;;
     *) echo "Unknown argument: $arg" >&2; exit 1 ;;
@@ -139,6 +141,15 @@ ensure_export_fonts() {
   if ! dpkg -s fonts-wqy-zenhei >/dev/null 2>&1; then
     log "Installing CJK font for PDF/CSV exports"
     apt-get install -y fonts-wqy-zenhei
+  fi
+}
+
+# Used only to validate backup snapshots before offering them for restore —
+# installed lazily the first time that's needed rather than on every deploy.
+ensure_sqlite3_cli() {
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    log "Installing sqlite3 CLI (used to validate backup snapshots)"
+    apt-get install -y sqlite3 || warn "Could not install sqlite3 — skipping the deeper integrity check for backups."
   fi
 }
 
@@ -553,6 +564,114 @@ action_reset_admin_password() {
 }
 
 # ---------------------------------------------------------------------------
+# Action: restore the database from a backup
+# ---------------------------------------------------------------------------
+
+# Prints one reason and fails if $1 doesn't look like a restorable snapshot;
+# prints nothing and succeeds otherwise. Kept independent of the app's own
+# TypeScript so a bad backup is caught here, before restore-backup.ts (and
+# the systemd stop it performs) ever runs.
+validate_backup_dir() {
+  local dir="$1" snapshot="$1/app.db"
+  if [ ! -f "$snapshot" ]; then
+    echo "no app.db in this folder"
+    return 1
+  fi
+  if [ ! -s "$snapshot" ]; then
+    echo "app.db is empty"
+    return 1
+  fi
+  if ! LC_ALL=C head -c 16 "$snapshot" | grep -qa "SQLite format 3"; then
+    echo "app.db does not look like a SQLite database"
+    return 1
+  fi
+  if command -v sqlite3 >/dev/null 2>&1; then
+    local check
+    check="$(sqlite3 "$snapshot" "PRAGMA integrity_check;" 2>&1 || true)"
+    if [ "$check" != "ok" ]; then
+      echo "integrity check failed: $check"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+action_restore_backup() {
+  require_installed || return 1
+  ensure_sqlite3_cli
+
+  if [ ! -d "$BACKUP_DIR_PATH" ]; then
+    err "Backup directory $BACKUP_DIR_PATH does not exist."
+    return 1
+  fi
+
+  log "Scanning $BACKUP_DIR_PATH for backups"
+  local dirs=()
+  while IFS= read -r -d '' d; do
+    dirs+=("$d")
+  done < <(find "$BACKUP_DIR_PATH" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+
+  if [ "${#dirs[@]}" -eq 0 ]; then
+    err "No backup folders found under $BACKUP_DIR_PATH."
+    return 1
+  fi
+
+  # Oldest to newest — directory names are ISO timestamps with ':' and '.'
+  # turned into '-', so plain lexicographic sort is already chronological.
+  local valid_dirs=() labels=() d name kind size docs_count problem
+  for d in "${dirs[@]}"; do
+    name="$(basename "$d")"
+    if problem="$(validate_backup_dir "$d")"; then
+      size="$(du -h "$d/app.db" 2>/dev/null | cut -f1)"
+      docs_count="—"
+      if [ -f "$d/documents.manifest.json" ]; then
+        docs_count="$(grep -o '"id"' "$d/documents.manifest.json" | wc -l)"
+      fi
+      kind="backup"
+      case "$name" in pre-restore-*) kind="safety copy taken before an earlier restore" ;; esac
+      valid_dirs+=("$d")
+      labels+=("$name — $kind (${size:-?}, ${docs_count} documents referenced)")
+    else
+      warn "Skipping $name — $problem"
+    fi
+  done
+
+  if [ "${#valid_dirs[@]}" -eq 0 ]; then
+    err "No valid backup snapshots found under $BACKUP_DIR_PATH."
+    return 1
+  fi
+
+  echo
+  echo "Valid backups (oldest to newest):"
+  local i
+  for i in "${!valid_dirs[@]}"; do
+    printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}"
+  done
+
+  local choice selected_dir
+  read -rp "Choose a backup to restore [1-${#valid_dirs[@]}], or blank to cancel: " choice
+  if [ -z "$choice" ]; then
+    echo "Cancelled."
+    return 0
+  fi
+  if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt "${#valid_dirs[@]}" ]; then
+    err "Invalid choice."
+    return 1
+  fi
+  selected_dir="${valid_dirs[$((choice - 1))]}"
+
+  warn "This will REPLACE the live database with the snapshot in $(basename "$selected_dir")."
+  warn "$SERVICE_NAME will be stopped for the restore and started again automatically afterward."
+  warn "A safety copy of the CURRENT database is taken first, restorable the same way if needed."
+  confirm "Proceed with restoring from $(basename "$selected_dir")?" || { echo "Aborted."; return 1; }
+
+  # restore-backup.ts does its own "type RESTORE" confirmation; the operator
+  # already confirmed above with the actual backup named, so answer it here
+  # instead of asking the same thing twice in two different UIs.
+  ( cd "$APP_CODE_DIR/server" && echo "RESTORE" | SERVICE_NAME="$SERVICE_NAME" npm run restore-backup -- "$selected_dir" )
+}
+
+# ---------------------------------------------------------------------------
 # Action: status summary
 # ---------------------------------------------------------------------------
 action_show_status() {
@@ -590,18 +709,20 @@ run_menu() {
   3) Reinstall everything with current settings
   4) Change the admin login email
   5) Reset a user's password
-  6) Show service status
-  7) Exit
+  6) Restore the database from a backup
+  7) Show service status
+  8) Exit
 MENU
-    read -rp "Choose an option [1-7]: " choice
+    read -rp "Choose an option [1-8]: " choice
     case "$choice" in
       1) action_change_domain || warn "Domain change did not complete." ;;
       2) action_check_update || warn "Update check did not complete." ;;
       3) action_full_install || warn "Reinstall did not complete." ;;
       4) action_change_admin_email || warn "Email change did not complete." ;;
       5) action_reset_admin_password || warn "Password reset did not complete." ;;
-      6) action_show_status || true ;;
-      7) echo "Bye."; exit 0 ;;
+      6) action_restore_backup || warn "Restore did not complete." ;;
+      7) action_show_status || true ;;
+      8) echo "Bye."; exit 0 ;;
       *) echo "Invalid option." ;;
     esac
   done
@@ -632,6 +753,7 @@ case "$ACTION" in
   change-domain) action_change_domain ;;
   change-admin-email) action_change_admin_email ;;
   reset-admin-password) action_reset_admin_password ;;
+  restore-backup) action_restore_backup ;;
   status) action_show_status ;;
   menu) run_menu ;;
 esac
