@@ -20,7 +20,7 @@ import { exportsRouter } from "./routes/exports.js";
 import { systemInfoRouter } from "./routes/systemInfo.js";
 import { auditRouter } from "./routes/audit.js";
 import { backupsRouter } from "./routes/backups.js";
-import { runBackup } from "./jobs/backup.js";
+import { runBackup, countSucceededRuns, isWeeklyBackupDue, DAILY_RETENTION_LIMIT } from "./jobs/backup.js";
 
 const app = express();
 const PORT = Number(process.env.PORT ?? 4000);
@@ -74,8 +74,23 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 if (process.env.ENABLE_BACKUP_SCHEDULE === "true") {
   // Daily backup at 02:15 China time, independent of the host's local TZ.
+  // Retained up to DAILY_RETENTION_LIMIT copies — older ones are pruned
+  // automatically after each successful run (see jobs/backup.ts).
   cron.schedule("15 2 * * *", () => {
-    runBackup().catch((err) => console.error("Scheduled backup failed:", err));
+    runBackup("daily").catch((err) => console.error("Scheduled daily backup failed:", err));
+  }, { timezone: "Asia/Shanghai" });
+
+  // Weekly backup at Sunday 00:00 China time — but only once the daily
+  // rotation is full (isWeeklyBackupDue), since before that a weekly copy
+  // wouldn't preserve anything a daily one doesn't already cover for at
+  // least as long. Also retained/pruned independently, up to 30 copies.
+  cron.schedule("0 0 * * 0", () => {
+    const dailyCount = countSucceededRuns("daily");
+    if (!isWeeklyBackupDue(dailyCount)) {
+      console.log(`Skipping weekly backup — only ${dailyCount}/${DAILY_RETENTION_LIMIT} daily backups so far.`);
+      return;
+    }
+    runBackup("weekly").catch((err) => console.error("Scheduled weekly backup failed:", err));
   }, { timezone: "Asia/Shanghai" });
 }
 

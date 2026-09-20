@@ -6,6 +6,7 @@ import { api, ApiError } from "../api/client";
 
 interface BackupRunDto {
   id: number;
+  kind: "daily" | "weekly";
   startedAt: string;
   completedAt: string | null;
   status: "running" | "succeeded" | "failed";
@@ -13,6 +14,11 @@ interface BackupRunDto {
   includedDocumentCount: number | null;
   error: string | null;
 }
+
+const kindColor: Record<BackupRunDto["kind"], string> = {
+  daily: "default",
+  weekly: "purple",
+};
 
 const statusColor: Record<BackupRunDto["status"], string> = {
   running: "blue",
@@ -65,6 +71,10 @@ export default function BackupsPage() {
         </Button>
       </Space>
 
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+        {t("backups.retentionNote")}
+      </Typography.Paragraph>
+
       <Table
         rowKey="id"
         loading={loading}
@@ -72,6 +82,11 @@ export default function BackupsPage() {
         style={{ marginBottom: 24 }}
         columns={[
           { title: t("backups.id"), dataIndex: "id", width: 70 },
+          {
+            title: t("backups.kind"),
+            dataIndex: "kind",
+            render: (k: BackupRunDto["kind"]) => <Tag color={kindColor[k]}>{t(`backups.kinds.${k}`)}</Tag>,
+          },
           { title: t("backups.startedAt"), dataIndex: "startedAt" },
           { title: t("backups.completedAt"), dataIndex: "completedAt", render: (v: string | null) => v ?? "—" },
           {

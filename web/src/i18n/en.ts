@@ -309,6 +309,11 @@ const en = {
     runStarted: "Backup started — this can take a moment for a large database.",
     runSucceeded: "Backup completed successfully.",
     id: "ID",
+    kind: "Kind",
+    kinds: {
+      daily: "Daily",
+      weekly: "Weekly",
+    },
     startedAt: "Started",
     completedAt: "Completed",
     status: "Status",
@@ -319,12 +324,14 @@ const en = {
     error: "Error",
     download: "Download",
     noSnapshot: "No snapshot available",
+    retentionNote:
+      "Up to 30 daily backups are kept, oldest pruned automatically after each successful run. A weekly backup also starts once those 30 daily slots are full, taken only at Sunday midnight (Asia/Shanghai) and kept up to 30 of its own, pruned the same way.",
     restoreTitle: "Restoring from a backup",
     restoreBody:
-      "Restoring the database is a server-side operation, not a one-click web action — swapping the live database out from under a running server is risky to do any other way. On the server, run:",
+      "Restoring the database is a server-side operation, not a one-click web action — swapping the live database out from under a running server is risky to do any other way. On a server set up with vps-deploy.sh, use its control panel's \"Restore the database from a backup\" option (or --restore-backup) — it scans and validates the backups for you and picks the one you choose. Otherwise, run this directly on the server:",
     restoreCommand: "npm run restore-backup -- <backup ID>",
     restoreNote:
-      "The script stops to confirm before changing anything, saves a safety copy of the current database first, and prints the commands to stop/start the service around it. Document files are not affected by a database restore — recover those separately from documents.manifest.json in the backup folder if needed.",
+      "Either way, the service is stopped and restarted automatically around the restore, and a safety copy of the current database is saved first. Document files are not affected by a database restore — recover those separately from documents.manifest.json in the backup folder if needed.",
   },
   help: {
     drawerTitle: "Help",
@@ -496,8 +503,8 @@ const en = {
     },
     backups: {
       title: "Backups",
-      body: "Snapshots of the entire database plus a manifest of the document files referenced at that point in time. Run one manually before a risky change, or rely on the scheduled ones.",
-      tips: "Restoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
+      body: "Snapshots of the entire database plus a manifest of the document files referenced at that point in time. Run one manually before a risky change, or rely on the scheduled daily and weekly ones.",
+      tips: "Up to 30 daily and (once those are full) 30 weekly backups are kept automatically; older ones are pruned on their own.\nRestoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
     },
     field: {
       rateBasis:
