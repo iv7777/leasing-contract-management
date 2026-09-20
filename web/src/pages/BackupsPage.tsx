@@ -8,6 +8,7 @@ const { useBreakpoint } = Grid;
 
 interface BackupRunDto {
   id: number;
+  kind: "daily" | "weekly";
   startedAt: string;
   completedAt: string | null;
   status: "running" | "succeeded" | "failed";
@@ -15,6 +16,11 @@ interface BackupRunDto {
   includedDocumentCount: number | null;
   error: string | null;
 }
+
+const kindColor: Record<BackupRunDto["kind"], string> = {
+  daily: "default",
+  weekly: "purple",
+};
 
 const statusColor: Record<BackupRunDto["status"], string> = {
   running: "blue",
@@ -84,6 +90,10 @@ export default function BackupsPage() {
         </Button>
       </Space>
 
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+        {t("backups.retentionNote")}
+      </Typography.Paragraph>
+
       {isMobile ? (
         <List
           loading={loading}
@@ -93,7 +103,8 @@ export default function BackupsPage() {
             <Card style={{ marginBottom: 12 }}>
               <Space style={{ width: "100%", justifyContent: "space-between" }} align="start">
                 <div>
-                  <Typography.Text strong>#{r.id}</Typography.Text> <Tag color={statusColor[r.status]}>{t(`backups.${r.status}`)}</Tag>
+                  <Typography.Text strong>#{r.id}</Typography.Text> <Tag color={kindColor[r.kind]}>{t(`backups.kinds.${r.kind}`)}</Tag>{" "}
+                  <Tag color={statusColor[r.status]}>{t(`backups.${r.status}`)}</Tag>
                   <br />
                   <Typography.Text type="secondary">
                     {t("backups.startedAt")}: {formatDateTime(r.startedAt)}
@@ -127,6 +138,12 @@ export default function BackupsPage() {
           style={{ marginBottom: 24 }}
           columns={[
             { title: t("backups.id"), dataIndex: "id", width: 60 },
+            {
+              title: t("backups.kind"),
+              dataIndex: "kind",
+              width: 90,
+              render: (k: BackupRunDto["kind"]) => <Tag color={kindColor[k]}>{t(`backups.kinds.${k}`)}</Tag>,
+            },
             { title: t("backups.startedAt"), dataIndex: "startedAt", width: 150, render: (v: string) => formatDateTime(v) },
             { title: t("backups.completedAt"), dataIndex: "completedAt", width: 150, render: (v: string | null) => formatDateTime(v) },
             {

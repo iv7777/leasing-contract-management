@@ -727,7 +727,7 @@ systemctl list-timers | grep certbot</code></pre>
 
     <section id="s12">
       <div class="step-head"><span class="step-num">12</span><h2>Backups</h2></div>
-      <p>With <code class="inline">ENABLE_BACKUP_SCHEDULE=true</code> (set in <a href="#s6">§6</a>), the running server itself writes a nightly snapshot — a consistent SQLite copy plus a manifest of every referenced document — to <code class="inline">BACKUP_DIR</code> at 02:15 Asia/Shanghai time, regardless of the VPS's own system clock. Verify it once by hand:</p>
+      <p>With <code class="inline">ENABLE_BACKUP_SCHEDULE=true</code> (set in <a href="#s6">§6</a>), the running server itself writes a nightly snapshot — a consistent SQLite copy plus a manifest of every referenced document — to <code class="inline">BACKUP_DIR</code> at 02:15 Asia/Shanghai time, regardless of the VPS's own system clock. It also takes a weekly snapshot at Sunday 00:00 Asia/Shanghai, but only once 30 daily backups have accumulated — before that, a weekly copy wouldn't outlast the daily ones anyway. Verify the daily job once by hand:</p>
       <div class="term svc-only">
         <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
         <pre><code>cd /opt/lcm/app/server
@@ -748,19 +748,41 @@ ls /opt/lcm/backups</code></pre>
 rclone config   # create a remote for your chosen storage, then a
                 # second 'crypt' remote wrapping it for encryption</code></pre>
       </div>
-      <p>Then sync nightly, shortly after the app's own 02:15 job finishes:</p>
+      <p>Then sync nightly, shortly after the app's own 02:15 job finishes. Use <code class="inline">copy</code>, not <code class="inline">sync</code> — the app now prunes its own local backups automatically (see the callout below), and <code class="inline">rclone sync</code> mirrors deletions to the destination too, which would delete your off-site copies right along with the local ones it's meant to survive:</p>
       <div class="term">
         <div class="term-bar"><span class="term-tag file"><span class="dot"></span>crontab -e (as root or a backup user)</span><button class="copy-btn" data-copy>Copy</button></div>
-        <pre><code>0 3 * * * rclone sync /opt/lcm/backups myremote-crypt:lcm-backups --min-age 30m</code></pre>
+        <pre><code>0 3 * * * rclone copy /opt/lcm/backups myremote-crypt:lcm-backups --min-age 30m</code></pre>
       </div>
       <div class="callout note">
         <span class="icon">🗓️</span>
-        <div><strong>Retention isn't automatic yet</strong>
-        <p>The app doesn't prune old backup folders on its own. The brief's suggested policy is 30 daily copies plus 12 month-end copies — a simple starting cron for the daily part:</p>
-        <pre style="margin-top:10px"><code>0 4 * * * find /opt/lcm/backups -maxdepth 1 -mtime +30 -exec rm -rf {} \;</code></pre>
-        <p style="margin-top:8px">Exclude month-end folders from that if you want to keep the 12-month-end tier — a manual step for now.</p>
+        <div><strong>Retention is automatic</strong>
+        <p>Daily and weekly backups are each kept up to 30 copies and pruned independently — right after each successful run, the app deletes its own oldest snapshot(s) beyond the limit (both the folder and its <code class="inline">backup_runs</code> row). A failed run never triggers pruning, so a bad backup can't shrink your history of good ones.</p>
+        <p style="margin-top:8px">This local pruning does <strong>not</strong> reach the off-site copy — with <code class="inline">rclone copy</code> above, the destination just keeps accumulating, which is what you want for a disaster-recovery archive. Prune the destination yourself on whatever schedule fits your retention needs (or leave it: object storage is cheap relative to losing history).</p>
+        <p style="margin-top:8px">One thing this policy does <em>not</em> cover: the safety-copy folders (<code class="inline">pre-restore-*</code>) that a restore saves before touching the live database. Those aren't part of the daily/weekly rotation and accumulate until removed by hand — check <code class="inline">/opt/lcm/backups</code> occasionally if you restore often.</p>
         </div>
       </div>
+
+      <h3>Restoring from a backup</h3>
+      <p>Swapping the live database out from under a running server is inherently risky, so this is deliberately not a one-click web action. If you deployed with <code class="inline">vps-deploy.sh</code>, its control panel does the whole thing for you — scans <code class="inline">/opt/lcm/backups</code>, validates each snapshot (SQLite header check, plus a <code class="inline">PRAGMA integrity_check</code> when the <code class="inline">sqlite3</code> CLI is available), lists the valid ones oldest to newest, and stops/restarts the <code class="inline">lcm</code> service around whichever one you pick:</p>
+      <div class="term">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>sudo bash vps-deploy.sh   # then choose "Restore the database from a backup"
+# or, non-interactively:
+sudo bash vps-deploy.sh --restore-backup</code></pre>
+      </div>
+      <p>Either way, a safety copy of the current database is saved first (also under <code class="inline">/opt/lcm/backups</code>, as <code class="inline">pre-restore-*</code>), and document files under <code class="inline">/opt/lcm/documents</code> are never touched by a restore — recover those separately from that backup's <code class="inline">documents.manifest.json</code> if needed.</p>
+      <p>To restore a specific backup directly, without the menu:</p>
+      <div class="term svc-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app/server
+sudo -u lcm npm run restore-backup -- &lt;backup ID or /opt/lcm/backups/&lt;timestamp&gt;&gt;</code></pre>
+      </div>
+      <div class="term root-only">
+        <div class="term-bar"><span class="term-tag"><span class="dot"></span>deploy · sudo</span><button class="copy-btn" data-copy>Copy</button></div>
+        <pre><code>cd /opt/lcm/app/server
+sudo npm run restore-backup -- &lt;backup ID or /opt/lcm/backups/&lt;timestamp&gt;&gt;</code></pre>
+      </div>
+      <p>This stops to ask for a typed confirmation, then stops and restarts the <code class="inline">lcm</code> service automatically around the restore — the same as the menu option, just without the scan/validate/pick step.</p>
     </section>
 
     <section id="s13">
@@ -775,6 +797,7 @@ rclone config   # create a remote for your chosen storage, then a
         <li><label><input type="checkbox" id="v7"><span>Ran the manual backup once and confirmed files appear under <code class="inline">/opt/lcm/backups</code></span></label></li>
         <li><label><input type="checkbox" id="v8"><span>Confirmed the off-site sync ran (checked the rclone log or the remote destination)</span></label></li>
         <li><label><input type="checkbox" id="v9"><span><code class="inline">sudo certbot renew --dry-run</code> succeeded</span></label></li>
+        <li><label><input type="checkbox" id="v10"><span>Performed a full restore drill (<a href="#s12">§12</a>) on a test copy and confirmed contracts, attachments, and ledger totals came back correctly — required by the brief before real tenant data goes in</span></label></li>
       </ul>
     </section>
 
@@ -898,6 +921,7 @@ curl http://127.0.0.1:4000/api/health</code></pre>
             <tr><td>Follow logs</td><td><code class="inline">sudo journalctl -u lcm.service -f</code></td></tr>
             <tr class="svc-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo -u lcm npm run backup</code></td></tr>
             <tr class="root-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo npm run backup</code></td></tr>
+            <tr><td>Restore from a backup</td><td><code class="inline">sudo bash vps-deploy.sh --restore-backup</code></td></tr>
             <tr class="svc-only"><td>Reset a password</td><td><code class="inline">sudo -u lcm npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr class="root-only"><td>Reset a password</td><td><code class="inline">sudo npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr class="svc-only"><td>Rename a login email</td><td><code class="inline">sudo -u lcm npm run set-email -- &lt;old-email&gt; &lt;new-email&gt;</code></td></tr>

@@ -414,6 +414,10 @@ export const contractVersions = sqliteTable("contract_versions", {
 
 export const backupRuns = sqliteTable("backup_runs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // "daily" runs nightly; "weekly" only once the daily rotation is full (see
+  // jobs/backup.ts) and only on Sundays. Each kind is retained and pruned
+  // independently.
+  kind: text("kind", { enum: ["daily", "weekly"] }).notNull().default("daily"),
   startedAt: text("started_at").notNull(),
   completedAt: text("completed_at"),
   status: text("status", { enum: ["running", "succeeded", "failed"] }).notNull(),

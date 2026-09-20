@@ -36,10 +36,23 @@ npm run dev:web                       # http://localhost:5173 (proxies /api to t
 ## Backups
 
 ```bash
-npm run backup --workspace=server
+npm run backup --workspace=server              # daily (default)
+npm run backup --workspace=server -- weekly    # weekly
 ```
 
-Writes a consistent SQLite snapshot plus a manifest of every referenced document under `server/storage/backups/<timestamp>/`. Set `ENABLE_BACKUP_SCHEDULE=true` in `server/.env` to also run this daily at 02:15 Asia/Shanghai time via the running server process. An off-site copy outside China and a documented restore drill are required before production use per the project brief — neither is automated yet.
+Writes a consistent SQLite snapshot plus a manifest of every referenced document under `server/storage/backups/<timestamp>/`. Set `ENABLE_BACKUP_SCHEDULE=true` in `server/.env` to also run this automatically via the running server process: daily at 02:15 Asia/Shanghai time, and weekly at Sunday 00:00 Asia/Shanghai — but the weekly job only actually takes a backup once the daily rotation is full (`isWeeklyBackupDue` in `server/src/jobs/backupRetention.ts`); before that a weekly copy wouldn't preserve anything a same-age daily copy doesn't already cover for at least as long.
+
+**Retention is automatic**: each kind keeps its most recent 30 successful runs and prunes older ones (both the on-disk snapshot directory and the `backup_runs` row) right after a successful backup of that kind — daily and weekly are counted and pruned independently, so one never crowds out the other. Pruning only runs after a confirmed success, so a failed backup never triggers cleanup of otherwise-good ones. Restore-time safety copies (`storage/backups/pre-restore-*`, made automatically by `restore-backup` below) are **not** covered by this retention policy and accumulate until removed by hand.
+
+Restoring: use `deploy/vps-deploy.sh`'s control-panel menu ("Restore the database from a backup", or `--restore-backup`) if you deployed with it — it scans `BACKUP_DIR`, validates each snapshot (SQLite header, and a `PRAGMA integrity_check` when `sqlite3` is available), and lets you pick one. Otherwise, on the server directly:
+
+```bash
+cd server && npm run restore-backup -- <backup ID | path-to-backup-dir>
+```
+
+Either way, the systemd service (if present) is stopped and restarted automatically around the restore, and a safety copy of the current database is saved first. Document files under `DOCUMENT_STORAGE_DIR` are never touched by a restore — recover those separately from `documents.manifest.json` in the backup folder if needed.
+
+An off-site copy outside China and a documented restore drill are required before production use per the project brief — neither is automated yet. If you set one up with `rclone`, prefer `rclone copy` over `rclone sync`: since local retention now prunes on its own, a `sync` would mirror those deletions off-site too, defeating the point of a separate off-site archive.
 
 ## Delivery phases
 

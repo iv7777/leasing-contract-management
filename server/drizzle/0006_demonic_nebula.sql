@@ -1,0 +1,1 @@
+ALTER TABLE `backup_runs` ADD `kind` text DEFAULT 'daily' NOT NULL;
