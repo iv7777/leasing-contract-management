@@ -23,9 +23,6 @@ export async function runBackup(): Promise<{ backupDir: string; documentCount: n
   const run = db.insert(backupRuns).values({ startedAt, status: "running" }).returning().get();
 
   try {
-    const snapshotPath = path.join(runDir, "app.db");
-    await sqlite.backup(snapshotPath);
-
     const allDocuments = db.select().from(documents).all();
     const manifest = allDocuments.map((d) => ({
       id: d.id,
@@ -42,16 +39,28 @@ export async function runBackup(): Promise<{ backupDir: string; documentCount: n
       if (!fs.existsSync(d.filePath)) missing++;
     }
 
+    // Finalize this run's own row BEFORE taking the snapshot below. sqlite's
+    // online backup API copies whatever is committed at the moment it's
+    // called; anything written to the live db afterward — including this
+    // row's own "succeeded" update — can never appear in a file that's
+    // already been written to disk. Finalizing first means a run's snapshot
+    // correctly shows itself as complete instead of forever "running" (the
+    // symptom if you ever restore straight onto a run's own snapshot).
+    const status = missing === 0 ? "succeeded" : "failed";
+    const error = missing > 0 ? `${missing} referenced document(s) missing from storage.` : null;
     db.update(backupRuns)
       .set({
         completedAt: new Date().toISOString(),
-        status: missing === 0 ? "succeeded" : "failed",
+        status,
         backupReference: runDir,
         includedDocumentCount: allDocuments.length,
-        error: missing > 0 ? `${missing} referenced document(s) missing from storage.` : null,
+        error,
       })
       .where(eq(backupRuns.id, run.id))
       .run();
+
+    const snapshotPath = path.join(runDir, "app.db");
+    await sqlite.backup(snapshotPath);
 
     if (missing > 0) {
       throw new Error(`Backup completed with ${missing} missing document(s); see backup_runs.`);
