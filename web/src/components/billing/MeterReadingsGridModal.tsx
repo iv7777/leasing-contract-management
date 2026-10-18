@@ -3,6 +3,7 @@ import { Alert, InputNumber, Modal, Table, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { addMonths, todayInChina } from "@lcm/shared";
 import { api, ApiError } from "../../api/client";
+import { apiErrorMessage } from "../../api/errorMessage";
 
 export interface MeteredStream {
   id: number;
@@ -94,7 +95,7 @@ export default function MeterReadingsGridModal({
       onDone();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("common.error"));
+      setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

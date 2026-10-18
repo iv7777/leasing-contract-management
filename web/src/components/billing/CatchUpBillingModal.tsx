@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Descriptions, Modal, Table, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../../api/client";
+import { apiErrorMessage } from "../../api/errorMessage";
 import { streamName, yuan } from "./format";
 
 interface PlannedCharge {
@@ -54,7 +55,7 @@ export default function CatchUpBillingModal({
     api
       .post<Preview>(`/contracts/${contractId}/billing/catch-up/preview`)
       .then(setPreview)
-      .catch((err) => setError(err instanceof ApiError ? err.message : t("common.error")))
+      .catch((err) => setError(apiErrorMessage(err, t)))
       .finally(() => setLoading(false));
   }, [open, contractId, t]);
 
@@ -80,7 +81,7 @@ export default function CatchUpBillingModal({
       onDone();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("common.error"));
+      setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

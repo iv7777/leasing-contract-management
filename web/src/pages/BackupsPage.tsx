@@ -3,6 +3,7 @@ import { Alert, Button, Card, Grid, List, Space, Table, Tag, Tooltip, Typography
 import { CloudDownloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 
 const { useBreakpoint } = Grid;
 
@@ -54,7 +55,7 @@ export default function BackupsPage() {
       message.success(t("backups.runSucceeded"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     } finally {
       setRunning(false);
     }

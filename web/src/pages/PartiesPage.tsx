@@ -5,6 +5,7 @@ import { PlusOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from "@ant-d
 import { useTranslation } from "react-i18next";
 import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 import { useAuth } from "../auth/AuthContext";
 
 const { useBreakpoint } = Grid;
@@ -97,7 +98,7 @@ export default function PartiesPage() {
       message.success(t("common.save"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -107,7 +108,7 @@ export default function PartiesPage() {
       message.success(p.archived ? t("common.unarchived") : t("common.archived"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -117,7 +118,7 @@ export default function PartiesPage() {
       message.success(t("common.deleted"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 

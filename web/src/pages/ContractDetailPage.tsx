@@ -23,12 +23,14 @@ import {
 } from "antd";
 import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import type { PartyDto } from "@lcm/shared";
+import { todayInChina, type PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 import { useAuth } from "../auth/AuthContext";
 import { useHelpTopic } from "../help/HelpContext";
 import { HelpIcon } from "../help/HelpIcon";
 import DateField from "../components/DateField";
+import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
@@ -201,7 +203,7 @@ export default function ContractDetailPage() {
   const [depositTxns, setDepositTxns] = useState<DepositTransactionDto[]>([]);
   const [depositBalanceFen, setDepositBalanceFen] = useState(0);
   const [statement, setStatement] = useState<StatementDto | null>(null);
-  const [statementPeriod, setStatementPeriod] = useState("");
+  const [statementPeriod, setStatementPeriod] = useState(todayInChina().slice(0, 7));
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number }[]>([]);
@@ -307,6 +309,15 @@ export default function ContractDetailPage() {
 
   useEffect(load, [id]);
 
+  // The statement follows the chosen month and refreshes after payments or new charges.
+  useEffect(() => {
+    if (!statementPeriod) return;
+    api
+      .get<{ statement: StatementDto }>(`/contracts/${id}/statement?period=${statementPeriod}`)
+      .then((r) => setStatement(r.statement))
+      .catch((err) => message.error(apiErrorMessage(err, t)));
+  }, [id, statementPeriod, receipts.length, charges.length]);
+
   if (!contract) return <Typography.Text>{t("common.loading")}</Typography.Text>;
 
   const isDraft = contract.status === "draft";
@@ -316,7 +327,7 @@ export default function ContractDetailPage() {
   const partyName = (pid: number) => parties.find((p) => p.id === pid)?.name ?? pid;
 
   const handleError = (err: unknown) => {
-    message.error(err instanceof ApiError ? err.message : t("common.error"));
+    message.error(apiErrorMessage(err, t));
   };
 
   const onAddUnit = async () => {
@@ -640,7 +651,7 @@ export default function ContractDetailPage() {
       message.success(t("common.deleted"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -808,15 +819,6 @@ export default function ContractDetailPage() {
       setDepositTxnModal(false);
       depositTxnForm.resetFields();
       load();
-    } catch (err) {
-      handleError(err);
-    }
-  };
-
-  const onViewStatement = async () => {
-    try {
-      const r = await api.get<{ statement: StatementDto }>(`/contracts/${id}/statement?period=${statementPeriod}`);
-      setStatement(r.statement);
     } catch (err) {
       handleError(err);
     }
@@ -1318,10 +1320,7 @@ export default function ContractDetailPage() {
             children: (
               <>
                 <Space style={{ marginBottom: 16 }}>
-                  <Input placeholder="2026-04" value={statementPeriod} onChange={(e) => setStatementPeriod(e.target.value)} style={{ width: 140 }} />
-                  <Button type="primary" onClick={onViewStatement}>
-                    {t("contracts.viewStatement")}
-                  </Button>
+                  <MonthField value={statementPeriod} onChange={(v) => v && setStatementPeriod(v)} style={{ width: 160 }} />
                 </Space>
                 {statement && (
                   <Descriptions bordered column={1} size="small">
@@ -2169,8 +2168,8 @@ export default function ContractDetailPage() {
 
       <Modal title={t("contracts.generateCharges")} open={generateModal} onCancel={() => setGenerateModal(false)} onOk={onGenerate} okText={t("contracts.generateCharges")} cancelText={t("common.cancel")}>
         <Form form={generateForm} layout="vertical">
-          <Form.Item name="period" label={t("contracts.period")} rules={[{ required: true, pattern: /^\d{4}-\d{2}$/ }]}>
-            <Input placeholder="2026-04" />
+          <Form.Item name="period" label={t("contracts.period")} rules={[{ required: true }]} initialValue={todayInChina().slice(0, 7)}>
+            <MonthField />
           </Form.Item>
         </Form>
       </Modal>

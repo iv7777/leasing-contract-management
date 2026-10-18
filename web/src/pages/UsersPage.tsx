@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { PropertyDto, PublicUser, Role } from "@lcm/shared";
 import { ROLES, LOCALES } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 import { useAuth } from "../auth/AuthContext";
 import { HelpIcon } from "../help/HelpIcon";
 
@@ -48,7 +49,7 @@ export default function UsersPage() {
       setEditingUser(null);
       load();
     } catch (err) {
-      if (err instanceof ApiError) message.error(err.message);
+      if (err instanceof ApiError) message.error(apiErrorMessage(err, t));
       else throw err;
     }
   };
@@ -62,7 +63,7 @@ export default function UsersPage() {
       setPasswordUser(null);
       passwordForm.resetFields();
     } catch (err) {
-      if (err instanceof ApiError) message.error(err.message);
+      if (err instanceof ApiError) message.error(apiErrorMessage(err, t));
       else throw err;
     }
   };
@@ -73,7 +74,7 @@ export default function UsersPage() {
       message.success(u.active ? "User deactivated" : "User activated");
       load();
     } catch (err) {
-      if (err instanceof ApiError) message.error(err.message);
+      if (err instanceof ApiError) message.error(apiErrorMessage(err, t));
       else throw err;
     }
   };
@@ -91,7 +92,7 @@ export default function UsersPage() {
           message.success(t("users.deleteUser"));
           load();
         } catch (err) {
-          if (err instanceof ApiError) message.error(err.message);
+          if (err instanceof ApiError) message.error(apiErrorMessage(err, t));
           else throw err;
         }
       },

@@ -3,6 +3,7 @@ import { Button, Space, Table, Tag, Typography, message } from "antd";
 import { ThunderboltOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 
 interface RunDto {
   id: number;
@@ -46,7 +47,7 @@ export default function BillingRunsPage() {
       message.success(t("billing.runs.runDone", { charges: r.chargesCreated, contracts: r.contractsProcessed }));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     } finally {
       setRunning(false);
     }

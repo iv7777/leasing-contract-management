@@ -3,6 +3,7 @@ import { Alert, Form, Input, InputNumber, Modal, Select, Table, Typography, mess
 import { useTranslation } from "react-i18next";
 import { todayInChina } from "@lcm/shared";
 import { api, ApiError } from "../../api/client";
+import { apiErrorMessage } from "../../api/errorMessage";
 import DateField from "../DateField";
 import { camel, PAYMENT_METHODS, yuan } from "./format";
 
@@ -88,7 +89,7 @@ export default function RecordPaymentModal({
       onDone();
       onClose();
     } catch (err) {
-      if (err instanceof ApiError) message.error(err.message);
+      if (err instanceof ApiError) message.error(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

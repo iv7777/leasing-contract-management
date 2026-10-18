@@ -4,6 +4,7 @@ import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { addMonths, todayInChina } from "@lcm/shared";
 import { api, ApiError } from "../../api/client";
+import { apiErrorMessage } from "../../api/errorMessage";
 import DateField from "../DateField";
 import { camel, PAYMENT_METHODS, yuan } from "./format";
 
@@ -72,7 +73,7 @@ export default function BulkPaymentsModal({
       onDone();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("common.error"));
+      setError(apiErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

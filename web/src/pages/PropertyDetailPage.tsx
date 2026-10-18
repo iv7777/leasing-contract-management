@@ -20,6 +20,7 @@ import { PlusOutlined, UploadOutlined, DownloadOutlined, DeleteOutlined, LockOut
 import { useTranslation } from "react-i18next";
 import type { PropertyDto, UnitDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 import { useAuth } from "../auth/AuthContext";
 import { useHelpTopic } from "../help/HelpContext";
 import { HelpIcon } from "../help/HelpIcon";
@@ -95,7 +96,7 @@ export default function PropertyDetailPage() {
       message.success(t("common.save"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -106,7 +107,7 @@ export default function PropertyDetailPage() {
       message.success(property.archived ? t("common.unarchived") : t("common.archived"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -119,7 +120,7 @@ export default function PropertyDetailPage() {
       message.success(t("common.save"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -128,7 +129,7 @@ export default function PropertyDetailPage() {
       await api.patch(`/properties/${id}/units/${u.id}`, { availability: u.availability === "unavailable" ? "vacant" : "unavailable" });
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -138,7 +139,7 @@ export default function PropertyDetailPage() {
       message.success(t("common.deleted"));
       navigate("/properties");
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -148,7 +149,7 @@ export default function PropertyDetailPage() {
       message.success(t("common.deleted"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -169,7 +170,7 @@ export default function PropertyDetailPage() {
       setPendingFile(null);
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     } finally {
       setUploadingDoc(false);
     }
@@ -195,7 +196,7 @@ export default function PropertyDetailPage() {
       message.success(t("common.save"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
@@ -205,7 +206,7 @@ export default function PropertyDetailPage() {
       message.success(t("common.deleted"));
       load();
     } catch (err) {
-      message.error(err instanceof ApiError ? err.message : t("common.error"));
+      message.error(apiErrorMessage(err, t));
     }
   };
 
