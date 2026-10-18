@@ -172,6 +172,54 @@ billingRouter.post("/billing/run", requireRole("admin"), (req, res) => {
 // "What's due" overview for whoever is logged in (scoped to their properties)
 // ---------------------------------------------------------------------------
 
+/** What a monthly contract has coming up: the dues from the plan that are
+ * still ahead, through the end of next month. A contract not yet on automatic
+ * billing still shows what is coming — but only dues still ahead of today: its
+ * unbilled history is what Catch up billing is for, and would swamp the
+ * forecast. Shared by the Dashboard and the contract's own tab. */
+function projectContract(ctx: ReturnType<typeof loadChargeContext>, today: string, lookAheadCutoff: string) {
+  const autoOn = ctx.rules.autoBilling;
+  const plan = planBilling(ctx, lookAheadCutoff, today);
+  return {
+    autoOn,
+    charges: plan.charges.filter((c) => autoOn || c.dueDate > today),
+    missingReadings: autoOn ? plan.missingReadings : [],
+  };
+}
+
+function lookAheadCutoffFor(today: string) {
+  // Bills for the rest of this month are normally already posted by the
+  // nightly job; look one month further so collectors can see what's next.
+  return monthEndOf(addMonths(monthStartOf(today), 1));
+}
+
+billingRouter.get("/contracts/:id/billing/upcoming", (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
+  let ctx;
+  try {
+    ctx = loadChargeContext(contractId);
+  } catch {
+    return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  }
+  const today = todayInChina();
+  const cutoff = lookAheadCutoffFor(today);
+  const base = { asOf: today, cutoff, status: ctx.contract.status, billingFrequency: ctx.rules.billingFrequency, autoBilling: ctx.rules.autoBilling };
+  if (ctx.contract.status !== "active" || ctx.rules.billingFrequency !== "monthly") {
+    return res.json({ ...base, items: [], totalFen: 0, missingReadings: [] });
+  }
+  const p = projectContract(ctx, today, cutoff);
+  const items = p.charges
+    .map((c) => ({ feeType: c.feeType, streamLabel: c.streamLabel, serviceStart: c.serviceStart, serviceEnd: c.serviceEnd, dueDate: c.dueDate, amountFen: c.amountFen }))
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.serviceStart.localeCompare(b.serviceStart));
+  res.json({
+    ...base,
+    items,
+    totalFen: items.reduce((sum, i) => sum + i.amountFen, 0),
+    missingReadings: p.missingReadings.map((m) => ({ feeType: m.feeType, streamLabel: m.streamLabel, month: m.periodStart.slice(0, 7), dueDate: m.dueDate })),
+  });
+});
+
 /** Lightweight "who is overdue" for the dots and tags on the list pages and
  * the contract page. Same visibility rules as the overview; pass contractId to
  * ask about one contract. */
@@ -184,9 +232,7 @@ billingRouter.get("/billing/overdue-summary", (req, res) => {
 
 billingRouter.get("/billing/overview", (req, res) => {
   const today = todayInChina();
-  // Bills for the rest of this month are normally already posted by the
-  // nightly job; look one month further so collectors can see what's next.
-  const lookAheadCutoff = monthEndOf(addMonths(monthStartOf(today), 1));
+  const lookAheadCutoff = lookAheadCutoffFor(today);
 
   const tenantNames = new Map(db.select({ id: parties.id, name: parties.name }).from(parties).all().map((p) => [p.id, p.name]));
   const visible = db
@@ -223,19 +269,11 @@ billingRouter.get("/billing/overview", (req, res) => {
       if (ctx.rules.billingFrequency !== "monthly") {
         notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "not_monthly" });
       } else {
-        const autoOn = ctx.rules.autoBilling;
-        if (!autoOn) notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
-        const plan = planBilling(ctx, lookAheadCutoff, today);
-        // A contract that isn't on automatic billing yet still shows what is
-        // coming — but only dues still ahead of today: its unbilled history is
-        // what Catch up billing is for, and would swamp the forecast.
-        projected = plan.charges
-          .filter((c) => autoOn || c.dueDate > today)
-          .map((c) => ({ feeType: c.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
-        if (autoOn) {
-          for (const m of plan.missingReadings) {
-            missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
-          }
+        if (!ctx.rules.autoBilling) notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
+        const p = projectContract(ctx, today, lookAheadCutoff);
+        projected = p.charges.map((c) => ({ feeType: c.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
+        for (const m of p.missingReadings) {
+          missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
         }
       }
     } catch {

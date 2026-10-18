@@ -343,7 +343,7 @@ export const guideEn: GuideContent = {
             "While automatic billing is on, a voided month is **billed again** at the next run. Correct the contract's terms first — or **Pause** automatic billing while you fix them.",
           ],
         },
-        { type: "callout", kind: "tip", title: "Reading the Dashboard", text: "**Overdue** — past the grace period. **Due now** — due, still inside the grace period. **Due later this month** — billed, not due yet. **Not billed yet** — bills the system will create (mostly next month's); nothing is posted early." },
+        { type: "callout", kind: "tip", title: "Reading the Dashboard", text: "**Overdue** — past the grace period. **Due now** — due, still inside the grace period. **Due later this month** — billed, not due yet. **Not billed yet** — bills the system will create (mostly next month's); nothing is posted early. Each contract also has a **Not billed yet** tab with the same forecast for that one contract." },
       ],
     },
     {

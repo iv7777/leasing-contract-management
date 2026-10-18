@@ -39,6 +39,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
+import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
 interface ContractDto {
@@ -1605,6 +1606,11 @@ export default function ContractDetailPage() {
                 />
               </>
             ),
+          },
+          {
+            key: "upcoming",
+            label: t("billing.upcoming.tab"),
+            children: <UpcomingBillsTab contractId={Number(id)} reloadKey={charges.length + ":" + chargeBalances.length} />,
           },
           {
             key: "amendments",
