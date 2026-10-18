@@ -41,3 +41,147 @@ body {
 .ant-layout-content {
   min-width: 0;
 }
+
+/* ---- Phones --------------------------------------------------------------
+ * dev-phone: held upright. dev-land: held on its side (short, touch-driven),
+ * which keeps the sidebar layout, so it gets a compact header and sidebar.
+ * Both shrink the oversized desktop type and give the icons a consistent size. */
+.dev-phone .app-icon-btn.ant-btn,
+.dev-land .app-icon-btn.ant-btn {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.dev-phone .app-icon-btn.ant-btn {
+  width: 40px;
+  padding: 0;
+}
+.dev-phone .app-icon-btn.ant-btn .anticon,
+.dev-land .app-icon-btn.ant-btn .anticon {
+  font-size: 18px;
+}
+.dev-phone .ant-layout-header,
+.dev-land .ant-layout-header {
+  height: 48px;
+  line-height: 48px;
+  padding-inline: 8px !important;
+}
+.dev-phone .app-title-mobile {
+  font-size: 15px;
+}
+.dev-phone .ant-layout-content,
+.dev-land .ant-layout-content {
+  font-size: 14px;
+}
+.dev-land .ant-layout-content {
+  padding: 12px 16px !important;
+}
+.dev-phone h4.ant-typography,
+.dev-land h4.ant-typography {
+  font-size: 18px;
+  line-height: 1.35;
+}
+.dev-phone h5.ant-typography,
+.dev-land h5.ant-typography {
+  font-size: 15px;
+}
+.dev-phone .ant-card .ant-card-body,
+.dev-land .ant-card .ant-card-body {
+  padding: 14px;
+}
+.dev-phone .ant-statistic .ant-statistic-title,
+.dev-land .ant-statistic .ant-statistic-title {
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+.dev-phone .ant-statistic .ant-statistic-content,
+.dev-land .ant-statistic .ant-statistic-content {
+  font-size: 20px;
+}
+.dev-phone .ant-table-wrapper,
+.dev-land .ant-table-wrapper {
+  font-size: 13px;
+}
+.dev-phone .ant-tabs .ant-tabs-tab,
+.dev-land .ant-tabs .ant-tabs-tab {
+  padding: 8px 0;
+}
+.dev-phone .ant-tabs .ant-tabs-tab + .ant-tabs-tab,
+.dev-land .ant-tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-inline-start: 20px;
+}
+.dev-phone .ant-alert,
+.dev-land .ant-alert {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.dev-phone .ant-alert .ant-alert-message,
+.dev-land .ant-alert .ant-alert-message {
+  font-size: 14px;
+}
+.dev-phone .ant-alert .ant-alert-icon,
+.dev-land .ant-alert .ant-alert-icon {
+  font-size: 16px;
+}
+
+/* Sideways phone: a narrower, compact, scrollable sidebar so every item fits. */
+.dev-land .ant-layout-sider {
+  flex: 0 0 176px !important;
+  max-width: 176px !important;
+  min-width: 176px !important;
+  width: 176px !important;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
+}
+.dev-land .app-sider-title {
+  padding: 10px 16px !important;
+  font-size: 15px !important;
+}
+.dev-land .ant-layout-sider .ant-menu-item {
+  height: 30px;
+  line-height: 30px;
+  margin-block: 1px;
+  font-size: 14px;
+}
+.dev-land .ant-layout-sider .ant-menu-item .anticon {
+  font-size: 16px;
+}
+
+/* Bottom tab bar for the upright phone: icon above a small label, as on iOS. */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  background: #fff;
+  border-top: 1px solid #eee;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.bottom-nav button {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 0 5px;
+  color: #666;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.bottom-nav button .anticon {
+  font-size: 20px;
+}
+.bottom-nav button.active {
+  color: #1f5f4a;
+  font-weight: 600;
+}

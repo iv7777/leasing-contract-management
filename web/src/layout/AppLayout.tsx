@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
 import {
   DashboardOutlined,
@@ -16,6 +16,7 @@ import {
   ScheduleOutlined,
   QuestionCircleOutlined,
   ReadOutlined,
+  EllipsisOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -26,6 +27,31 @@ import { HelpDrawer } from "../help/HelpDrawer";
 const { Header, Sider, Content } = Layout;
 const { useBreakpoint } = Grid;
 
+/** Marks the page so the stylesheet can size things for a phone held upright
+ * (dev-phone) or on its side (dev-land: short and touch-driven, which still gets
+ * the sidebar layout but needs a compact one). */
+function useDeviceClasses() {
+  useEffect(() => {
+    const queries: [string, string][] = [
+      ["dev-phone", "(max-width: 767px)"],
+      ["dev-land", "(max-height: 500px) and (orientation: landscape) and (pointer: coarse)"],
+    ];
+    const cleanups = queries.map(([cls, q]) => {
+      const mq = window.matchMedia(q);
+      const apply = () => document.documentElement.classList.toggle(cls, mq.matches);
+      apply();
+      mq.addEventListener("change", apply);
+      return () => {
+        mq.removeEventListener("change", apply);
+        document.documentElement.classList.remove(cls);
+      };
+    });
+    return () => cleanups.forEach((c) => c());
+  }, []);
+}
+
+const BOTTOM_NAV_KEYS = ["/", "/contracts", "/properties", "/reminders"];
+
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation();
   const { user, logout, setLocale } = useAuth();
@@ -35,6 +61,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = !screens.md;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  useDeviceClasses();
 
   const items = [
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
@@ -81,7 +108,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <Layout style={{ minHeight: "100vh" }}>
       {!isMobile && (
         <Sider width={220} theme="light" style={{ borderInlineEnd: "1px solid #eee" }}>
-          <div style={{ padding: "16px 20px", fontWeight: 600, fontSize: 16 }}>{t("app.title")}</div>
+          <div className="app-sider-title" style={{ padding: "16px 20px", fontWeight: 600, fontSize: 16 }}>{t("app.title")}</div>
           {nav}
         </Sider>
       )}
@@ -97,18 +124,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
           }}
         >
           <Space>
-            {isMobile && <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />}
-            {isMobile && <Typography.Text strong>{t("app.title")}</Typography.Text>}
+            {isMobile && <Button className="app-icon-btn" type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} />}
+            {isMobile && <Typography.Text strong className="app-title-mobile">{t("app.title")}</Typography.Text>}
           </Space>
           <Space>
-            <Button type="text" icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)} aria-label={t("help.drawerTitle")} />
+            <Button className="app-icon-btn" type="text" icon={<QuestionCircleOutlined />} onClick={() => setHelpOpen(true)} aria-label={t("help.drawerTitle")} />
             <Dropdown menu={languageMenu}>
-              <Button type="text" icon={<GlobalOutlined />}>
+              <Button className="app-icon-btn" type="text" icon={<GlobalOutlined />}>
                 <span className="desktop-only">{i18n.language?.startsWith("zh") ? "中文" : "EN"}</span>
               </Button>
             </Dropdown>
-            <Typography.Text className="desktop-only">{user?.name}</Typography.Text>
-            <Button type="text" icon={<LogoutOutlined />} onClick={() => void logout()}>
+            {!isMobile && <Typography.Text>{user?.name}</Typography.Text>}
+            <Button className="app-icon-btn" type="text" icon={<LogoutOutlined />} onClick={() => void logout()}>
               <span className="desktop-only">{t("nav.logout")}</span>
             </Button>
           </Space>
@@ -120,23 +147,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
 
-        <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 72 : 24 }}>{children}</Content>
+        <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 76 : 24 }}>{children}</Content>
 
         {isMobile && (
-          <Menu
-            mode="horizontal"
-            selectedKeys={[selectedKey]}
-            items={items}
-            onClick={({ key }) => handleNavigate(key)}
-            style={{
-              position: "fixed",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              justifyContent: "space-around",
-              borderTop: "1px solid #eee",
-            }}
-          />
+          <nav className="bottom-nav">
+            {items
+              .filter((i) => BOTTOM_NAV_KEYS.includes(i.key))
+              .map((i) => (
+                <button key={i.key} className={i.key === selectedKey ? "active" : ""} onClick={() => handleNavigate(i.key)}>
+                  {i.icon}
+                  <span>{i.label}</span>
+                </button>
+              ))}
+            <button className={BOTTOM_NAV_KEYS.includes(selectedKey) ? "" : "active"} onClick={() => setDrawerOpen(true)}>
+              <EllipsisOutlined />
+              <span>{t("nav.more")}</span>
+            </button>
+          </nav>
         )}
       </Layout>
     </Layout>

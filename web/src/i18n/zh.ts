@@ -5,6 +5,7 @@ const zh: Translations = {
     title: "租赁合同管理",
   },
   nav: {
+    more: "更多",
     dashboard: "工作台",
     guide: "指南",
     properties: "物业",

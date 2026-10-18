@@ -79,3 +79,10 @@
 
 .hb-top.ant-float-btn { bottom: 28px; inset-inline-end: 28px; }
 @media (max-width: 900px) { .hb-top.ant-float-btn { bottom: 76px; inset-inline-end: 16px; } }
+@media (max-width: 767px) {
+  .hb-hero h1 { font-size: 22px; }
+  .hb-hero p { font-size: 14px; }
+  .hb-chapter { margin-bottom: 36px; }
+  .hb-chapter h2 { font-size: 21px; }
+  .hb-lead { font-size: 14px; }
+}

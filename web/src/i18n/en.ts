@@ -3,6 +3,7 @@ const en = {
     title: "Lease Management",
   },
   nav: {
+    more: "More",
     dashboard: "Dashboard",
     guide: "Guide",
     properties: "Properties",
