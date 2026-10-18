@@ -1,0 +1,611 @@
+import type { GuideContent } from "./types";
+
+export const guideEn: GuideContent = {
+  eyebrow: "Handbook",
+  title: "Manage a lease from first signature to final settlement",
+  subtitle:
+    "Plain-language concepts, step-by-step instructions and a worked example. No prior experience needed — start anywhere, or follow the lifecycle below in order.",
+  searchPlaceholder: "Search the handbook… e.g. “partial payment”, “free rent”, “overdue”",
+  roleChipsLabel: "Quick start for:",
+  roleLabels: { admin: "Admin", manager: "Manager", collector: "Collector", viewer: "Viewer" },
+  lifecycleTitle: "The life of a contract",
+  legendYou: "You do this",
+  legendSystem: "The system does this for you",
+  jumpTo: "Jump to a chapter",
+  noResults: "Nothing matches that search. Try a shorter word, or browse the chapters in the list.",
+  resultsFor: "{{n}} chapter(s) mention “{{q}}”.",
+  youllSee: "You'll see:",
+  stepWord: "Step",
+  groups: { start: "Start here", life: "The lifecycle", learn: "Learn by example" },
+  stages: [
+    { title: "Prepare", text: "Property, units, parties", chapter: "prepare" },
+    { title: "Create", text: "Terms, pricing, deposit", chapter: "create" },
+    { title: "Activate", text: "Signed lease attached", chapter: "create" },
+    { title: "Bill", text: "System bills every night", chapter: "billing", system: true },
+    { title: "Collect", text: "Payments and follow-up", chapter: "collect" },
+    { title: "Change", text: "Amendments", chapter: "change" },
+    { title: "Renew / End", text: "Renewal, termination", chapter: "end" },
+    { title: "Settle", text: "Deposit refund, records", chapter: "end" },
+  ],
+  chapters: [
+    {
+      id: "welcome",
+      group: "start",
+      kicker: "Start here",
+      title: "Your first ten minutes",
+      lead: "Pick your role to see what to do first. You only ever see the properties you have been assigned to.",
+      blocks: [
+        {
+          type: "roleStart",
+          roles: [
+            {
+              id: "admin",
+              label: "Admin",
+              intro: "You set the system up, approve changes and keep the money straight.",
+              steps: [
+                "**Users** → create an account for each team member, choose a role, assign their properties, and decide who may download or print.",
+                "**Properties** and **Tenants & Landlords** → add the buildings, units and parties (chapter “Prepare”).",
+                "Create your first contract and **Activate** it (chapter “Create a contract”). For a lease that started before this system, run **Catch up billing** on its Charges tab, then enter the payments already collected.",
+                "Open the **Dashboard** every day. Check **Billing runs** now and then to confirm the nightly job is healthy, and **Backups** to confirm backups are running.",
+              ],
+            },
+            {
+              id: "manager",
+              label: "Manager",
+              intro: "You prepare contracts, keep readings up to date and propose changes.",
+              steps: [
+                "Add properties, units and parties if they are not on file yet.",
+                "**Contracts** → **Add contract**, then fill in units, pricing, deposit and documents. An Admin activates it when it's ready.",
+                "Each month, enter **meter readings** for electricity and water (Dashboard tells you which are missing).",
+                "Use **Propose amendment** for any change to an active contract — an Admin approves it.",
+              ],
+            },
+            {
+              id: "collector",
+              label: "Collector",
+              intro: "You collect rent and chase what's overdue.",
+              steps: [
+                "Open the **Dashboard**: **Overdue** and **Due now** show exactly who owes what.",
+                "When money arrives: contract → **Receipts** → **Record payment**.",
+                "Use **Reminders** to follow up on overdue balances and deposit shortfalls.",
+                "You can't change contracts. If something looks wrong, tell a Manager or Admin.",
+              ],
+            },
+            {
+              id: "viewer",
+              label: "Viewer",
+              intro: "You have read-only access to your assigned properties.",
+              steps: [
+                "The **Dashboard** and **Contracts** show everything you're allowed to see.",
+                "Open a contract's **Monthly statement** tab to see what was billed and paid in any month.",
+                "Downloads and printing are only available if your Admin switched them on for your account.",
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "concepts",
+      group: "start",
+      kicker: "Start here",
+      title: "Concepts in plain words",
+      lead: "A handful of ideas explain almost everything in the app. Each card says what it means and where to find it.",
+      blocks: [
+        {
+          type: "cards",
+          items: [
+            { icon: "P", title: "Property & unit", text: "A property is a building or plot of land. Units are the individual spaces you rent out — a floor, a workshop, a piece of open land. Vacant units stay on file.", where: "Properties" },
+            { icon: "T", title: "Party", text: "Any company or individual — a landlord on one contract, a tenant on another. ID and licence numbers are stored separately and only Admins can see them.", where: "Tenants & Landlords" },
+            { icon: "C", title: "Contract & term", text: "The lease itself: who rents which units, from which date to which date. A contract is a **Draft** until an Admin activates it; only an **Active** contract is billed.", where: "Contracts" },
+            { icon: "$", title: "Pricing stream", text: "One recurring fee — rent, management fee, electricity — with its own rate and rule. A contract has one stream per fee.", where: "Contract → Pricing" },
+            { icon: "↗", title: "Rate steps & escalation", text: "A stream can hold several rates over time (for example rent that rises each year), or a rate that grows by a percentage at fixed intervals.", where: "Contract → Pricing" },
+            { icon: "0", title: "Free rent (concession)", text: "A temporary discount on one fee — or all fees — for a date range. 100% means free. Free rent on the rent alone leaves the management fee payable.", where: "Contract → Concessions" },
+            { icon: "B", title: "Charge (a bill)", text: "What a tenant owes for one fee in one month. The system creates charges; nobody edits them. A wrong one is **voided** and replaced.", where: "Contract → Charges" },
+            { icon: "D", title: "Due date & grace", text: "A bill is **due** on its due date and becomes **overdue** only after the grace period — 5 days unless the lease says otherwise.", where: "Contract → Edit" },
+            { icon: "R", title: "Receipt & allocation", text: "A receipt is money received. **Allocating** it applies it to specific bills. Whatever isn't applied stays as credit — never as extra income.", where: "Contract → Receipts" },
+            { icon: "M", title: "Meter reading", text: "Electricity and water are billed from a quantity you enter each month. It is the one thing the system cannot do by itself.", where: "Contract → Usage entries" },
+            { icon: "S", title: "Deposit", text: "Security money held apart from rent. It has its own ledger: required, held, deducted, refunded.", where: "Contract → Deposit" },
+            { icon: "A", title: "Amendment & version", text: "The only way to change an Active contract. It is proposed, approved by an Admin, then applied — and every approved change creates a new version.", where: "Contract → Amendments" },
+            { icon: "!", title: "Reminder", text: "An automatic flag — overdue balance, deposit shortfall, missing reading, renewal coming up. It disappears by itself when the problem is fixed.", where: "Reminders" },
+            { icon: "⟳", title: "Automatic billing", text: "Every night the system creates all bills that are already due or fall due this month. An Admin switches a contract on with **Catch up billing**.", where: "Contract → Charges" },
+            { icon: "∅", title: "Void", text: "The undo for a mistaken bill. The record stays (marked voided) but it no longer counts as owed. Not possible once payments are applied.", where: "Contract → Charges" },
+            { icon: "L", title: "Audit log", text: "A permanent record of who did what and when. Nothing in it can be edited or deleted.", where: "Audit Log (Admin)" },
+          ],
+        },
+        {
+          type: "callout",
+          kind: "info",
+          title: "Nothing is ever really deleted",
+          text: "Bills, payments and changes are corrected by adding a new entry (a void, a reversal, an amendment) — never by overwriting. That is why the numbers always reconcile and every change can be traced to a person.",
+        },
+      ],
+    },
+    {
+      id: "roles",
+      group: "start",
+      kicker: "Start here",
+      title: "Who can do what",
+      lead: "Each person has one role. Non-Admin roles can also be limited to specific properties.",
+      blocks: [
+        {
+          type: "table",
+          head: ["Action", "Admin", "Manager", "Collector", "Viewer"],
+          rows: [
+            ["View contracts, bills and payments", "All", "Assigned", "Assigned", "Assigned"],
+            ["Create contracts and edit drafts", "Yes", "Yes", "—", "—"],
+            ["Activate a contract", "Yes", "—", "—", "—"],
+            ["Propose an amendment", "Yes (auto-approved)", "Yes", "—", "—"],
+            ["Approve or reject amendments", "Yes", "—", "—", "—"],
+            ["Enter meter readings", "Yes", "Yes", "—", "—"],
+            ["Record payments and deposit receipts", "Yes", "Yes", "Yes", "—"],
+            ["Catch up billing, pause it, void a bill", "Yes", "—", "—", "—"],
+            ["Reverse a payment; deposit refund, deduction or transfer to rent", "Yes", "—", "—", "—"],
+            ["Export PDF / CSV", "Yes", "Yes", "If switched on", "If switched on"],
+            ["See tenant ID numbers and sensitive documents", "Yes", "—", "—", "—"],
+            ["Manage users, backups, billing runs, audit log", "Yes", "—", "—", "—"],
+          ],
+        },
+        {
+          type: "callout",
+          kind: "tip",
+          title: "Assigned properties",
+          text: "A Manager, Collector or Viewer only sees the properties assigned to them. A contract that covers several properties is visible only to someone assigned to **all** of them.",
+        },
+        {
+          type: "callout",
+          kind: "warn",
+          title: "Sensitive documents",
+          text: "When you upload a document you choose **Ordinary** or **Sensitive**. Sensitive documents (ID copies, a lease that contains ID numbers) can only be opened by an Admin, whatever the download setting. If other staff need the lease, upload a redacted copy as an ordinary document.",
+        },
+      ],
+    },
+    {
+      id: "prepare",
+      group: "life",
+      kicker: "Chapter 1",
+      title: "Prepare: properties, units and parties",
+      lead: "Before a contract exists, the system needs to know what is being rented and who the two sides are. This takes a few minutes per building.",
+      blocks: [
+        {
+          type: "steps",
+          steps: [
+            {
+              title: "Add the property",
+              body: ["Open **Properties** and add the building or plot: a name and an address."],
+              see: "the property in the list. Click it to open its page.",
+            },
+            {
+              title: "Add its units",
+              body: [
+                "On the property's page, add each rentable space with:",
+                "- a **label** (for example “A-101” or “2F East”),",
+                "- a **type**: Building or Open land (they are reported separately in Occupancy),",
+                "- its **rentable area** in square metres.",
+              ],
+              callouts: [{ kind: "tip", title: "One unit per independently rentable space", text: "If two halves of a floor can be leased to different tenants, add them as two units. A unit can only be on one active lease at a time." }],
+            },
+            {
+              title: "Add the landlord and the tenant",
+              body: ["Open **Tenants & Landlords** and add each party as a **Company** or an **Individual**, with contact details.", "An Admin can record ID / licence numbers in the party's protected section — other roles never see them."],
+            },
+            {
+              title: "Set up your team (Admin)",
+              body: ["Open **Users**, create an account per person, pick their role and assign the properties they work with. Switch download / print on only for those who need it."],
+            },
+          ],
+        },
+        { type: "callout", kind: "info", title: "Vacant space is still tracked", text: "Units exist independently of contracts. The **Occupancy** page shows how much of each property is leased on any date you choose." },
+      ],
+    },
+    {
+      id: "create",
+      group: "life",
+      kicker: "Chapter 2",
+      title: "Create a contract",
+      lead: "About 15 minutes with the signed lease open beside you. Everything stays a draft — editable, and invisible to billing — until an Admin activates it.",
+      blocks: [
+        {
+          type: "steps",
+          steps: [
+            {
+              title: "Start the draft",
+              body: [
+                "**Contracts** → **Add contract**. Choose the landlord and tenant, enter the reference number and the term start and end dates.",
+                "Then set how bills fall due:",
+                "- **Due day** — the day of the month rent is due. Default **1**.",
+                "- **Due month offset** — **0** means due in the month being billed; **−1** means due in the month before (rent paid in advance, for example due on the 25th of the previous month).",
+                "- **Overdue after (days)** — the grace period. Default **5**.",
+              ],
+              see: "a new contract marked Draft, with empty tabs.",
+              callouts: [{ kind: "tip", title: "Defaults vs. the lease", text: "Leave the defaults when the lease is silent. If the lease states a due day or a grace period, enter the lease's figures — the lease always wins." }],
+            },
+            {
+              title: "Add the units",
+              body: ["**Units** tab → **Add unit**. Pick each leased unit and enter the **contracted area** — it can differ from the unit's rentable area if the lease says so. If a unit joins later, set its own start date."],
+            },
+            {
+              title: "Set the pricing",
+              body: [
+                "**Pricing** tab → **Add pricing stream**, one per recurring fee (rent, management fee, electricity, water, elevator, other). For each you choose what it applies to, how it is calculated, the rate and when it starts:",
+              ],
+            },
+          ],
+        },
+        {
+          type: "table",
+          head: ["Method", "Use it when…", "Example"],
+          rows: [
+            ["Flat", "One fixed amount per period", "¥20,000 per month"],
+            ["Per sqm", "Rate × the contracted area", "¥30 × 1,000 m² = ¥30,000 per month"],
+            ["Percentage escalation", "The rate rises by a % at fixed intervals", "+5% every 12 months"],
+            ["Metered", "Price × a quantity you enter each month", "¥1.20 × 500 kWh = ¥600"],
+          ],
+        },
+        {
+          type: "p",
+          text: "The **rate basis** says what the number means: per month, per quarter, per year, per square metre per month, or per unit (metered). A stream can carry several rows over time — that is how stepped rent is entered.",
+        },
+        { type: "callout", kind: "warn", title: "Lease already running? Enter its whole history", text: "If the lease started before today, enter **every past rate step and every free-rent period** now. The system builds the full bill history from these, and you will compare it with your own records before anything is posted." },
+        {
+          type: "steps",
+          steps: [
+            {
+              title: "Add free rent or discounts (if any)",
+              body: [
+                "**Concessions** tab → **Add concession**. Enter the date range and the discount (**100% = free**). Choose a specific fee, or leave it blank to apply to every fee.",
+                "A free-rent period that targets only the rent leaves the management fee payable — as most leases intend.",
+              ],
+            },
+            {
+              title: "Set the deposit",
+              body: [
+                "**Deposit** tab → **Set deposit terms**. Choose **Fixed amount** (the system then tracks any shortfall) or **Formula** (for example “3 months' rent” — the system can't compute it, so you check it by hand). Add a due date if the deposit is due later.",
+                "If part of the deposit is waived on a condition, record the condition; an Admin later records whether it was met.",
+              ],
+            },
+            {
+              title: "Upload the documents",
+              body: ["**Documents** tab → **Upload document**. Choose the type — the **Signed lease** is required to activate — and whether it is Ordinary or Sensitive. Floor plans, ID copies and supplements can go here too."],
+            },
+            {
+              title: "Activate (Admin)",
+              body: ["An Admin presses **Activate**. The contract becomes **Active**, direct edits are locked, and billing begins."],
+              callouts: [
+                { kind: "danger", title: "Check before you activate", text: "After activation, terms can only change through an amendment with a supporting document. Re-check the term dates, pricing and deposit first." },
+                { kind: "info", title: "Billing starts automatically for new leases", text: "A lease that starts this month or later is switched on for automatic billing at activation. A lease that started earlier waits for **Catch up billing** (next chapter)." },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: "billing",
+      group: "life",
+      kicker: "Chapter 3",
+      title: "How billing works",
+      lead: "The system creates the bills — you don't have to. This chapter explains what it does, what's left for you (meter readings), and how to bring an older lease up to date.",
+      blocks: [
+        { type: "h", text: "What happens every night" },
+        {
+          type: "p",
+          text: "At 03:00 China time the system looks at every contract on **automatic billing** and creates every bill that is **already due** or **falls due before the end of the month**. So when staff log in, they immediately see what to collect — nothing to generate by hand. Running it twice never creates a bill twice.",
+        },
+        { type: "h", text: "Due dates and overdue" },
+        {
+          type: "table",
+          head: ["Setting", "What it means"],
+          rows: [
+            ["Due day 1, offset 0", "Due on the 1st of the month being billed"],
+            ["Due day 25, offset −1", "Due on the 25th of the **previous** month (paid in advance)"],
+            ["Overdue after 5 days", "Not overdue on days 1–5 after the due date; **overdue from day 6**, and “days overdue” counts from then"],
+          ],
+        },
+        { type: "h", text: "Meter readings (electricity and water)" },
+        {
+          type: "p",
+          text: "A metered bill needs the month's quantity. It cannot be known in advance, so it is the one input the system waits for. Metered bills are due on the contract's due day in the **month after** the usage month.",
+        },
+        {
+          type: "steps",
+          steps: [
+            { title: "See what's missing", body: ["The **Dashboard** lists every contract that still needs a reading, with the months."] },
+            { title: "Enter the readings", body: ["Contract → **Usage entries** → **Meter readings grid**. Type each month's quantity for every metered fee and save. (**Record usage** adds a single reading.)"] },
+            { title: "The bill appears", body: ["It is created by the next nightly run. An Admin who doesn't want to wait can press **Run billing now** on the **Billing runs** page."], callouts: [{ kind: "info", title: "Readings lock once billed", text: "After a bill has been created from a reading, the reading can't be changed. If it was wrong, an Admin voids the bill, you correct the reading, and the month is billed again." }] },
+          ],
+        },
+        { type: "h", text: "Bringing an older lease up to date (catch-up)" },
+        {
+          type: "p",
+          text: "For a lease that started before this system, the system can create **every bill since day one**, and you then enter the payments already collected so the tenant's account matches your records.",
+        },
+        {
+          type: "steps",
+          steps: [
+            { title: "Make sure the contract is complete", body: ["Active, with the full rent history and any free-rent periods entered (see “Create a contract”)."] },
+            { title: "Preview", body: ["Contract → **Charges** → **Catch up billing** (Admin). A list shows every bill the system would create, month by month, with the total. **Nothing is posted yet.**"], see: "the charges, their due dates, and any meter readings still missing." },
+            { title: "Compare with your records", body: ["Check a few months against your own ledger. If something is off, cancel and fix the contract's terms first."] },
+            { title: "Confirm", body: ["The bills are created and automatic billing is switched on. Missing meter readings are listed; enter them and they bill automatically."] },
+            { title: "Enter the payments already received", body: ["Contract → **Receipts** → **Bulk payments**. Add one row per payment (date, amount, method); **Add next month** copies the last row forward. They are applied in date order, oldest bill first."] },
+            { title: "Check the result", body: ["Look at the **Monthly statement** and the **Dashboard**: the tenant's balance should now equal your own."] },
+          ],
+        },
+        { type: "h", text: "Quarterly and yearly contracts" },
+        { type: "p", text: "Automatic billing covers **monthly** contracts. For a contract billed quarterly or yearly, open Charges → **Generate charges**, pick the month, and create the bill by hand when it is due. The Dashboard lists these contracts so none is forgotten." },
+        { type: "h", text: "When a bill is wrong (Admin)" },
+        {
+          type: "list",
+          items: [
+            "**No payment applied yet:** Charges tab → **Void** (a reason is required). The bill stays on record, marked voided, and stops counting.",
+            "**Payments applied:** reverse those allocations first (Receipts tab), then void.",
+            "While automatic billing is on, a voided month is **billed again** at the next run. Correct the contract's terms first — or **Pause** automatic billing while you fix them.",
+          ],
+        },
+        { type: "callout", kind: "tip", title: "Reading the Dashboard", text: "**Overdue** — past the grace period. **Due now** — due, still inside the grace period. **Due later this month** — billed, not due yet. **Not billed yet** — bills the system will create (mostly next month's); nothing is posted early." },
+      ],
+    },
+    {
+      id: "collect",
+      group: "life",
+      kicker: "Chapter 4",
+      title: "Collect payments",
+      lead: "Recording a payment takes under a minute: say what arrived, and the system applies it to the oldest unpaid bills.",
+      blocks: [
+        {
+          type: "steps",
+          steps: [
+            { title: "Open the contract's Receipts tab", body: ["Click **Record payment**."] },
+            { title: "Say what arrived", body: ["Enter the **date received**, the **amount** and the **method** (bank transfer, cash, WeChat Pay, Alipay, cheque). Add the bank reference if you have one."] },
+            {
+              title: "Check how it is applied",
+              body: ["The system proposes to pay the **oldest unpaid bills first** and shows each one. If the tenant said which bill the money is for, change the amounts. Then press **Record payment**."],
+              see: "the balances drop; the Dashboard, Reminders and the Monthly statement update straight away.",
+            },
+          ],
+        },
+        { type: "h", text: "Common situations" },
+        {
+          type: "table",
+          head: ["Situation", "What to do"],
+          rows: [
+            ["Tenant pays part of a bill", "Record the amount. The rest stays owing and becomes overdue after the grace period."],
+            ["One payment for several months", "Record it once; it clears the oldest months first."],
+            ["Tenant pays too much", "The extra stays as **unallocated credit** (shown on the Receipts tab). It is never counted as income; apply it to future bills with **Allocate**."],
+            ["Entering last year's payments", "Use **Bulk payments**: one row per payment, with the real dates. **Add next month** speeds up regular rent."],
+            ["Recorded the wrong amount", "An Admin presses **Reverse** on the receipt and gives a reason. Both entries stay visible; then record the right one."],
+          ],
+        },
+        { type: "callout", kind: "info", title: "The older “Record receipt” button", text: "It saves the money without applying it to any bill — use **Allocate** afterwards. For everyday collections, **Record payment** does both steps in one." },
+        {
+          type: "p",
+          text: "If the contract has a **late penalty** configured (a flat daily rate, with an optional cap), it is calculated on overdue balances and shown on the ledger. It starts after the grace period.",
+        },
+      ],
+    },
+    {
+      id: "deposit",
+      group: "life",
+      kicker: "Chapter 5",
+      title: "Deposits",
+      lead: "A deposit is held apart from rent and tracked in its own ledger. The contract page tells you at a glance whether it is complete.",
+      blocks: [
+        {
+          type: "p",
+          text: "On the **Deposit** tab you see **Required**, **Held** and **Shortfall**. A shortfall also shows as a red tag beside the contract's status, a dot on the Deposit tab, a box on the Dashboard and a Reminder.",
+        },
+        {
+          type: "steps",
+          steps: [
+            { title: "Record a deposit received", body: ["**Deposit** tab → **Record transaction** (or the button in the red shortfall box) → type **Receipt**, with the date and amount."] },
+            { title: "Several deposit terms add up", body: ["A contract can have an original deposit plus another for space added later. The system adds the terms that are in force."] },
+            { title: "Waivers (Admin)", body: ["When a term is waived on a condition, an Admin records whether the condition was met, with a reason and evidence. A waived term counts for nothing."] },
+            { title: "Formula deposits", body: ["If the requirement is a formula (such as “3 months' rent”), the system shows an amber “check manually” notice — work out the amount from the lease and compare it with the amount held."] },
+          ],
+        },
+        {
+          type: "table",
+          head: ["Transaction", "Who", "What it does"],
+          rows: [
+            ["Receipt", "Admin, Manager, Collector", "Deposit money received"],
+            ["Refund", "Admin", "Returns deposit to the tenant"],
+            ["Deduction", "Admin", "Keeps part of the deposit (for damage, arrears…) with a reason"],
+            ["Transfer to rent", "Admin", "Applies held deposit to an unpaid bill — without counting the money twice"],
+            ["Reversal", "Admin", "Undoes a mistaken deposit entry; both stay visible"],
+          ],
+        },
+        { type: "callout", kind: "warn", title: "Deposit money is not rent", text: "A deposit receipt can't also be applied to rent. To use the deposit against arrears, use **Transfer to rent** (Admin). You can never refund or deduct more than is held." },
+      ],
+    },
+    {
+      id: "change",
+      group: "life",
+      kicker: "Chapter 6",
+      title: "Change a contract (amendments)",
+      lead: "Once a contract is Active it is locked. Every change — a new rate, another unit, an early end — goes through an amendment, so there is always a paper trail.",
+      blocks: [
+        {
+          type: "steps",
+          steps: [
+            { title: "Propose", body: ["Contract → **Amendments** → **Propose amendment**. Choose what is changing, the effective date and the reason."] },
+            { title: "Attach the signed supplement", body: ["Upload the signed supplement (or the correspondence) and select it. It is required before the amendment can be submitted."] },
+            { title: "Submit", body: ["A Manager's amendment waits for an Admin. An Admin's own amendment is approved straight away."], see: "the amendment as Pending. Nothing about billing has changed yet." },
+            { title: "Approve or reject (Admin)", body: ["The Admin reviews the whole package and approves it or rejects it with a reason. Approval creates a **new version** of the contract; the earlier versions stay on record."] },
+          ],
+        },
+        {
+          type: "table",
+          head: ["The amendment can…", "Effect once approved"],
+          rows: [
+            ["Change a rate on an existing pricing stream", "The new rate applies from the effective date, to bills created afterwards"],
+            ["Add a unit to the contract", "The unit joins the contract; add a pricing stream for it if it should be billed"],
+            ["Add a new pricing stream", "A new recurring fee starts from its start date"],
+            ["Terminate the contract early", "Status becomes Terminated, the end date is set, and billing stops after it"],
+          ],
+        },
+        {
+          type: "callout",
+          kind: "warn",
+          title: "Two proposals at once",
+          text: "If two amendments are proposed on the same version, the second one to be approved is blocked as **stale** — the contract has already moved on. Refresh it and review it again; it can never silently overwrite newer terms.",
+        },
+        { type: "callout", kind: "info", title: "What about bills that already exist?", text: "Approving a change does not rewrite bills already created. If an old bill was wrong, void it (Chapter 3) and let it be billed again from the corrected terms." },
+      ],
+    },
+    {
+      id: "end",
+      group: "life",
+      kicker: "Chapter 7",
+      title: "Renew, extend or end a lease",
+      lead: "Plan the end of a lease from the start: the system warns you, and nothing is billed past the end date.",
+      blocks: [
+        { type: "h", text: "Renewal reminders" },
+        { type: "p", text: "Each contract has a **renewal notice period** (90 days by default, editable while in draft). When the notice window opens, a **Renewal notice** reminder appears — orange at first, red in the last 30 days." },
+        { type: "h", text: "Renewing or extending" },
+        {
+          type: "steps",
+          steps: [
+            { title: "Agree the new terms and sign", body: ["Get the renewal or extension agreement signed."] },
+            { title: "Create a contract for the new term", body: ["**Add contract** for the same tenant and units, starting the day after the old term ends, with the new rates. Upload the signed agreement and activate it."], callouts: [{ kind: "tip", title: "Why a new contract", text: "The amendment screen covers rate changes, added units and streams, and early termination. A new term is clearest as its own contract, with its own start date, rates and deposit." }] },
+            { title: "Let the old one run out", body: ["No bill is ever created for a month starting after the old contract's end date."] },
+          ],
+        },
+        { type: "h", text: "Ending early" },
+        { type: "p", text: "Propose an amendment of the type **Terminate the contract early**, with the termination date as the effective date and the signed agreement attached. Once approved the contract is **Terminated** and billing stops." },
+        { type: "h", text: "Settling up" },
+        {
+          type: "checklist",
+          items: [
+            { title: "Collect or write off the last overdue amounts", text: "Dashboard → Overdue shows what is outstanding." },
+            { title: "Enter any final meter readings", text: "So the last electricity and water bills are created." },
+            { title: "Settle the deposit", text: "Deposit tab: deduct what is owed (with a reason), refund the rest. Admin only." },
+            { title: "Keep the records", text: "Bills, payments, amendments and documents stay on file; nothing is deleted." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "monthly",
+      group: "life",
+      kicker: "Chapter 8",
+      title: "Routines and reports",
+      lead: "Ten minutes a day and half an hour at month-end keep everything accurate.",
+      blocks: [
+        { type: "h", text: "Every day" },
+        {
+          type: "checklist",
+          items: [
+            { title: "Open the Dashboard", text: "Overdue and Due now are your collection list." },
+            { title: "Record the payments that arrived", text: "Contract → Receipts → Record payment." },
+            { title: "Glance at Reminders", text: "Overdue balances, deposit shortfalls, missing readings, renewals." },
+          ],
+        },
+        { type: "h", text: "At month-end" },
+        {
+          type: "checklist",
+          items: [
+            { title: "Enter this month's meter readings", text: "The Dashboard lists what is missing." },
+            { title: "Follow up every overdue balance", text: "Record anything received since." },
+            { title: "Check deposit shortfalls and renewal windows", text: "Reminders page." },
+            { title: "Review the Monthly statement for each contract", text: "Opening + new bills − payments = closing balance." },
+            { title: "Admin: confirm Billing runs and Backups are green", text: "Both pages list every run and any failure." },
+          ],
+        },
+        { type: "h", text: "Reports and exports" },
+        {
+          type: "list",
+          items: [
+            "**Monthly statement** (contract page): opening balance, new bills, adjustments, payments applied, closing balance, unallocated credit — and the deposit shown separately.",
+            "**Occupancy**: how much space is leased on any date; buildings and open land are reported separately.",
+            "**Export PDF summary / Export CSV**: terms, ledger and amendment history. Available to Admins, Managers and anyone whose account allows it.",
+            "**Audit Log** (Admin): who did what, and when.",
+          ],
+        },
+        { type: "callout", kind: "tip", title: "Backups and restore (Admin)", text: "The system makes a daily backup (30 kept) and, once those are full, a weekly one (30 kept). The Backups page lists them. Restoring is done from the server's control panel, which scans, validates and lets you pick one." },
+      ],
+    },
+    {
+      id: "example",
+      group: "learn",
+      kicker: "Learn by example",
+      title: "A full worked example",
+      lead: "A 12-month lease for unit A-101 (1,000 m²) from 1 January: rent ¥30 per m² per month, management fee ¥500, electricity ¥1.20 per kWh, two months of free rent, deposit ¥60,000, due on the 1st with a 5-day grace period.",
+      blocks: [
+        {
+          type: "table",
+          head: ["When", "What happens", "Result"],
+          rows: [
+            ["1 Jan", "The nightly run creates January's bills", "Rent {green:¥0 — free rent}, management fee ¥500"],
+            ["3 Jan", "Tenant pays ¥500 — you press Record payment", "January {green:settled}"],
+            ["1 Mar", "March's bills are created", "Rent ¥30,000 + management fee ¥500"],
+            ["3 Mar", "Tenant pays ¥20,000", "Applied to rent first: ¥10,000 of rent and ¥500 of management fee still owed"],
+            ["7 Mar", "The 5-day grace period (to 6 Mar) is over", "{red:Overdue} — ¥10,500 on the Dashboard and in Reminders"],
+            ["20 Mar", "Tenant pays ¥10,500", "{green:Settled} — the reminder disappears by itself"],
+            ["2 Apr", "You enter March's electricity: 500 kWh", "Next night a ¥600 bill is created, due 1 Apr — shown as {amber:Due now}"],
+            ["1 Jul", "An approved amendment raises the rent 5%", "Rent bills of ¥31,500 from July on"],
+          ],
+        },
+        {
+          type: "callout",
+          kind: "info",
+          title: "Why the ¥20,000 went to rent",
+          text: "Both March bills fell due on 1 March, so the payment was applied to the first one — rent. Had the tenant said the money was for the management fee, you would simply change the split on the Record payment screen.",
+        },
+        { type: "callout", kind: "tip", title: "Free rent is a discount, not a missing bill", text: "January's rent exists as a ¥0 bill. That is deliberate: the history shows the rent was waived on purpose, and the management fee — not covered by the free-rent period — is still charged." },
+      ],
+    },
+    {
+      id: "faq",
+      group: "learn",
+      kicker: "When something looks wrong",
+      title: "Troubleshooting and FAQ",
+      lead: "Most surprises have a simple explanation.",
+      blocks: [
+        {
+          type: "faq",
+          items: [
+            { q: "A bill I expected is missing", a: "Check in order: Is the contract **Active**? Does the Charges tab say **Automatic billing is on**? Is it a metered fee still waiting for a reading? Is the contract billed quarterly or yearly (generated by hand)? And has the bill's due date fallen within this month yet — bills due next month appear under “Not billed yet” until then." },
+            { q: "I recorded a payment but the balance didn't change", a: "A receipt saved with the older **Record receipt** button isn't applied to any bill. Open the Receipts tab and press **Allocate**, or use **Record payment** next time." },
+            { q: "Why is a bill “overdue” when the due date was only a few days ago?", a: "It isn't — a bill is overdue only after the grace period (5 days unless the lease says otherwise). Days 1–5 after the due date show as **Due now**." },
+            { q: "Why is there a ¥0 bill?", a: "It's a month covered by a 100% concession (free rent). The bill exists so the history shows the rent was waived." },
+            { q: "I need to change a rate on an active contract", a: "Direct edits are locked. Use **Propose amendment** → change a rate, attach the signed supplement, and have an Admin approve it." },
+            { q: "A bill has the wrong amount", a: "Admin: void it (reverse any payments applied first), correct the contract's terms, and the month is billed again at the next run. Pause automatic billing first if you don't want the old terms re-billed." },
+            { q: "I can't edit the contract", a: "Only **Draft** contracts can be edited directly. An Active contract changes through amendments." },
+            { q: "I can't see a contract that a colleague can", a: "You see only properties assigned to you — and a contract spanning several properties only if you're assigned to all of them. Ask an Admin." },
+            { q: "The PDF / CSV buttons are missing", a: "Export is switched on per account for Collectors and Viewers. Ask an Admin to enable it for you." },
+            { q: "The deposit shows a shortfall but we waived it", a: "A waiver must be **recorded** by an Admin on the deposit term (condition met, with a reason). Until then the full amount counts as required." },
+            { q: "An overdue reminder disappeared", a: "That's the system working: it vanishes as soon as the bills are paid, adjusted or voided. Reminders are never dismissed by hand." },
+            { q: "How do I fix a payment I entered wrongly?", a: "An Admin presses **Reverse** on the receipt (with a reason). Both the original and the reversal stay visible; then enter the correct payment." },
+            { q: "Can anything be deleted?", a: "Drafts can be deleted if they have no financial activity. Bills, payments and amendments are never deleted — they are voided, reversed or superseded so the history stays complete." },
+          ],
+        },
+      ],
+    },
+    {
+      id: "reference",
+      group: "learn",
+      kicker: "Quick reference",
+      title: "Labels and colours",
+      lead: "What the tags and colours you see around the app mean.",
+      blocks: [
+        {
+          type: "table",
+          head: ["You see", "It means"],
+          rows: [
+            ["{amber:Draft}", "Contract still being set up — editable, never billed"],
+            ["{green:Active}", "Contract in force and billed"],
+            ["Expired / Terminated", "Contract has ended — no further bills"],
+            ["{red:N days overdue}", "Unpaid past the grace period; N counts from its end"],
+            ["{amber:Due now}", "Due, still inside the grace period"],
+            ["{blue:Upcoming}", "Billed, due date still ahead"],
+            ["Not billed yet", "A bill the system will create"],
+            ["Voided", "A bill cancelled by an Admin — kept on record, owes nothing"],
+            ["Automatic billing: on / off", "Whether the nightly job creates this contract's bills"],
+            ["Red tag “Deposit short …”", "Less deposit held than the contract requires"],
+            ["Red reminder", "Urgent — overdue 30+ days, or a renewal deadline within 30 days"],
+          ],
+        },
+      ],
+    },
+  ],
+};

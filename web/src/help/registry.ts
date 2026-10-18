@@ -33,3 +33,25 @@ export function topicFallbackChain(topic: string): string[] {
   }
   return chain;
 }
+
+// Which handbook chapter explains a help topic best (anchor ids in guide/content.*.ts).
+const topicChapters: Record<string, string> = {
+  dashboard: "billing",
+  "properties.list": "prepare",
+  "properties.detail": "prepare",
+  "parties.list": "prepare",
+  "contracts.list": "create",
+  "contracts.detail": "create",
+  reminders: "monthly",
+  occupancy: "monthly",
+  users: "roles",
+  audit: "monthly",
+  backups: "monthly",
+  billingRuns: "billing",
+};
+
+export function guideChapterForTopic(topic: string): string | undefined {
+  return topicFallbackChain(topic)
+    .map((key) => topicChapters[key])
+    .find(Boolean);
+}

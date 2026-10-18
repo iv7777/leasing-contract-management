@@ -3,7 +3,7 @@ import { ReadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useHelp } from "./HelpContext";
-import { topicFallbackChain } from "./registry";
+import { guideChapterForTopic, topicFallbackChain } from "./registry";
 
 export function HelpDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t, i18n } = useTranslation();
@@ -25,7 +25,8 @@ export function HelpDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         <Typography.Link
           onClick={() => {
             onClose();
-            navigate("/guide");
+            const chapter = guideChapterForTopic(topic);
+            navigate(chapter ? `/guide#${chapter}` : "/guide");
           }}
           style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 16 }}
         >
