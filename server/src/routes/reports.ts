@@ -5,8 +5,6 @@ import {
   contracts,
   rateSchedule,
   pricingStreams,
-  depositTerms,
-  depositTransactions,
   units,
   contractUnits,
   properties,
@@ -16,12 +14,27 @@ import { canAccessContract } from "../lib/contractScope.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
 import { loadDepositStatus } from "../billing/depositLoad.js";
+import { loadChargeContext } from "../billing/generate.js";
+import { currentCutoff, planBilling } from "../billing/autoBilling.js";
 import { computeReminders, type ContractReminderInput } from "../reports/reminders.js";
 import { computeOccupancy } from "../reports/occupancy.js";
 import { todayInChina } from "@lcm/shared";
 
 export const reportsRouter = Router();
 reportsRouter.use(requireAuth);
+
+/** Metered fees whose reading is still missing for contracts on automatic
+ * billing — the one thing the nightly job can't do for staff. */
+function missingReadingsFor(contractId: number, status: string, asOfDate: string) {
+  if (status !== "active") return [];
+  try {
+    const ctx = loadChargeContext(contractId);
+    if (!ctx.rules.autoBilling || ctx.rules.billingFrequency !== "monthly") return [];
+    return planBilling(ctx, currentCutoff(asOfDate), asOfDate).missingReadings.map((m) => ({ stream: m.streamLabel, month: m.periodStart.slice(0, 7) }));
+  } catch {
+    return [];
+  }
+}
 
 reportsRouter.get("/reminders", (req, res) => {
   const asOfDate = (req.query.asOf as string) ?? todayInChina();
@@ -40,9 +53,6 @@ reportsRouter.get("/reminders", (req, res) => {
       }));
 
     const deposit = loadDepositStatus(contract.id, asOfDate);
-    const depositRequiredFen = deposit.requiredFen > 0 ? deposit.requiredFen : null;
-    const depositWaived = false; // waived terms are already excluded from requiredFen
-    const depositHeldFen = deposit.heldFen;
 
     const ledger = loadLedgerInputs(contract.id);
     const chargeBalances = ledger.charges.map((c) => ({
@@ -57,10 +67,9 @@ reportsRouter.get("/reminders", (req, res) => {
       termEnd: contract.termEnd,
       renewalNoticeDays: contract.renewalNoticeDays,
       upcomingRateChanges,
-      depositRequiredFen,
-      depositWaived,
-      depositHeldFen,
+      deposit: { state: deposit.state, requiredFen: deposit.requiredFen, heldFen: deposit.heldFen, shortfallFen: deposit.shortfallFen },
       chargeBalances,
+      missingReadings: missingReadingsFor(contract.id, contract.status, asOfDate),
     };
   });
 

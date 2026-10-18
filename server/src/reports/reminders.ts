@@ -1,6 +1,6 @@
 import { daysBetween, type IsoDate } from "@lcm/shared";
 
-export type ReminderType = "renewal_notice" | "rate_change" | "deposit_shortfall" | "overdue_balance";
+export type ReminderType = "renewal_notice" | "rate_change" | "deposit_shortfall" | "deposit_check" | "overdue_balance" | "missing_reading";
 export type ReminderSeverity = "info" | "warning" | "critical";
 
 /** Money fields here are always fen (integer, matching every other amount
@@ -29,6 +29,18 @@ export interface ChargeBalanceInput {
   daysOverdue: number;
 }
 
+export interface MissingReadingInput {
+  stream: string;
+  month: string; // YYYY-MM
+}
+
+export interface DepositReminderInput {
+  state: "none" | "ok" | "short" | "manual";
+  requiredFen: number;
+  heldFen: number;
+  shortfallFen: number;
+}
+
 export interface ContractReminderInput {
   contractId: number;
   referenceNumber: string;
@@ -36,10 +48,9 @@ export interface ContractReminderInput {
   termEnd: IsoDate;
   renewalNoticeDays: number;
   upcomingRateChanges: RateChangeInput[];
-  depositRequiredFen: number | null;
-  depositWaived: boolean;
-  depositHeldFen: number;
+  deposit: DepositReminderInput;
   chargeBalances: ChargeBalanceInput[];
+  missingReadings: MissingReadingInput[];
 }
 
 const RATE_CHANGE_LOOKAHEAD_DAYS = 30;
@@ -50,7 +61,7 @@ const RATE_CHANGE_LOOKAHEAD_DAYS = 30;
  * reminder disappears the moment an amendment, payment, or adjustment
  * resolves it — automatically satisfying "don't send obsolete reminders"
  * without a dedupe table. */
-export function computeReminders(contracts: ContractReminderInput[], asOfDate: IsoDate, overdueEscalationThresholdDays = 10): Reminder[] {
+export function computeReminders(contracts: ContractReminderInput[], asOfDate: IsoDate): Reminder[] {
   const reminders: Reminder[] = [];
 
   for (const c of contracts) {
@@ -82,32 +93,61 @@ export function computeReminders(contracts: ContractReminderInput[], asOfDate: I
       }
     }
 
-    if (!c.depositWaived && c.depositRequiredFen !== null && c.depositHeldFen < c.depositRequiredFen) {
+    if (c.deposit.state === "short") {
       reminders.push({
         contractId: c.contractId,
         referenceNumber: c.referenceNumber,
         type: "deposit_shortfall",
         severity: "warning",
         date: asOfDate,
-        params: { depositHeldFen: c.depositHeldFen, depositRequiredFen: c.depositRequiredFen },
+        params: { depositHeldFen: c.deposit.heldFen, depositRequiredFen: c.deposit.requiredFen, shortfallFen: c.deposit.shortfallFen },
+      });
+    } else if (c.deposit.state === "manual") {
+      reminders.push({
+        contractId: c.contractId,
+        referenceNumber: c.referenceNumber,
+        type: "deposit_check",
+        severity: "info",
+        date: asOfDate,
+        params: { depositHeldFen: c.deposit.heldFen },
       });
     }
 
-    for (const cb of c.chargeBalances) {
-      if (cb.isOverdue && cb.daysOverdue >= overdueEscalationThresholdDays) {
-        reminders.push({
-          contractId: c.contractId,
-          referenceNumber: c.referenceNumber,
-          type: "overdue_balance",
-          severity: cb.daysOverdue >= 30 ? "critical" : "warning",
-          date: cb.dueDate,
-          params: { daysOverdue: cb.daysOverdue, balanceFen: cb.balanceFen, dueDate: cb.dueDate },
-        });
-      }
+    // One overdue reminder per contract, from the first day after the grace
+    // period (days overdue already count from its end): the tenant's total,
+    // how many bills, and how long the oldest has been waiting. Settling or
+    // adjusting the bills makes it disappear on its own.
+    const overdue = c.chargeBalances.filter((cb) => cb.isOverdue && cb.balanceFen > 0);
+    if (overdue.length > 0) {
+      const oldest = overdue.reduce((a, b) => (b.dueDate < a.dueDate ? b : a));
+      const longest = Math.max(...overdue.map((o) => o.daysOverdue));
+      reminders.push({
+        contractId: c.contractId,
+        referenceNumber: c.referenceNumber,
+        type: "overdue_balance",
+        severity: longest >= 30 ? "critical" : "warning",
+        date: oldest.dueDate,
+        params: { count: overdue.length, balanceFen: overdue.reduce((sum, o) => sum + o.balanceFen, 0), daysOverdue: longest, dueDate: oldest.dueDate },
+      });
+    }
+
+    // Metered fees can't be billed without a reading — the one manual input.
+    if (c.missingReadings.length > 0) {
+      const months = Array.from(new Set(c.missingReadings.map((m) => m.month))).sort();
+      reminders.push({
+        contractId: c.contractId,
+        referenceNumber: c.referenceNumber,
+        type: "missing_reading",
+        severity: "warning",
+        date: `${months[0]}-01`,
+        params: { count: c.missingReadings.length, streams: Array.from(new Set(c.missingReadings.map((m) => m.stream))).join(", "), months: months.join(", ") },
+      });
     }
   }
 
-  return reminders;
+  // Most urgent first; within a level, the oldest issue first.
+  const rank: Record<ReminderSeverity, number> = { critical: 0, warning: 1, info: 2 };
+  return reminders.sort((a, b) => rank[a.severity] - rank[b.severity] || a.date.localeCompare(b.date));
 }
 
 function shiftDate(date: IsoDate, deltaDays: number): IsoDate {
