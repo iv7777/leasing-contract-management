@@ -82,6 +82,27 @@ function fixSelfReferentialRunStatus(restoredBackupDir: string) {
   }
 }
 
+/** Re-apply comments to runs that still exist in the restored database. A
+ * snapshot taken before the comment column existed is skipped — the column
+ * arrives with the next start-up migration. */
+function restoreRunComments(comments: { id: number; comment: string }[]) {
+  if (comments.length === 0) return;
+  const patchDb = new Database(DB_PATH);
+  try {
+    const columns = patchDb.prepare(`PRAGMA table_info(backup_runs)`).all() as { name: string }[];
+    if (!columns.some((c) => c.name === "comment")) {
+      console.log("Backup comments were not carried over: the restored snapshot predates them.");
+      return;
+    }
+    const update = patchDb.prepare(`UPDATE backup_runs SET comment = ? WHERE id = ?`);
+    let kept = 0;
+    for (const c of comments) kept += update.run(c.comment, c.id).changes;
+    console.log(`Kept ${kept} backup comment(s) on the runs that exist in the restored database.`);
+  } finally {
+    patchDb.close();
+  }
+}
+
 const [, , target] = process.argv;
 if (!target) {
   console.error("Usage: npm run restore-backup -- <backupRunId | path-to-backup-dir>");
@@ -150,6 +171,17 @@ if (answer.trim() !== "RESTORE") {
   process.exit(1);
 }
 
+// Comments live in the database being replaced, so remember the current ones
+// and re-apply them to the same runs afterwards (best effort).
+let savedComments: { id: number; comment: string }[] = [];
+try {
+  savedComments = sqlite
+    .prepare(`SELECT id, comment FROM backup_runs WHERE comment IS NOT NULL AND comment != ''`)
+    .all() as { id: number; comment: string }[];
+} catch {
+  // the live database predates the comment column — nothing to carry over
+}
+
 sqlite.close(); // release our own handle before touching files on disk
 
 try {
@@ -179,6 +211,7 @@ try {
   }
 
   fixSelfReferentialRunStatus(backupDir);
+  restoreRunComments(savedComments);
 
   console.log("");
   console.log("Restore complete.");

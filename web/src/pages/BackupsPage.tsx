@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Grid, List, Space, Table, Tag, Tooltip, Typography, message } from "antd";
-import { CloudDownloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Grid, Input, List, Modal, Space, Table, Tag, Tooltip, Typography, message } from "antd";
+import { CloudDownloadOutlined, EditOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../api/client";
 import { apiErrorMessage } from "../api/errorMessage";
@@ -16,6 +16,7 @@ interface BackupRunDto {
   backupReference: string | null;
   includedDocumentCount: number | null;
   error: string | null;
+  comment: string | null;
 }
 
 const kindColor: Record<BackupRunDto["kind"], string> = {
@@ -36,6 +37,9 @@ export default function BackupsPage() {
   const [runs, setRuns] = useState<BackupRunDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [editing, setEditing] = useState<BackupRunDto | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -60,6 +64,38 @@ export default function BackupsPage() {
       setRunning(false);
     }
   };
+
+  const openComment = (r: BackupRunDto) => {
+    setEditing(r);
+    setDraft(r.comment ?? "");
+  };
+
+  const saveComment = async () => {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const res = await api.patch<{ id: number; comment: string | null }>(`/backups/${editing.id}/comment`, { comment: draft.trim() || null });
+      setRuns((rs) => rs.map((r) => (r.id === res.id ? { ...r, comment: res.comment } : r)));
+      setEditing(null);
+      message.success(t("backups.commentSaved"));
+    } catch (err) {
+      message.error(apiErrorMessage(err, t));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const commentButton = (r: BackupRunDto) => (
+    <Tooltip title={r.comment ? t("backups.editComment") : t("backups.addComment")}>
+      <Button size="small" icon={<EditOutlined />} onClick={() => openComment(r)} />
+    </Tooltip>
+  );
+
+  const commentLine = (r: BackupRunDto) => (
+    <Typography.Text type="secondary" style={{ whiteSpace: "pre-wrap" }}>
+      {r.comment}
+    </Typography.Text>
+  );
 
   const download = (id: number) => {
     window.open(`/api/backups/${id}/download`, "_blank");
@@ -124,8 +160,17 @@ export default function BackupsPage() {
                       <Typography.Text type="danger">{r.error}</Typography.Text>
                     </>
                   )}
+                  {r.comment && (
+                    <>
+                      <br />
+                      {commentLine(r)}
+                    </>
+                  )}
                 </div>
-                {downloadButton(r)}
+                <Space>
+                  {commentButton(r)}
+                  {downloadButton(r)}
+                </Space>
               </Space>
             </Card>
           )}
@@ -137,6 +182,14 @@ export default function BackupsPage() {
           loading={loading}
           dataSource={runs}
           style={{ marginBottom: 24 }}
+          expandable={{
+            // A run's comment sits on a second line under the row; rows without one stay single-line.
+            expandedRowKeys: runs.filter((r) => r.comment).map((r) => r.id),
+            rowExpandable: (r) => !!r.comment,
+            expandedRowRender: (r) => commentLine(r),
+            expandIcon: () => null,
+            columnWidth: 0,
+          }}
           columns={[
             { title: t("backups.id"), dataIndex: "id", width: 60 },
             {
@@ -162,12 +215,32 @@ export default function BackupsPage() {
             {
               title: t("common.actions"),
               key: "actions",
-              width: 70,
-              render: (_: unknown, r: BackupRunDto) => downloadButton(r),
+              width: 110,
+              render: (_: unknown, r: BackupRunDto) => (
+                <Space>
+                  {commentButton(r)}
+                  {downloadButton(r)}
+                </Space>
+              ),
             },
           ]}
         />
       )}
+
+      <Modal
+        open={!!editing}
+        title={editing ? t("backups.commentTitle", { id: editing.id }) : ""}
+        okText={t("common.save")}
+        confirmLoading={saving}
+        onOk={saveComment}
+        onCancel={() => setEditing(null)}
+        destroyOnClose
+      >
+        <Input.TextArea value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={500} autoSize={{ minRows: 3, maxRows: 8 }} placeholder={t("backups.commentPlaceholder")} />
+        <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+          {t("backups.commentHint")}
+        </Typography.Paragraph>
+      </Modal>
 
       <Alert
         type="info"

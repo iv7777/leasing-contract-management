@@ -329,6 +329,13 @@ const en = {
     documentCount: "Documents referenced",
     error: "Error",
     download: "Download",
+    comment: "Comment",
+    addComment: "Add a comment",
+    editComment: "Edit comment",
+    commentTitle: "Comment on backup #{{id}}",
+    commentPlaceholder: "e.g. Before the year-end close",
+    commentHint: "Leave it empty to remove the comment. Comments stay with the backup list when you restore a database.",
+    commentSaved: "Comment saved.",
     noSnapshot: "No snapshot available",
     retentionNote:
       "Up to 30 daily backups are kept, oldest pruned automatically after each successful run. A weekly backup also starts once those 30 daily slots are full, taken only at Sunday midnight (Asia/Shanghai) and kept up to 30 of its own, pruned the same way.",
@@ -661,7 +668,7 @@ const en = {
     backups: {
       title: "Backups",
       body: "Snapshots of the entire database plus a manifest of the document files referenced at that point in time. Run one manually before a risky change, or rely on the scheduled daily and weekly ones.",
-      tips: "Up to 30 daily and (once those are full) 30 weekly backups are kept automatically; older ones are pruned on their own.\nRestoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
+      tips: "Up to 30 daily and (once those are full) 30 weekly backups are kept automatically; older ones are pruned on their own.\nUse the pencil icon on a row to add a comment (for example why you took it); it shows under the row.\nRestoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
     },
     field: {
       rateBasis:

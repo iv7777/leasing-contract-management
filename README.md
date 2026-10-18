@@ -44,6 +44,8 @@ Writes a consistent SQLite snapshot plus a manifest of every referenced document
 
 **Retention is automatic**: each kind keeps its most recent 30 successful runs and prunes older ones (both the on-disk snapshot directory and the `backup_runs` row) right after a successful backup of that kind — daily and weekly are counted and pruned independently, so one never crowds out the other. Pruning only runs after a confirmed success, so a failed backup never triggers cleanup of otherwise-good ones. Restore-time safety copies (`storage/backups/pre-restore-*`, made automatically by `restore-backup` below) are **not** covered by this retention policy and accumulate until removed by hand.
 
+**Comments**: an Admin can attach a short note (up to 500 characters) to any backup run from the Backups page (`PATCH /api/backups/:id/comment`); it shows on a second line under the run. Because the note lives in the database, `restore-backup` carries the current comments over to the runs that still exist in the restored database.
+
 Restoring: use `deploy/vps-deploy.sh`'s control-panel menu ("Restore the database from a backup", or `--restore-backup`) if you deployed with it — it scans `BACKUP_DIR`, validates each snapshot (SQLite header, and a `PRAGMA integrity_check` when `sqlite3` is available), and lets you pick one. Otherwise, on the server directly:
 
 ```bash

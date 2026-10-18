@@ -437,6 +437,8 @@ export const backupRuns = sqliteTable("backup_runs", {
   backupReference: text("backup_reference"),
   includedDocumentCount: integer("included_document_count"),
   error: text("error"),
+  // Free-text note an Admin can attach to any run (e.g. "before the year-end close").
+  comment: text("comment"),
 });
 
 /** One row per execution of the daily billing job (scheduled or manual), so
