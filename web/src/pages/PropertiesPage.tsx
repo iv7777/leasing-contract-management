@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Button, Card, Form, Grid, Input, List, Modal, Space, Switch, Table, Tag, Typography } from "antd";
+import { Button, Card, Form, Grid, Input, List, Modal, Space, Switch, Table, Tag, Tooltip, Typography } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import type { PropertyDto } from "@lcm/shared";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useOverdueSummary } from "../components/billing/useOverdueSummary";
+import { yuan } from "../components/billing/format";
 
 const { useBreakpoint } = Grid;
 
@@ -21,6 +23,17 @@ export default function PropertiesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const { byProperty: overdueByProperty } = useOverdueSummary();
+
+  const overdueTag = (id: number) => {
+    const o = overdueByProperty.get(id);
+    if (!o) return null;
+    return (
+      <Tooltip title={t("billing.propertyOverdueTip", { count: o.contractCount, amount: yuan(o.overdueFen) })}>
+        <Tag color="red">{t("billing.propertyOverdue", { count: o.contractCount })}</Tag>
+      </Tooltip>
+    );
+  };
 
   const load = () => {
     setLoading(true);
@@ -68,7 +81,7 @@ export default function PropertiesPage() {
           dataSource={visibleProperties}
           renderItem={(p) => (
             <Card style={{ marginBottom: 12 }} onClick={() => navigate(`/properties/${p.id}`)}>
-              <Typography.Text strong>{displayName(p)}</Typography.Text>
+              <Typography.Text strong>{displayName(p)}</Typography.Text> {overdueTag(p.id)}
               <br />
               <Typography.Text type="secondary">{p.address}</Typography.Text>
               {p.archived && (
@@ -89,6 +102,7 @@ export default function PropertiesPage() {
           columns={[
             { title: t("common.name"), dataIndex: "name", render: (_, p) => displayName(p) },
             { title: t("common.address"), dataIndex: "address" },
+            { title: t("billing.overdueColumn"), key: "overdue", width: 130, render: (_: unknown, p: PropertyDto) => overdueTag(p.id) },
             {
               title: t("common.archived"),
               dataIndex: "archived",

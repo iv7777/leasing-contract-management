@@ -13,6 +13,7 @@ import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { loadDepositStatus } from "../billing/depositLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
 import { buildOverview, type OverviewContractInput } from "../billing/overviewCalc.js";
+import { activeContractIds, buildOverdueSummary } from "../billing/overdueSummary.js";
 import { monthEndOf, monthStartOf } from "../billing/billingSchedule.js";
 import { addMonths, todayInChina } from "@lcm/shared";
 
@@ -170,6 +171,16 @@ billingRouter.post("/billing/run", requireRole("admin"), (req, res) => {
 // ---------------------------------------------------------------------------
 // "What's due" overview for whoever is logged in (scoped to their properties)
 // ---------------------------------------------------------------------------
+
+/** Lightweight "who is overdue" for the dots and tags on the list pages and
+ * the contract page. Same visibility rules as the overview; pass contractId to
+ * ask about one contract. */
+billingRouter.get("/billing/overdue-summary", (req, res) => {
+  const today = todayInChina();
+  const only = req.query.contractId ? Number(req.query.contractId) : null;
+  const ids = (only ? [only] : activeContractIds()).filter((id) => canAccessContract(req.user!, id));
+  res.json({ asOf: today, ...buildOverdueSummary(ids, today) });
+});
 
 billingRouter.get("/billing/overview", (req, res) => {
   const today = todayInChina();

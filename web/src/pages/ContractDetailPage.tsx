@@ -21,6 +21,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   Upload,
   message,
@@ -887,6 +888,17 @@ export default function ContractDetailPage() {
     }
   };
 
+  // Same balance rules as the Dashboard and Reminders, from the ledger already on this page.
+  const overdueBalances = chargeBalances.filter((b) => b.isOverdue && b.balanceFen > 0);
+  const overdue =
+    contract.status === "active" && overdueBalances.length > 0
+      ? {
+          count: overdueBalances.length,
+          fen: overdueBalances.reduce((sum, b) => sum + b.balanceFen, 0),
+          days: Math.max(...overdueBalances.map((b) => b.daysOverdue)),
+        }
+      : null;
+
   return (
     <div>
       <Space wrap style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
@@ -896,8 +908,15 @@ export default function ContractDetailPage() {
         <Space wrap>
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           <Tag>v{contract.versionNumber}</Tag>
+          {overdue && (
+            <Tooltip title={t("billing.overdueTip", { count: overdue.count, amount: yuan(overdue.fen), days: overdue.days })}>
+              <Tag color="red" style={{ cursor: "pointer" }} onClick={() => setActiveTab("charges")}>
+                {t("billing.overdueTag", { amount: yuan(overdue.fen), days: overdue.days })}
+              </Tag>
+            </Tooltip>
+          )}
           {contract.status === "active" && depositStatus?.state === "short" && (
-            <Tag color="red" style={{ cursor: "pointer" }} onClick={() => setActiveTab("deposit")}>
+            <Tag color="orange" style={{ cursor: "pointer" }} onClick={() => setActiveTab("deposit")}>
               {t("billing.deposit.shortTag", { amount: yuan(depositStatus.shortfallFen) })}
             </Tag>
           )}
@@ -1253,7 +1272,7 @@ export default function ContractDetailPage() {
             key: "deposit",
             label:
               contract.status === "active" && (depositStatus?.state === "short" || depositStatus?.state === "manual") ? (
-                <Badge dot color={depositStatus.state === "short" ? "#b3423a" : "#b8860b"} offset={[6, 0]}>
+                <Badge dot color="#d48806" offset={[6, 0]}>
                   {t("contracts.depositTerms")}
                 </Badge>
               ) : (
@@ -1484,7 +1503,15 @@ export default function ContractDetailPage() {
           },
           {
             key: "charges",
-            label: t("contracts.charges"),
+            label: overdue ? (
+              <Tooltip title={t("billing.overdueTip", { count: overdue.count, amount: yuan(overdue.fen), days: overdue.days })}>
+                <Badge dot color="#b3423a" offset={[6, 0]}>
+                  {t("contracts.charges")}
+                </Badge>
+              </Tooltip>
+            ) : (
+              t("contracts.charges")
+            ),
             children: (
               <>
                 {contract.status === "active" && billingRulesInfo && (

@@ -415,6 +415,11 @@ const zh: Translations = {
       done: "新增 {{created}} 个读数，更新 {{updated}} 个。",
       locked: "该读数已生成账单，无法修改。",
     },
+    overdueColumn: "逾期",
+    overdueTag: "逾期 {{amount}} · {{days}} 天",
+    overdueTip: "已超过宽限期：{{count}} 笔账单，合计 {{amount}}；最早的一笔已逾期 {{days}} 天。",
+    propertyOverdue: "{{count}} 份逾期",
+    propertyOverdueTip: "此处有 {{count}} 份合同存在逾期余额，合计 {{amount}}。",
     deposit: {
       required: "应收押金",
       held: "已收押金",
@@ -584,7 +589,7 @@ const zh: Translations = {
       list: {
         title: "合同",
         body: "所有物业下的全部租赁合同。草稿合同仍在录入阶段，在管理员将其生效之前，不会出现在系统的其他任何地方（不产生账单、不产生提醒）。合同生效后，后续的大部分变更需通过变更流程完成，而非直接编辑。",
-        tips: "导出CSV会按当前界面语言导出完整的合同列表。\n「版本」列会在每次该合同的变更获批后递增，可借此快速了解一份合同经历过多少次变更。",
+        tips: "导出CSV会按当前界面语言导出完整的合同列表。\n红色标签表示该合同已超过宽限期的逾期金额，以及最早一笔账单的逾期天数；账目正常的合同不显示标签。\n「版本」列会在每次该合同的变更获批后递增，可借此快速了解一份合同经历过多少次变更。",
       },
       detail: {
         title: "合同",

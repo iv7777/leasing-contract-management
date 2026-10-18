@@ -413,6 +413,11 @@ const en = {
       done: "{{created}} readings added, {{updated}} updated.",
       locked: "A charge has already been generated from this reading.",
     },
+    overdueColumn: "Overdue",
+    overdueTag: "Overdue {{amount}} · {{days}} d",
+    overdueTip: "Past the grace period: {{count}} bill(s) totalling {{amount}}; the oldest is {{days}} days overdue.",
+    propertyOverdue: "{{count}} overdue",
+    propertyOverdueTip: "{{count}} contract(s) here have overdue balances, {{amount}} in total.",
     deposit: {
       required: "Deposit required",
       held: "Deposit held",
@@ -582,7 +587,7 @@ const en = {
       list: {
         title: "Contracts",
         body: "Every lease contract, across every property. Draft contracts are still being set up and don't appear anywhere else in the system (no charges, no reminders) until an Admin activates them. Once active, most further changes go through the amendment workflow rather than direct edits.",
-        tips: "Export CSV downloads the full contract list in the currently selected display language.\nThe \"Version\" column increments every time an amendment is approved on that contract — it's a quick way to see how many changes a contract has been through.",
+        tips: "Export CSV downloads the full contract list in the currently selected display language.\nA red tag shows what a contract has overdue (past its grace period) and how old the oldest bill is; contracts that are up to date show nothing.\nThe \"Version\" column increments every time an amendment is approved on that contract — it's a quick way to see how many changes a contract has been through.",
       },
       detail: {
         title: "Contract",

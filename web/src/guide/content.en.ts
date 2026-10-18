@@ -392,7 +392,7 @@ export const guideEn: GuideContent = {
       blocks: [
         {
           type: "p",
-          text: "On the **Deposit** tab you see **Required**, **Held** and **Shortfall**. A shortfall also shows as a red tag beside the contract's status, a dot on the Deposit tab, a box on the Dashboard and a Reminder.",
+          text: "On the **Deposit** tab you see **Required**, **Held** and **Shortfall**. A shortfall also shows as an orange tag beside the contract's status, an orange dot on the Deposit tab, a box on the Dashboard and a Reminder.",
         },
         {
           type: "steps",
@@ -601,7 +601,9 @@ export const guideEn: GuideContent = {
             ["Not billed yet", "A bill the system will create"],
             ["Voided", "A bill cancelled by an Admin — kept on record, owes nothing"],
             ["Automatic billing: on / off", "Whether the nightly job creates this contract's bills"],
-            ["Red tag “Deposit short …”", "Less deposit held than the contract requires"],
+            ["{red:Overdue ¥… · N d}", "Red tag on the Contracts list and the contract page: the amount past the grace period and the age of the oldest bill. A red dot on the **Charges** tab marks the same thing"],
+            ["{red:N overdue}", "Red tag on the Properties list: how many contracts in that property have overdue balances"],
+            ["{amber:Deposit short …}", "Orange tag and dot: less deposit held than the contract requires"],
             ["Red reminder", "Urgent — overdue 30+ days, or a renewal deadline within 30 days"],
           ],
         },

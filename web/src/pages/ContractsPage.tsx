@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Typography, Card } from "antd";
+import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Tooltip, Typography, Card } from "antd";
 import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -8,6 +8,8 @@ import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { HelpIcon } from "../help/HelpIcon";
 import DateField from "../components/DateField";
+import { useOverdueSummary } from "../components/billing/useOverdueSummary";
+import { yuan } from "../components/billing/format";
 
 interface ContractDto {
   id: number;
@@ -43,6 +45,17 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const { byContract: overdueByContract } = useOverdueSummary();
+
+  const overdueTag = (id: number) => {
+    const o = overdueByContract.get(id);
+    if (!o) return null;
+    return (
+      <Tooltip title={t("billing.overdueTip", { count: o.overdueCount, amount: yuan(o.overdueFen), days: o.maxDaysOverdue })}>
+        <Tag color="red">{t("billing.overdueTag", { amount: yuan(o.overdueFen), days: o.maxDaysOverdue })}</Tag>
+      </Tooltip>
+    );
+  };
 
   const load = () => {
     setLoading(true);
@@ -130,6 +143,7 @@ export default function ContractsPage() {
           renderItem={(c) => (
             <Card style={{ marginBottom: 12 }} onClick={() => navigate(`/contracts/${c.id}`)}>
               <Typography.Text strong>{c.referenceNumber}</Typography.Text> <Tag color={statusColor[c.status]}>{t(`contracts.${c.status}`)}</Tag>
+              {overdueTag(c.id)}
               <br />
               <Typography.Text type="secondary">
                 {partyLink(c.tenantPartyId)} · {c.termStart} → {c.termEnd}
@@ -164,6 +178,7 @@ export default function ContractsPage() {
               dataIndex: "status",
               render: (s: ContractDto["status"]) => <Tag color={statusColor[s]}>{t(`contracts.${s}`)}</Tag>,
             },
+            { title: t("billing.overdueColumn"), key: "overdue", render: (_: unknown, c: ContractDto) => overdueTag(c.id) },
             { title: t("contracts.version"), dataIndex: "versionNumber" },
           ]}
         />
