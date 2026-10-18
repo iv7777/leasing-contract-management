@@ -222,13 +222,20 @@ billingRouter.get("/billing/overview", (req, res) => {
       const ctx = loadChargeContext(contract.id);
       if (ctx.rules.billingFrequency !== "monthly") {
         notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "not_monthly" });
-      } else if (!ctx.rules.autoBilling) {
-        notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
       } else {
+        const autoOn = ctx.rules.autoBilling;
+        if (!autoOn) notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
         const plan = planBilling(ctx, lookAheadCutoff, today);
-        projected = plan.charges.map((c) => ({ feeType: c.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
-        for (const m of plan.missingReadings) {
-          missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
+        // A contract that isn't on automatic billing yet still shows what is
+        // coming — but only dues still ahead of today: its unbilled history is
+        // what Catch up billing is for, and would swamp the forecast.
+        projected = plan.charges
+          .filter((c) => autoOn || c.dueDate > today)
+          .map((c) => ({ feeType: c.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
+        if (autoOn) {
+          for (const m of plan.missingReadings) {
+            missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
+          }
         }
       }
     } catch {
