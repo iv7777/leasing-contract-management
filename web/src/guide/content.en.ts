@@ -521,7 +521,7 @@ export const guideEn: GuideContent = {
             "**Audit Log** (Admin): who did what, and when.",
           ],
         },
-        { type: "callout", kind: "tip", title: "Backups and restore (Admin)", text: "The system makes a daily backup (30 kept) and, once those are full, a weekly one (30 kept). The Backups page lists them. Restoring is done from the server's control panel, which scans, validates and lets you pick one." },
+        { type: "callout", kind: "tip", title: "Backups and restore (Admin)", text: "The system makes a daily backup (30 kept) and, once those are full, a weekly one (30 kept). The Backups page lists them. Restoring is done from the server's control panel, which scans, validates and lets you pick one. To keep a backup for good (before a big change, at go-live), press its pin icon to mark it **Permanent**: it is never deleted and doesn't use up one of the 30." },
       ],
     },
     {

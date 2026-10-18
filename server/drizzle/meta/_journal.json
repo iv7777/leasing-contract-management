@@ -64,6 +64,13 @@
       "when": 1792320268794,
       "tag": "0008_legal_jasper_sitwell",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792322127768,
+      "tag": "0009_cool_spectrum",
+      "breakpoints": true
     }
   ]
 }

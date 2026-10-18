@@ -439,6 +439,9 @@ export const backupRuns = sqliteTable("backup_runs", {
   error: text("error"),
   // Free-text note an Admin can attach to any run (e.g. "before the year-end close").
   comment: text("comment"),
+  // A permanent backup is never pruned and does not count toward its kind's
+  // retention limit (nor toward "the daily rotation is full" for weeklies).
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
 });
 
 /** One row per execution of the daily billing job (scheduled or manual), so

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Grid, Input, List, Modal, Space, Table, Tag, Tooltip, Typography, message } from "antd";
-import { CloudDownloadOutlined, EditOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Grid, Input, List, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography, message } from "antd";
+import { CloudDownloadOutlined, EditOutlined, PushpinFilled, PushpinOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../api/client";
 import { apiErrorMessage } from "../api/errorMessage";
@@ -17,6 +17,7 @@ interface BackupRunDto {
   includedDocumentCount: number | null;
   error: string | null;
   comment: string | null;
+  pinned: boolean;
 }
 
 const kindColor: Record<BackupRunDto["kind"], string> = {
@@ -37,6 +38,7 @@ export default function BackupsPage() {
   const [runs, setRuns] = useState<BackupRunDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [permanent, setPermanent] = useState({ count: 0, sizeBytes: 0 });
   const [editing, setEditing] = useState<BackupRunDto | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -44,8 +46,11 @@ export default function BackupsPage() {
   const load = () => {
     setLoading(true);
     void api
-      .get<{ runs: BackupRunDto[] }>("/backups")
-      .then((r) => setRuns(r.runs))
+      .get<{ runs: BackupRunDto[]; permanent: { count: number; sizeBytes: number } }>("/backups")
+      .then((r) => {
+        setRuns(r.runs);
+        setPermanent(r.permanent);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -84,6 +89,37 @@ export default function BackupsPage() {
       setSaving(false);
     }
   };
+
+  const setPinned = async (r: BackupRunDto, pinned: boolean) => {
+    try {
+      const res = await api.patch<{ id: number; pinned: boolean; removed: boolean }>(`/backups/${r.id}/pin`, { pinned });
+      message.success(t(pinned ? "backups.pinnedDone" : res.removed ? "backups.unpinnedRemoved" : "backups.unpinnedDone"));
+      load();
+    } catch (err) {
+      message.error(apiErrorMessage(err, t));
+    }
+  };
+
+  const pinButton = (r: BackupRunDto) => {
+    if (!r.pinned && !(r.status === "succeeded" && r.backupReference)) return null;
+    return (
+      <Popconfirm
+        title={t(r.pinned ? "backups.unpinTitle" : "backups.pinTitle", { id: r.id })}
+        description={t(r.pinned ? "backups.unpinBody" : "backups.pinBody")}
+        okText={t("common.confirm")}
+        cancelText={t("common.cancel")}
+        onConfirm={() => setPinned(r, !r.pinned)}
+      >
+        <Tooltip title={r.pinned ? t("backups.unpin") : t("backups.pin")}>
+          <Button size="small" type={r.pinned ? "primary" : "default"} icon={r.pinned ? <PushpinFilled /> : <PushpinOutlined />} />
+        </Tooltip>
+      </Popconfirm>
+    );
+  };
+
+  const permanentTag = (r: BackupRunDto) => (r.pinned ? <Tag color="gold">{t("backups.permanentTag")}</Tag> : null);
+
+  const formatSize = (bytes: number) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
   const commentButton = (r: BackupRunDto) => (
     <Tooltip title={r.comment ? t("backups.editComment") : t("backups.addComment")}>
@@ -130,6 +166,12 @@ export default function BackupsPage() {
       <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
         {t("backups.retentionNote")}
       </Typography.Paragraph>
+      {permanent.count > 0 && (
+        <Typography.Paragraph style={{ marginBottom: 16 }}>
+          <Tag color="gold">{t("backups.permanentTag")}</Tag>
+          {t("backups.permanentSummary", { count: permanent.count, size: formatSize(permanent.sizeBytes) })}
+        </Typography.Paragraph>
+      )}
 
       {isMobile ? (
         <List
@@ -142,6 +184,7 @@ export default function BackupsPage() {
                 <div>
                   <Typography.Text strong>#{r.id}</Typography.Text> <Tag color={kindColor[r.kind]}>{t(`backups.kinds.${r.kind}`)}</Tag>{" "}
                   <Tag color={statusColor[r.status]}>{t(`backups.${r.status}`)}</Tag>
+                  {permanentTag(r)}
                   <br />
                   <Typography.Text type="secondary">
                     {t("backups.startedAt")}: {formatDateTime(r.startedAt)}
@@ -168,6 +211,7 @@ export default function BackupsPage() {
                   )}
                 </div>
                 <Space>
+                  {pinButton(r)}
                   {commentButton(r)}
                   {downloadButton(r)}
                 </Space>
@@ -195,8 +239,13 @@ export default function BackupsPage() {
             {
               title: t("backups.kind"),
               dataIndex: "kind",
-              width: 90,
-              render: (k: BackupRunDto["kind"]) => <Tag color={kindColor[k]}>{t(`backups.kinds.${k}`)}</Tag>,
+              width: 170,
+              render: (k: BackupRunDto["kind"], r: BackupRunDto) => (
+                <>
+                  <Tag color={kindColor[k]}>{t(`backups.kinds.${k}`)}</Tag>
+                  {permanentTag(r)}
+                </>
+              ),
             },
             { title: t("backups.startedAt"), dataIndex: "startedAt", width: 150, render: (v: string) => formatDateTime(v) },
             { title: t("backups.completedAt"), dataIndex: "completedAt", width: 150, render: (v: string | null) => formatDateTime(v) },
@@ -215,9 +264,10 @@ export default function BackupsPage() {
             {
               title: t("common.actions"),
               key: "actions",
-              width: 110,
+              width: 150,
               render: (_: unknown, r: BackupRunDto) => (
                 <Space>
+                  {pinButton(r)}
                   {commentButton(r)}
                   {downloadButton(r)}
                 </Space>

@@ -337,8 +337,19 @@ const en = {
     commentHint: "Leave it empty to remove the comment. Comments stay with the backup list when you restore a database.",
     commentSaved: "Comment saved.",
     noSnapshot: "No snapshot available",
+    pin: "Make permanent",
+    unpin: "Remove permanent mark",
+    permanentTag: "Permanent",
+    pinTitle: "Make backup #{{id}} permanent?",
+    pinBody: "It will never be deleted automatically and will not count toward the 30 copies. It keeps using disk space until you un-mark it.",
+    unpinTitle: "Remove the permanent mark from backup #{{id}}?",
+    unpinBody: "It rejoins the normal rotation. If it is older than the newest 30, it is deleted immediately.",
+    pinnedDone: "Marked permanent.",
+    unpinnedDone: "Permanent mark removed.",
+    unpinnedRemoved: "Permanent mark removed — the backup was beyond the 30-copy limit and has been deleted.",
+    permanentSummary: " {{count}} permanent backup(s), {{size}} on disk — kept until you remove the mark.",
     retentionNote:
-      "Up to 30 daily backups are kept, oldest pruned automatically after each successful run. A weekly backup also starts once those 30 daily slots are full, taken only at Sunday midnight (Asia/Shanghai) and kept up to 30 of its own, pruned the same way.",
+      "Up to 30 daily backups are kept, oldest pruned automatically after each successful run. A weekly backup also starts once those 30 daily slots are full, taken only at Sunday midnight (Asia/Shanghai) and kept up to 30 of its own, pruned the same way. Backups marked Permanent (pin icon) are never removed automatically and do not count toward either 30.",
     restoreTitle: "Restoring from a backup",
     restoreBody:
       "Restoring the database is a server-side operation, not a one-click web action — swapping the live database out from under a running server is risky to do any other way. On a server set up with vps-deploy.sh, use its control panel's \"Restore the database from a backup\" option (or --restore-backup) — it scans and validates the backups for you and picks the one you choose. Otherwise, run this directly on the server:",
@@ -673,7 +684,7 @@ const en = {
     backups: {
       title: "Backups",
       body: "Snapshots of the entire database plus a manifest of the document files referenced at that point in time. Run one manually before a risky change, or rely on the scheduled daily and weekly ones.",
-      tips: "Up to 30 daily and (once those are full) 30 weekly backups are kept automatically; older ones are pruned on their own.\nUse the pencil icon on a row to add a comment (for example why you took it); it shows under the row.\nRestoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
+      tips: "Up to 30 daily and (once those are full) 30 weekly backups are kept automatically; older ones are pruned on their own.\nUse the pin icon to mark a backup Permanent — it is then kept forever and doesn't count toward the 30 (un-marking returns it to the rotation and may delete it at once).\nUse the pencil icon on a row to add a comment (for example why you took it); it shows under the row.\nRestoring a backup is a server-side operation for safety reasons — it's not a one-click action from this page. See the instructions below the table.",
     },
     field: {
       rateBasis:

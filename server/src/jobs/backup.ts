@@ -12,12 +12,13 @@ const DB_PATH = process.env.DATABASE_PATH ?? "./data/app.db";
 const BACKUP_DIR = process.env.BACKUP_DIR ?? "./storage/backups";
 const DOCUMENT_STORAGE_DIR = process.env.DOCUMENT_STORAGE_DIR ?? "./storage/documents";
 
+/** Runs that occupy a retention slot: successful and not permanent. */
+function rotatingRuns(kind: BackupKind) {
+  return and(eq(backupRuns.kind, kind), eq(backupRuns.status, "succeeded"), eq(backupRuns.pinned, false));
+}
+
 export function countSucceededRuns(kind: BackupKind): number {
-  return db
-    .select({ id: backupRuns.id })
-    .from(backupRuns)
-    .where(and(eq(backupRuns.kind, kind), eq(backupRuns.status, "succeeded")))
-    .all().length;
+  return db.select({ id: backupRuns.id }).from(backupRuns).where(rotatingRuns(kind)).all().length;
 }
 
 /** Deletes a pruned run's on-disk snapshot directory (if still present) and
@@ -30,11 +31,13 @@ function deleteBackupRun(run: { id: number; backupReference: string | null }) {
   db.delete(backupRuns).where(eq(backupRuns.id, run.id)).run();
 }
 
-function pruneOldRuns(kind: BackupKind, retentionLimit: number): number {
+/** Prunes this kind's oldest rotating runs beyond the limit. Permanent
+ * (pinned) runs are neither counted nor ever deleted here. */
+export function pruneOldRuns(kind: BackupKind, retentionLimit: number): number {
   const runs = db
     .select({ id: backupRuns.id, backupReference: backupRuns.backupReference })
     .from(backupRuns)
-    .where(and(eq(backupRuns.kind, kind), eq(backupRuns.status, "succeeded")))
+    .where(rotatingRuns(kind))
     .orderBy(asc(backupRuns.id))
     .all();
   const toPrune = selectRunsToPrune(
@@ -45,6 +48,13 @@ function pruneOldRuns(kind: BackupKind, retentionLimit: number): number {
     deleteBackupRun(runs.find((r) => r.id === id)!);
   }
   return toPrune.length;
+}
+
+/** Applies the normal retention limits to both kinds — used right after a
+ * backup is un-pinned and so rejoins the rotation. */
+export function pruneAllKinds(): void {
+  pruneOldRuns("daily", DAILY_RETENTION_LIMIT);
+  pruneOldRuns("weekly", WEEKLY_RETENTION_LIMIT);
 }
 
 /** Takes a consistent SQLite snapshot (via the native backup API, safe to

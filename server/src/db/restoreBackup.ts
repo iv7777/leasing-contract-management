@@ -82,22 +82,36 @@ function fixSelfReferentialRunStatus(restoredBackupDir: string) {
   }
 }
 
-/** Re-apply comments to runs that still exist in the restored database. A
- * snapshot taken before the comment column existed is skipped — the column
- * arrives with the next start-up migration. */
-function restoreRunComments(comments: { id: number; comment: string }[]) {
-  if (comments.length === 0) return;
+/** Re-apply comments and permanent flags. A permanent backup newer than the
+ * restored snapshot has no row there at all, so its row is put back — it must
+ * stay listed and protected. A snapshot taken before these columns existed is
+ * skipped; the columns arrive with the next start-up migration, and any
+ * permanent backups are reported so their folders can be found by hand. */
+function restoreRunMetadata(runs: SavedRun[]) {
+  if (runs.length === 0) return;
   const patchDb = new Database(DB_PATH);
   try {
-    const columns = patchDb.prepare(`PRAGMA table_info(backup_runs)`).all() as { name: string }[];
-    if (!columns.some((c) => c.name === "comment")) {
-      console.log("Backup comments were not carried over: the restored snapshot predates them.");
+    const columns = (patchDb.prepare(`PRAGMA table_info(backup_runs)`).all() as { name: string }[]).map((c) => c.name);
+    if (!columns.includes("comment") || !columns.includes("pinned")) {
+      console.log("Backup comments / permanent flags were not carried over: the restored snapshot predates them.");
+      for (const r of runs.filter((x) => x.pinned)) console.log(`  Permanent backup #${r.id} is still on disk at: ${r.backup_reference}`);
       return;
     }
-    const update = patchDb.prepare(`UPDATE backup_runs SET comment = ? WHERE id = ?`);
-    let kept = 0;
-    for (const c of comments) kept += update.run(c.comment, c.id).changes;
-    console.log(`Kept ${kept} backup comment(s) on the runs that exist in the restored database.`);
+    const update = patchDb.prepare(`UPDATE backup_runs SET comment = ?, pinned = ? WHERE id = ?`);
+    const insert = patchDb.prepare(
+      `INSERT INTO backup_runs (id, kind, started_at, completed_at, status, backup_reference, included_document_count, error, comment, pinned)
+       VALUES (@id, @kind, @started_at, @completed_at, @status, @backup_reference, @included_document_count, @error, @comment, @pinned)`
+    );
+    let updated = 0;
+    let reinstated = 0;
+    for (const r of runs) {
+      if (update.run(r.comment, r.pinned, r.id).changes > 0) updated++;
+      else if (r.pinned) {
+        insert.run(r);
+        reinstated++;
+      }
+    }
+    console.log(`Kept comments/permanent flags on ${updated} backup(s)` + (reinstated ? `; put ${reinstated} permanent backup(s) newer than the snapshot back on the list.` : "."));
   } finally {
     patchDb.close();
   }
@@ -171,15 +185,27 @@ if (answer.trim() !== "RESTORE") {
   process.exit(1);
 }
 
-// Comments live in the database being replaced, so remember the current ones
-// and re-apply them to the same runs afterwards (best effort).
-let savedComments: { id: number; comment: string }[] = [];
+// Comments and permanent flags live in the database being replaced, so
+// remember them (permanent runs in full) and re-apply them afterwards.
+interface SavedRun {
+  id: number;
+  kind: string;
+  started_at: string;
+  completed_at: string | null;
+  status: string;
+  backup_reference: string | null;
+  included_document_count: number | null;
+  error: string | null;
+  comment: string | null;
+  pinned: number;
+}
+let savedRuns: SavedRun[] = [];
 try {
-  savedComments = sqlite
-    .prepare(`SELECT id, comment FROM backup_runs WHERE comment IS NOT NULL AND comment != ''`)
-    .all() as { id: number; comment: string }[];
+  savedRuns = sqlite
+    .prepare(`SELECT * FROM backup_runs WHERE pinned = 1 OR (comment IS NOT NULL AND comment != '')`)
+    .all() as SavedRun[];
 } catch {
-  // the live database predates the comment column — nothing to carry over
+  // the live database predates these columns — nothing to carry over
 }
 
 sqlite.close(); // release our own handle before touching files on disk
@@ -211,7 +237,7 @@ try {
   }
 
   fixSelfReferentialRunStatus(backupDir);
-  restoreRunComments(savedComments);
+  restoreRunMetadata(savedRuns);
 
   console.log("");
   console.log("Restore complete.");
