@@ -39,6 +39,7 @@ export default function ContractsPage() {
   const filterPartyId = Number(searchParams.get("partyId")) || null;
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.md;
+  const wide = !!screens.xl;
 
   const [contracts, setContracts] = useState<ContractDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
@@ -47,12 +48,14 @@ export default function ContractsPage() {
   const [form] = Form.useForm();
   const { byContract: overdueByContract } = useOverdueSummary();
 
-  const overdueTag = (id: number) => {
+  const overdueTag = (id: number, compact = false) => {
     const o = overdueByContract.get(id);
     if (!o) return null;
     return (
       <Tooltip title={t("billing.overdueTip", { count: o.overdueCount, amount: yuan(o.overdueFen), days: o.maxDaysOverdue })}>
-        <Tag color="red">{t("billing.overdueTag", { amount: yuan(o.overdueFen), days: o.maxDaysOverdue })}</Tag>
+        <Tag color="red" style={compact ? { display: "block", width: "fit-content", maxWidth: "100%", marginTop: 4, whiteSpace: "normal" } : undefined}>
+          {t("billing.overdueTag", { amount: yuan(o.overdueFen), days: o.maxDaysOverdue })}
+        </Tag>
       </Tooltip>
     );
   };
@@ -163,23 +166,51 @@ export default function ContractsPage() {
           loading={loading}
           dataSource={visibleContracts}
           onRow={(c) => ({ onClick: () => navigate(`/contracts/${c.id}`), style: { cursor: "pointer" } })}
+          // Like Tenants & Landlords: compact rows, text columns that wrap instead of
+          // pushing the table wider, and a narrow-screen layout (a phone held sideways
+          // still gets this table) that folds the two dates into one column and puts
+          // the overdue tag under the status.
+          size={wide ? "middle" : "small"}
           columns={[
-            { title: t("contracts.reference"), dataIndex: "referenceNumber" },
-            { title: t("contracts.tenant"), dataIndex: "tenantPartyId", render: (id: number) => partyLink(id) },
+            { title: t("contracts.reference"), dataIndex: "referenceNumber", render: (v: string) => <div style={{ minWidth: wide ? undefined : 70, wordBreak: "break-all" }}>{v}</div> },
+            { title: t("contracts.tenant"), dataIndex: "tenantPartyId", render: (id: number) => <div style={{ minWidth: wide ? undefined : 70, wordBreak: "break-all" }}>{partyLink(id)}</div> },
             {
               title: t("contracts.units"),
               dataIndex: "unitLabels",
-              render: (labels: string[]) => labels.join(", ") || "—",
+              render: (labels: string[]) => <div style={{ minWidth: wide ? undefined : 50, wordBreak: "break-all" }}>{labels.join(", ") || "—"}</div>,
             },
-            { title: t("contracts.termStart"), dataIndex: "termStart" },
-            { title: t("contracts.termEnd"), dataIndex: "termEnd" },
+            ...(wide
+              ? [
+                  { title: t("contracts.termStart"), dataIndex: "termStart" },
+                  { title: t("contracts.termEnd"), dataIndex: "termEnd" },
+                ]
+              : [
+                  {
+                    title: t("contracts.termStart") + " / " + t("contracts.termEnd"),
+                    key: "term",
+                    width: 96,
+                    render: (_: unknown, c: ContractDto) => (
+                      <>
+                        {c.termStart}
+                        <br />
+                        {c.termEnd}
+                      </>
+                    ),
+                  },
+                ]),
             {
               title: t("contracts.status"),
               dataIndex: "status",
-              render: (s: ContractDto["status"]) => <Tag color={statusColor[s]}>{t(`contracts.${s}`)}</Tag>,
+              width: wide ? undefined : 100,
+              render: (s: ContractDto["status"], c: ContractDto) => (
+                <>
+                  <Tag color={statusColor[s]}>{t(`contracts.${s}`)}</Tag>
+                  {!wide && overdueTag(c.id, true)}
+                </>
+              ),
             },
-            { title: t("billing.overdueColumn"), key: "overdue", render: (_: unknown, c: ContractDto) => overdueTag(c.id) },
-            { title: t("contracts.version"), dataIndex: "versionNumber" },
+            ...(wide ? [{ title: t("billing.overdueColumn"), key: "overdue", render: (_: unknown, c: ContractDto) => overdueTag(c.id) }] : []),
+            { title: t("contracts.version"), dataIndex: "versionNumber", width: wide ? undefined : 56 },
           ]}
         />
       )}

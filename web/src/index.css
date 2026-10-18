@@ -38,22 +38,6 @@ body {
   }
 }
 
-/* Tables never squeeze their columns or push the page wider than the screen:
- * each table keeps its natural width and scrolls sideways inside its own box
- * when the space is short (e.g. a phone held sideways, which still gets the
- * desktop layout). A cell's text is capped so one long value (an address, an
- * error message) can't make the whole table enormous — it wraps instead. */
 .ant-layout-content {
   min-width: 0;
-}
-.ant-table-wrapper .ant-table-content {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.ant-table-wrapper .ant-table-content > table {
-  min-width: max-content;
-}
-.ant-table-wrapper .ant-table-thead > tr > th,
-.ant-table-wrapper .ant-table-tbody > tr > td {
-  max-width: 360px;
 }
