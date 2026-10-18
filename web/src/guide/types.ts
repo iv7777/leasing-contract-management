@@ -63,5 +63,6 @@ export interface GuideContent {
   resultsFor: string;
   youllSee: string;
   stepWord: string;
+  backToTop: string;
   chapters: Chapter[];
 }

@@ -16,6 +16,7 @@ export const guideEn: GuideContent = {
   resultsFor: "{{n}} chapter(s) mention “{{q}}”.",
   youllSee: "You'll see:",
   stepWord: "Step",
+  backToTop: "Back to top",
   groups: { start: "Start here", life: "The lifecycle", learn: "Learn by example" },
   stages: [
     { title: "Prepare", text: "Property, units, parties", chapter: "prepare" },

@@ -15,6 +15,7 @@ export const guideZh: GuideContent = {
   resultsFor: "有 {{n}} 个章节提到了「{{q}}」。",
   youllSee: "您会看到：",
   stepWord: "第",
+  backToTop: "回到顶部",
   groups: { start: "从这里开始", life: "合同全流程", learn: "举例学习" },
   stages: [
     { title: "准备", text: "物业、单元、当事人", chapter: "prepare" },
