@@ -21,6 +21,7 @@ import { systemInfoRouter } from "./routes/systemInfo.js";
 import { auditRouter } from "./routes/audit.js";
 import { backupsRouter } from "./routes/backups.js";
 import { billingRouter } from "./routes/billing.js";
+import { paymentsRouter } from "./routes/payments.js";
 import { runDailyBilling } from "./jobs/billing.js";
 import { runBackup, countSucceededRuns, isWeeklyBackupDue, DAILY_RETENTION_LIMIT } from "./jobs/backup.js";
 
@@ -64,6 +65,7 @@ app.use("/api", receiptsRouter);
 app.use("/api", depositTransactionsRouter);
 app.use("/api", usageEntriesRouter);
 app.use("/api", billingRouter);
+app.use("/api", paymentsRouter);
 app.use("/api", reportsRouter);
 app.use("/api", exportsRouter);
 app.use("/api/system-info", systemInfoRouter);

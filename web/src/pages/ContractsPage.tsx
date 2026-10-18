@@ -67,8 +67,8 @@ export default function ContractsPage() {
 
   const onCreate = async () => {
     const values = await form.validateFields();
-    const { dueDay, dueMonthOffset, ...contractFields } = values;
-    await api.post("/contracts", { ...contractFields, billingRules: { dueDay, dueMonthOffset: dueMonthOffset ?? 0 } });
+    const { dueDay, dueMonthOffset, overdueGraceDays, ...contractFields } = values;
+    await api.post("/contracts", { ...contractFields, billingRules: { dueDay, dueMonthOffset: dueMonthOffset ?? 0, overdueGraceDays: overdueGraceDays ?? 5 } });
     setModalOpen(false);
     form.resetFields();
     load();
@@ -193,7 +193,7 @@ export default function ContractsPage() {
           <Form.Item name="termEnd" label={t("contracts.termEnd")} rules={[{ required: true }]}>
             <DateField />
           </Form.Item>
-          <Form.Item name="dueDay" label={t("contracts.dueDay")} rules={[{ required: true }]} initialValue={25}>
+          <Form.Item name="dueDay" label={t("contracts.dueDay")} rules={[{ required: true }]} initialValue={1}>
             <InputNumber min={1} max={31} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item
@@ -203,9 +203,12 @@ export default function ContractsPage() {
                 {t("contracts.dueMonthOffset")} <HelpIcon field="dueMonthOffset" />
               </>
             }
-            initialValue={-1}
+            initialValue={0}
           >
             <InputNumber min={-3} max={3} style={{ width: "100%" }} />
+          </Form.Item>
+          <Form.Item name="overdueGraceDays" label={t("billing.graceDays")} extra={t("billing.graceDaysHint")} initialValue={5}>
+            <InputNumber min={0} max={60} style={{ width: "100%" }} />
           </Form.Item>
         </Form>
       </Modal>

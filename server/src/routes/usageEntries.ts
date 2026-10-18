@@ -7,6 +7,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { Decimal, daysInMonth } from "@lcm/shared";
 
 const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number");
 
@@ -145,4 +146,80 @@ usageEntriesRouter.delete("/usage-entries/:id", requireRole("admin", "manager"),
   db.delete(usageEntries).where(eq(usageEntries.id, id)).run();
   recordAudit({ actorUserId: req.user!.id, action: "usage_entry_removed", entityType: "contract", entityId: existing.contractId });
   res.status(204).send();
+});
+
+// ---------------------------------------------------------------------------
+// Bulk monthly entry (the readings grid): one request, many stream-months.
+// Existing readings are updated in place unless a charge has already been
+// posted from them; unchanged values are left alone. All-or-nothing.
+// ---------------------------------------------------------------------------
+
+const bulkUsageSchema = z.object({
+  entries: z
+    .array(z.object({ pricingStreamId: z.number().int(), period: z.string().regex(/^\d{4}-\d{2}$/), quantity: decimalString }))
+    .min(1)
+    .max(1000),
+});
+
+usageEntriesRouter.post("/contracts/:contractId/usage-entries/bulk", requireRole("admin", "manager"), (req, res) => {
+  const contractId = Number(req.params.contractId);
+  if (!ensureContractAccess(req, res, contractId)) return;
+
+  const parsed = bulkUsageSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid readings payload." } });
+
+  type Op = { kind: "insert"; pricingStreamId: number; serviceStart: string; serviceEnd: string; quantity: string; unit: string } | { kind: "update"; id: number; quantity: string };
+  const ops: Op[] = [];
+  const errors: { row: number; message: string }[] = [];
+  let unchanged = 0;
+
+  parsed.data.entries.forEach((e, idx) => {
+    const row = idx + 1;
+    const [year, month] = e.period.split("-").map(Number);
+    if (month < 1 || month > 12) return errors.push({ row, message: `Invalid month ${e.period}.` });
+    const serviceStart = `${e.period}-01`;
+    const serviceEnd = `${e.period}-${String(daysInMonth(year, month)).padStart(2, "0")}`;
+
+    if (!pricingStreamBelongsToContract(e.pricingStreamId, contractId)) return errors.push({ row, message: "Pricing stream does not belong to this contract." });
+    const rate = db
+      .select()
+      .from(rateSchedule)
+      .where(eq(rateSchedule.pricingStreamId, e.pricingStreamId))
+      .all()
+      .find((r) => r.effectiveStart <= serviceStart && (!r.effectiveEnd || r.effectiveEnd >= serviceStart));
+    if (rate?.calculationMethod !== "metered") return errors.push({ row, message: `${e.period}: this stream is not metered then.` });
+
+    const existing = db
+      .select()
+      .from(usageEntries)
+      .where(and(eq(usageEntries.pricingStreamId, e.pricingStreamId), eq(usageEntries.serviceStart, serviceStart), eq(usageEntries.serviceEnd, serviceEnd)))
+      .get();
+    if (!existing) return ops.push({ kind: "insert", pricingStreamId: e.pricingStreamId, serviceStart, serviceEnd, quantity: e.quantity, unit: rate.unit ?? "unit" });
+    if (new Decimal(existing.quantity).equals(new Decimal(e.quantity))) return void unchanged++;
+    if (chargeAlreadyPosted(contractId, e.pricingStreamId, serviceStart, serviceEnd)) {
+      return errors.push({ row, message: `${e.period}: a charge was already generated from this reading, so it can't be changed.` });
+    }
+    ops.push({ kind: "update", id: existing.id, quantity: e.quantity });
+  });
+
+  if (errors.length > 0) {
+    return res.status(400).json({ error: { code: "invalid_entries", message: errors[0].message, details: errors } });
+  }
+
+  db.transaction((tx) => {
+    for (const op of ops) {
+      if (op.kind === "insert") {
+        tx.insert(usageEntries)
+          .values({ contractId, pricingStreamId: op.pricingStreamId, serviceStart: op.serviceStart, serviceEnd: op.serviceEnd, quantity: op.quantity, unit: op.unit, source: "bulk entry", enteredBy: req.user!.id })
+          .run();
+      } else {
+        tx.update(usageEntries).set({ quantity: op.quantity }).where(eq(usageEntries.id, op.id)).run();
+      }
+    }
+  });
+
+  const created = ops.filter((o) => o.kind === "insert").length;
+  const updated = ops.length - created;
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entries_bulk_recorded", entityType: "contract", entityId: contractId, details: { created, updated, unchanged } });
+  res.status(201).json({ created, updated, unchanged });
 });

@@ -29,6 +29,10 @@ import { useAuth } from "../auth/AuthContext";
 import { useHelpTopic } from "../help/HelpContext";
 import { HelpIcon } from "../help/HelpIcon";
 import DateField from "../components/DateField";
+import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
+import RecordPaymentModal from "../components/billing/RecordPaymentModal";
+import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
+import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
 interface ContractDto {
   id: number;
@@ -42,6 +46,9 @@ interface ContractDto {
   specialTerms: string | null;
 }
 interface BillingRulesDto {
+  billingFrequency: "monthly" | "quarterly" | "yearly";
+  autoBilling: boolean;
+  overdueGraceDays: number;
   dueDay: number;
   dueMonthOffset: number;
   latePenaltyEnabled: boolean;
@@ -106,6 +113,8 @@ interface ChargeDto {
   serviceEnd: string;
   dueDate: string;
   amountFen: number;
+  status: "posted" | "voided";
+  voidReason: string | null;
 }
 interface AmendmentDto {
   id: number;
@@ -211,6 +220,12 @@ export default function ContractDetailPage() {
   const [concessionModal, setConcessionModal] = useState(false);
   const [depositModal, setDepositModal] = useState(false);
   const [generateModal, setGenerateModal] = useState(false);
+  const [catchUpOpen, setCatchUpOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
+  const [readingsGridOpen, setReadingsGridOpen] = useState(false);
+  const [voidModal, setVoidModal] = useState<{ chargeId: number } | null>(null);
+  const [voidForm] = Form.useForm();
   const [amendmentModal, setAmendmentModal] = useState(false);
   const [receiptModal, setReceiptModal] = useState(false);
   const [allocateModal, setAllocateModal] = useState<{ receiptId: number } | null>(null);
@@ -538,6 +553,30 @@ export default function ContractDetailPage() {
     }
   };
 
+  const onPauseAutoBilling = async () => {
+    try {
+      await api.post(`/contracts/${id}/billing/pause`);
+      message.success(t("billing.auto.paused"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onVoidCharge = async () => {
+    if (!voidModal) return;
+    try {
+      const values = await voidForm.validateFields();
+      await api.post(`/charges/${voidModal.chargeId}/void`, values);
+      message.success(t("billing.void.done"));
+      setVoidModal(null);
+      voidForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
   const onActivate = async () => {
     try {
       await api.post(`/contracts/${id}/activate`);
@@ -607,10 +646,10 @@ export default function ContractDetailPage() {
 
   const onEditContract = async () => {
     try {
-      const { dueDay, dueMonthOffset, ...contractValues } = await editForm.validateFields();
+      const { dueDay, dueMonthOffset, overdueGraceDays, ...contractValues } = await editForm.validateFields();
       await Promise.all([
         api.patch(`/contracts/${id}`, contractValues),
-        api.patch(`/contracts/${id}/billing-rules`, { dueDay, dueMonthOffset }),
+        api.patch(`/contracts/${id}/billing-rules`, { dueDay, dueMonthOffset, overdueGraceDays }),
       ]);
       setEditModal(false);
       message.success(t("common.save"));
@@ -860,7 +899,7 @@ export default function ContractDetailPage() {
             <Button
               icon={<EditOutlined />}
               onClick={() => {
-                editForm.setFieldsValue({ ...contract, dueDay: billingRulesInfo?.dueDay, dueMonthOffset: billingRulesInfo?.dueMonthOffset });
+                editForm.setFieldsValue({ ...contract, dueDay: billingRulesInfo?.dueDay, dueMonthOffset: billingRulesInfo?.dueMonthOffset, overdueGraceDays: billingRulesInfo?.overdueGraceDays });
                 setEditModal(true);
               }}
             >
@@ -1084,6 +1123,11 @@ export default function ContractDetailPage() {
                       {t("contracts.addUsageEntry")}
                     </Button>
                   )}
+                  {canManageUsage && meteredStreams.length > 0 && (
+                    <Button onClick={() => setReadingsGridOpen(true)} style={{ marginBottom: 12, marginLeft: 8 }}>
+                      {t("billing.readings.button")}
+                    </Button>
+                  )}
                   {canManageUsage && meteredStreams.length === 0 && (
                     <Typography.Paragraph type="secondary">{t("contracts.usageEntryNoMeteredStreams")}</Typography.Paragraph>
                   )}
@@ -1301,9 +1345,15 @@ export default function ContractDetailPage() {
             children: (
               <>
                 {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && (
-                  <Button icon={<PlusOutlined />} onClick={() => setReceiptModal(true)} style={{ marginBottom: 12 }}>
-                    {t("contracts.recordReceipt")}
-                  </Button>
+                  <Space wrap style={{ marginBottom: 12 }}>
+                    <Button type="primary" icon={<PlusOutlined />} onClick={() => setPaymentOpen(true)}>
+                      {t("billing.payment.button")}
+                    </Button>
+                    <Button onClick={() => setBulkPaymentOpen(true)}>{t("billing.bulkPayments.button")}</Button>
+                    <Button icon={<PlusOutlined />} onClick={() => setReceiptModal(true)}>
+                      {t("contracts.recordReceipt")}
+                    </Button>
+                  </Space>
                 )}
                 <Table
                   rowKey="id"
@@ -1348,6 +1398,41 @@ export default function ContractDetailPage() {
             label: t("contracts.charges"),
             children: (
               <>
+                {contract.status === "active" && billingRulesInfo && (
+                  billingRulesInfo.billingFrequency !== "monthly" ? (
+                    <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("billing.auto.manualOnly")} />
+                  ) : billingRulesInfo.autoBilling ? (
+                    <Alert
+                      type="success"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message={t("billing.auto.on")}
+                      description={t("billing.auto.onBody", { days: billingRulesInfo.overdueGraceDays })}
+                      action={
+                        user?.role === "admin" && (
+                          <Popconfirm title={t("billing.auto.pauseConfirm")} onConfirm={onPauseAutoBilling} okText={t("billing.auto.pause")} cancelText={t("common.cancel")}>
+                            <Button size="small">{t("billing.auto.pause")}</Button>
+                          </Popconfirm>
+                        )
+                      }
+                    />
+                  ) : (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message={t("billing.auto.off")}
+                      description={t(user?.role === "admin" ? "billing.auto.offBodyAdmin" : "billing.auto.offBody")}
+                      action={
+                        user?.role === "admin" && (
+                          <Button size="small" type="primary" onClick={() => setCatchUpOpen(true)}>
+                            {t("billing.catchUp.button")}
+                          </Button>
+                        )
+                      }
+                    />
+                  )
+                )}
                 {(user?.role === "admin" || user?.role === "manager") && (
                   <Button icon={<PlusOutlined />} onClick={() => setGenerateModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.generateCharges")}
@@ -1369,6 +1454,11 @@ export default function ContractDetailPage() {
                       render: (_: unknown, c: ChargeDto) => {
                         const b = chargeBalances.find((x) => x.chargeId === c.id);
                         if (!b) return null;
+                        if (c.status === "voided") {
+                          return (
+                            <Tag title={c.voidReason ?? undefined}>{t("billing.void.voided")}</Tag>
+                          );
+                        }
                         return (
                           <Space>
                             {yuan(b.balanceFen)}
@@ -1377,6 +1467,20 @@ export default function ContractDetailPage() {
                         );
                       },
                     },
+                    ...(user?.role === "admin"
+                      ? [
+                          {
+                            title: "",
+                            key: "void",
+                            render: (_: unknown, c: ChargeDto) =>
+                              c.status === "posted" && (
+                                <Button size="small" danger type="text" onClick={() => setVoidModal({ chargeId: c.id })}>
+                                  {t("billing.void.button")}
+                                </Button>
+                              ),
+                          },
+                        ]
+                      : []),
                   ]}
                 />
               </>
@@ -1618,6 +1722,9 @@ export default function ContractDetailPage() {
             }
           >
             <InputNumber style={{ width: "100%" }} min={-3} max={3} />
+          </Form.Item>
+          <Form.Item name="overdueGraceDays" label={t("billing.graceDays")} extra={t("billing.graceDaysHint")}>
+            <InputNumber style={{ width: "100%" }} min={0} max={60} />
           </Form.Item>
           <Form.Item name="specialTerms" label={t("contracts.specialTerms")}>
             <Input.TextArea rows={3} />
@@ -2356,6 +2463,44 @@ export default function ContractDetailPage() {
           )}
 
           {amendmentKind === "terminate" && <Typography.Text type="secondary">{t("contracts.amendTerminateHint")}</Typography.Text>}
+        </Form>
+      </Modal>
+
+      <CatchUpBillingModal open={catchUpOpen} contractId={contract.id} onClose={() => setCatchUpOpen(false)} onDone={load} />
+      <RecordPaymentModal open={paymentOpen} contractId={contract.id} onClose={() => setPaymentOpen(false)} onDone={load} />
+      <BulkPaymentsModal open={bulkPaymentOpen} contractId={contract.id} onClose={() => setBulkPaymentOpen(false)} onDone={load} />
+      <MeterReadingsGridModal
+        open={readingsGridOpen}
+        contractId={contract.id}
+        termStart={contract.termStart}
+        termEnd={contract.termEnd}
+        streams={streams
+          .filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"))
+          .map((s) => ({
+            id: s.id,
+            name: s.label ?? t(`contracts.${camel(s.feeType)}`),
+            unit: rates.find((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered")?.unit ?? "",
+          }))}
+        usageEntries={usageEntries}
+        charges={charges}
+        onClose={() => setReadingsGridOpen(false)}
+        onDone={load}
+      />
+      <Modal
+        title={t("billing.void.title")}
+        open={!!voidModal}
+        onCancel={() => setVoidModal(null)}
+        onOk={onVoidCharge}
+        okText={t("billing.void.button")}
+        okButtonProps={{ danger: true }}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary">{t("billing.void.body")}</Typography.Paragraph>
+        <Form form={voidForm} layout="vertical">
+          <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true, min: 3 }]}>
+            <Input.TextArea rows={3} />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
