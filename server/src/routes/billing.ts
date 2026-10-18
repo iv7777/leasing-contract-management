@@ -2,13 +2,18 @@ import { Router } from "express";
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { billingRules, billingRuns, charges, chargeAdjustments, receiptAllocations } from "../db/schema.js";
+import { billingRules, billingRuns, charges, chargeAdjustments, contracts, parties, receiptAllocations } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
 import { loadChargeContext } from "../billing/generate.js";
 import { runDailyBilling } from "../jobs/billing.js";
+import { loadLedgerInputs } from "../billing/ledgerLoad.js";
+import { computeChargeBalance } from "../billing/ledger.js";
+import { buildOverview, type OverviewContractInput } from "../billing/overviewCalc.js";
+import { monthEndOf, monthStartOf } from "../billing/billingSchedule.js";
+import { addMonths, todayInChina } from "@lcm/shared";
 
 export const billingRouter = Router();
 billingRouter.use(requireAuth);
@@ -159,4 +164,63 @@ billingRouter.post("/billing/run", requireRole("admin"), (req, res) => {
   } catch (err) {
     res.status(500).json({ error: { code: "billing_run_failed", message: err instanceof Error ? err.message : "Billing run failed." } });
   }
+});
+
+// ---------------------------------------------------------------------------
+// "What's due" overview for whoever is logged in (scoped to their properties)
+// ---------------------------------------------------------------------------
+
+billingRouter.get("/billing/overview", (req, res) => {
+  const today = todayInChina();
+  // Bills for the rest of this month are normally already posted by the
+  // nightly job; look one month further so collectors can see what's next.
+  const lookAheadCutoff = monthEndOf(addMonths(monthStartOf(today), 1));
+
+  const tenantNames = new Map(db.select({ id: parties.id, name: parties.name }).from(parties).all().map((p) => [p.id, p.name]));
+  const visible = db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.status, "active"))
+    .all()
+    .filter((c) => canAccessContract(req.user!, c.id));
+
+  const inputs: OverviewContractInput[] = [];
+  const missingReadings: { contractId: number; referenceNumber: string; tenantName: string; stream: string; feeType: string; month: string }[] = [];
+  const notAutoBilled: { contractId: number; referenceNumber: string; tenantName: string; reason: "off" | "not_monthly" }[] = [];
+
+  for (const contract of visible) {
+    const tenantName = tenantNames.get(contract.tenantPartyId) ?? "";
+    const ledger = loadLedgerInputs(contract.id);
+    const rawById = new Map(ledger.chargesRaw.map((c) => [c.id, c]));
+
+    const balances = ledger.charges
+      .filter((c) => c.status === "posted")
+      .map((c) => {
+        const b = computeChargeBalance(c, ledger.adjustments, ledger.allocations, today, ledger.overdueGraceDays);
+        return { chargeId: c.id, feeType: rawById.get(c.id)!.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, balanceFen: b.balanceFen, isOverdue: b.isOverdue, daysOverdue: b.daysOverdue };
+      });
+
+    let projected: OverviewContractInput["projected"] = [];
+    try {
+      const ctx = loadChargeContext(contract.id);
+      if (ctx.rules.billingFrequency !== "monthly") {
+        notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "not_monthly" });
+      } else if (!ctx.rules.autoBilling) {
+        notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
+      } else {
+        const plan = planBilling(ctx, lookAheadCutoff, today);
+        projected = plan.charges.map((c) => ({ feeType: c.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
+        for (const m of plan.missingReadings) {
+          missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
+        }
+      }
+    } catch {
+      // A contract the planner can't read still shows what it owes.
+    }
+
+    inputs.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, charges: balances, projected });
+  }
+
+  const { totals, contracts: rows } = buildOverview(inputs, today);
+  res.json({ asOf: today, totals, contracts: rows, missingReadings, notAutoBilled });
 });

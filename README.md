@@ -62,11 +62,24 @@ An off-site copy outside China and a documented restore drill are required befor
 - **Phase 4 — Operational rollout** (done): reminder dashboard (renewal notices, upcoming rate changes, deposit shortfalls, overdue escalation past 10 days — computed live, not persisted, so a reminder disappears the moment its cause is resolved), simple per-contract late-penalty calculation, a generated PDF contract summary, and CSV exports.
 - **Phase 5 — External notifications** (not started): WeChat/SMS urgent delivery, deferred per the brief until a provider is selected and validated.
 
+### Automatic billing
+
+Charges are created automatically so staff see what is due the moment they log in. Per contract this is switched on by an Admin, never implicitly:
+
+- **Nightly job** (`server/src/jobs/billing.ts`, 03:00 Asia/Shanghai, runs unless `ENABLE_CHARGE_GENERATION_SCHEDULE=false`): for every active, **monthly-billed** contract with `billing_rules.auto_billing` on, it posts every charge already due plus everything falling due by the end of the current month. Idempotent (charges already posted are skipped), isolates failures per contract, and logs each run in `billing_runs` (Admin → Billing runs, with a *Run billing now* button). Metered fees (electricity, water) are the one manual input: they are billed once a reading exists, due on the contract's due day in the month *after* the usage month.
+- **Catch-up for leases that started before the system** (Admin, contract → Charges → *Catch up billing*): previews every charge from the first month of the lease through the end of this month, and only after confirmation posts them and turns `auto_billing` on. The server re-checks the reviewed totals so only what was previewed can be posted. Then enter the payments already collected (Receipts → *Bulk payments*) to bring the tenant's account current. Existing contracts stay off until this is done; leases activated before they start join automatically. Quarterly/yearly contracts are not auto-billed yet (the engine bills one calendar month at a time) and stay on manual generation.
+- **Due dates and overdue**: when a lease is silent, rent is due on the 1st and a charge is overdue only after a 5-day grace period (`billing_rules.due_day` / `overdue_grace_days`, editable per contract; a lease's own due day and grace override the defaults). Days overdue count from the end of the grace period.
+- **Payments**: *Record payment* applies money to the oldest unpaid charges first (editable split; any remainder stays unallocated credit); *Bulk payments* enters many past payments in date order, all or nothing. Meter readings can be entered one at a time or month-by-month in a grid.
+- **Void** (Admin): the undo for a mistaken charge. The row stays, marked voided with a reason; refused while payments are applied. While auto-billing is on, a voided period is re-billed by the next run unless billing is paused or the terms are corrected first.
+- **Dashboard**: each user sees overdue, due now, due later this month and not-yet-billed amounts for their assigned properties, plus missing meter readings (`GET /api/billing/overview`).
+
+Note: this generates history from day one and relies on entered payments to reconcile, rather than the brief's opening-balance import at a cutover date. The catch-up preview and void exist as the guard rails for that choice.
+
 ### Charge generation engine
 
 `server/src/billing/chargeEngine.ts` is pure and unit-tested (`server/src/billing/chargeEngine.test.ts`, run with `npx tsx --test src/billing/chargeEngine.test.ts` from `server/`) against the brief's §12 acceptance scenarios: two units at different per-sqm rates, a mid-month rate change with correct proration, percentage escalation compounding, and free rent on one fee component while another (e.g. management fee) stays payable. Charge generation is idempotent — repeating it for an already-billed period creates nothing new — and every charge carries a `calculation_snapshot` recording exactly which rate, area, and dates produced it.
 
-Trigger it via `POST /api/contracts/:id/generate-charges` with `{ "period": "YYYY-MM" }`, or `GET /api/contracts/:id/charges` to list what's been posted.
+Trigger one month by hand via `POST /api/contracts/:id/generate-charges` with `{ "period": "YYYY-MM" }` (the nightly job does this automatically for contracts on automatic billing — see above), or `GET /api/contracts/:id/charges` to list what's been posted.
 
 ### Amendments
 

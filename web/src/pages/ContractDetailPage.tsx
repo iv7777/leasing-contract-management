@@ -1472,12 +1472,16 @@ export default function ContractDetailPage() {
                           {
                             title: "",
                             key: "void",
-                            render: (_: unknown, c: ChargeDto) =>
-                              c.status === "posted" && (
+                            render: (_: unknown, c: ChargeDto) => {
+                              const b = chargeBalances.find((x) => x.chargeId === c.id);
+                              // Charges with payments or amendment adjustments can't be voided.
+                              if (c.status !== "posted" || !b || b.allocatedFen !== 0 || b.adjustedFen !== 0) return null;
+                              return (
                                 <Button size="small" danger type="text" onClick={() => setVoidModal({ chargeId: c.id })}>
                                   {t("billing.void.button")}
                                 </Button>
-                              ),
+                              );
+                            },
                           },
                         ]
                       : []),

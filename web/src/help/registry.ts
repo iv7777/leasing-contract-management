@@ -16,6 +16,7 @@ const routeTopics: RouteTopic[] = [
   { pattern: /^\/users$/, topic: "users" },
   { pattern: /^\/audit$/, topic: "audit" },
   { pattern: /^\/backups$/, topic: "backups" },
+  { pattern: /^\/billing-runs$/, topic: "billingRuns" },
   { pattern: /^\/$/, topic: "dashboard" },
 ];
 

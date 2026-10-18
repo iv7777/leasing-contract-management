@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { PropertyDto, PartyDto } from "@lcm/shared";
 import { useAuth } from "../auth/AuthContext";
+import BillingOverview from "../components/billing/BillingOverview";
 
 interface SystemInfo {
   version: string;
@@ -50,6 +51,7 @@ export default function DashboardPage() {
       <Typography.Paragraph type="secondary">
         {user?.name} · {t(`users.${user?.role ?? "viewer"}`)}
       </Typography.Paragraph>
+      <BillingOverview />
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={8}>
           <Card hoverable onClick={() => navigate("/properties")}>

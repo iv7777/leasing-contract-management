@@ -13,6 +13,7 @@ import {
   PieChartOutlined,
   AuditOutlined,
   CloudServerOutlined,
+  ScheduleOutlined,
   QuestionCircleOutlined,
   ReadOutlined,
 } from "@ant-design/icons";
@@ -45,6 +46,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { key: "/parties", icon: <TeamOutlined />, label: t("nav.parties") },
     ...(user?.role === "admin" ? [{ key: "/users", icon: <UserOutlined />, label: t("nav.users") }] : []),
     ...(user?.role === "admin" ? [{ key: "/audit", icon: <AuditOutlined />, label: t("nav.audit") }] : []),
+    ...(user?.role === "admin" ? [{ key: "/billing-runs", icon: <ScheduleOutlined />, label: t("nav.billingRuns") }] : []),
     ...(user?.role === "admin" ? [{ key: "/backups", icon: <CloudServerOutlined />, label: t("nav.backups") }] : []),
   ];
 

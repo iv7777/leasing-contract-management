@@ -556,6 +556,7 @@ DATABASE_PATH=/opt/lcm/data/app.db
 DOCUMENT_STORAGE_DIR=/opt/lcm/documents
 BACKUP_DIR=/opt/lcm/backups
 ENABLE_BACKUP_SCHEDULE=true
+ENABLE_CHARGE_GENERATION_SCHEDULE=true
 SEED_ADMIN_EMAIL=you@yourcompany.com
 SEED_ADMIN_PASSWORD=&lt;a temporary strong password, changed in the next step&gt;</code></pre>
       </div>
@@ -797,6 +798,7 @@ sudo npm run restore-backup -- &lt;backup ID or /opt/lcm/backups/&lt;timestamp&g
         <li><label><input type="checkbox" id="v7"><span>Ran the manual backup once and confirmed files appear under <code class="inline">/opt/lcm/backups</code></span></label></li>
         <li><label><input type="checkbox" id="v8"><span>Confirmed the off-site sync ran (checked the rclone log or the remote destination)</span></label></li>
         <li><label><input type="checkbox" id="v9"><span><code class="inline">sudo certbot renew --dry-run</code> succeeded</span></label></li>
+        <li><label><input type="checkbox" id="v11"><span>For each lease that started before this system: previewed and confirmed <strong>Catch up billing</strong> (Charges tab), entered the payments already collected (Receipts → Bulk payments), and checked the tenant's balance on the Dashboard matches your own records</span></label></li>
         <li><label><input type="checkbox" id="v10"><span>Performed a full restore drill (<a href="#s12">§12</a>) on a test copy and confirmed contracts, attachments, and ledger totals came back correctly — required by the brief before real tenant data goes in</span></label></li>
       </ul>
     </section>
@@ -895,6 +897,7 @@ curl http://127.0.0.1:4000/api/health</code></pre>
             <tr><td><code class="inline">DATABASE_PATH</code></td><td><code class="inline">/opt/lcm/data/app.db</code></td><td>SQLite database file location.</td></tr>
             <tr><td><code class="inline">DOCUMENT_STORAGE_DIR</code></td><td><code class="inline">/opt/lcm/documents</code></td><td>Private, non-web-served upload storage.</td></tr>
             <tr><td><code class="inline">BACKUP_DIR</code></td><td><code class="inline">/opt/lcm/backups</code></td><td>Where nightly snapshots and manifests are written.</td></tr>
+            <tr><td><code class="inline">ENABLE_CHARGE_GENERATION_SCHEDULE</code></td><td><code class="inline">true</code></td><td>Runs the nightly 03:00 Asia/Shanghai billing job. It only touches contracts an Admin has switched to automatic billing (via "Catch up billing"); set <code class="inline">false</code> to turn the job off. Missing from an older <code class="inline">.env</code>? The job still runs — it is on unless set to <code class="inline">false</code>.</td></tr>
             <tr><td><code class="inline">ENABLE_BACKUP_SCHEDULE</code></td><td><code class="inline">true</code></td><td>Runs the nightly 02:15 Asia/Shanghai backup job inside the server process.</td></tr>
             <tr><td><code class="inline">SEED_ADMIN_EMAIL</code></td><td>your real email</td><td>Only read once, by <code class="inline">npm run seed</code>.</td></tr>
             <tr><td><code class="inline">SEED_ADMIN_PASSWORD</code></td><td>a temporary strong password</td><td>Only read once, by <code class="inline">npm run seed</code> — change it immediately via <code class="inline">reset-password</code>.</td></tr>

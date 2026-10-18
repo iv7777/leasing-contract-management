@@ -15,6 +15,7 @@ import RemindersPage from "./pages/RemindersPage";
 import OccupancyPage from "./pages/OccupancyPage";
 import UsersPage from "./pages/UsersPage";
 import AuditLogPage from "./pages/AuditLogPage";
+import BillingRunsPage from "./pages/BillingRunsPage";
 import BackupsPage from "./pages/BackupsPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -76,6 +77,14 @@ export default function App() {
                   element={
                     <RequireRole roles={["admin"]}>
                       <BackupsPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/billing-runs"
+                  element={
+                    <RequireRole roles={["admin"]}>
+                      <BillingRunsPage />
                     </RequireRole>
                   }
                 />

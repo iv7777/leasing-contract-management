@@ -82,6 +82,20 @@ export default function GuidePage() {
       </div>
 
       <Typography.Title level={5} style={{ fontSize: 15 }}>
+        {t("help.guide.commonTasks.catchUp.heading")}
+      </Typography.Title>
+      <div style={{ marginBottom: 24 }}>
+        <StepList items={steps(t("help.guide.commonTasks.catchUp.steps"))} />
+      </div>
+
+      <Typography.Title level={5} style={{ fontSize: 15 }}>
+        {t("help.guide.commonTasks.meterReadings.heading")}
+      </Typography.Title>
+      <div style={{ marginBottom: 24 }}>
+        <StepList items={steps(t("help.guide.commonTasks.meterReadings.steps"))} />
+      </div>
+
+      <Typography.Title level={5} style={{ fontSize: 15 }}>
         {t("help.guide.commonTasks.rentIncrease.heading")}
       </Typography.Title>
       <div style={{ marginBottom: 24 }}>

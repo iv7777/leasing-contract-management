@@ -13,6 +13,7 @@ const en = {
     users: "Users",
     audit: "Audit Log",
     backups: "Backups",
+    billingRuns: "Billing runs",
     logout: "Log out",
   },
   login: {
@@ -400,6 +401,45 @@ const en = {
       done: "{{created}} readings added, {{updated}} updated.",
       locked: "A charge has already been generated from this reading.",
     },
+    overview: {
+      title: "What's due",
+      overdue: "Overdue",
+      dueNow: "Due now",
+      dueLater: "Due later this month",
+      nextMonth: "Not billed yet",
+      tenant: "Tenant",
+      nextDue: "Next bill",
+      empty: "Nothing is overdue or coming due — everyone is up to date.",
+      readingsTitle: "{{count}} meter reading(s) needed",
+      readingsBody: "These metered fees can't be billed until a reading is entered. Open the contract's Usage entries tab (or use the readings grid).",
+      notBilledTitle: "{{count}} active contract(s) not on automatic billing yet",
+      notBilledBody: "Open each contract's Charges tab and use \"Catch up billing\" to create its charges and turn on the nightly job:",
+      manualTitle: "{{count}} contract(s) billed quarterly/yearly — generate their charges manually",
+      status: {
+        due: "Due now",
+        upcoming: "Upcoming",
+        projected: "Not billed yet",
+      },
+    },
+    runs: {
+      title: "Billing runs",
+      runNow: "Run billing now",
+      runDone: "Billing run finished: {{charges}} charge(s) created across {{contracts}} contract(s).",
+      note: "The system runs this every night at 03:00 (China time) for contracts on automatic billing. It creates every charge that is already due or falls due this month. Metered fees wait for their reading. A failure on one contract never stops the others.",
+      trigger: "Trigger",
+      scheduled: "Scheduled",
+      manual: "Manual",
+      contracts: "Contracts",
+      created: "Charges created",
+      failed: "Failed",
+      missing: "Missing readings",
+      status: {
+        running: "Running",
+        succeeded: "Succeeded",
+        partial: "Partly failed",
+        failed: "Failed",
+      },
+    },
     void: {
       button: "Void",
       title: "Void this charge",
@@ -440,7 +480,17 @@ const en = {
         payment: {
           heading: "Recording a rent payment",
           steps:
-            "Open the contract and go to its Receipts tab.\nClick Record receipt and enter the amount, date, and payment method.\nUse Allocate to apply the receipt against one or more outstanding charges — a receipt doesn't apply itself automatically.\nIf you don't yet know which charge it covers, leave it unallocated for now; it will show up as an unallocated receipt on the Statement tab until you allocate it.",
+            "Open the contract and go to its Receipts tab.\nClick Record payment and enter the amount, date, and payment method.\nThe payment is applied to the oldest unpaid charges first — adjust the amounts if the tenant said which bill it pays.\nAnything not applied stays as unallocated credit; it shows on the Statement tab and can be allocated later.",
+        },
+        catchUp: {
+          heading: "Bringing an existing lease up to date",
+          steps:
+            "Create the contract with its full rent history (every past rate step and any free-rent period) and activate it.\nOpen its Charges tab and click Catch up billing (Admin). Compare the previewed charges with your own records, then confirm — this creates every charge since the lease began and switches on nightly automatic billing.\nOpen the Receipts tab and use Bulk payments to enter the payments the tenant has already made, with their dates.\nCheck the Statement tab and the Dashboard: the tenant's balance should now match your records.",
+        },
+        meterReadings: {
+          heading: "Entering meter readings",
+          steps:
+            "The Dashboard lists contracts with meter readings still needed.\nOpen the contract's Usage entries tab and click Meter readings grid.\nEnter each month's quantity for every metered fee (past months too, for a lease that started earlier) and save.\nThe charges are created automatically on the next nightly run — an Admin can also press Run billing now on the Billing runs page.",
         },
         rentIncrease: {
           heading: "Increasing rent on an active contract",
@@ -467,8 +517,8 @@ const en = {
     },
     dashboard: {
       title: "Dashboard",
-      body: "A quick snapshot of your portfolio: how many properties and tenants/landlords you have on file, and how many reminders currently need attention. Each tile is a shortcut — click any of them to jump straight to that list.",
-      tips: "The reminder count only includes contracts that are active or expiring soon — draft and terminated contracts never generate reminders.\nAn Admin can edit the copyright line shown at the bottom of the page by clicking the pencil icon next to it.",
+      body: "Starts with what's due: what tenants owe now, what is overdue, what comes due later this month, and what is still to be billed — only for the properties you're assigned to. Expand a row to see the individual bills. Below that, a snapshot of your portfolio and how many reminders need attention; each tile is a shortcut to its list.",
+      tips: "Bills are created automatically every night for contracts on automatic billing. A bill counts as overdue only after the contract's grace period (5 days unless the lease says otherwise).\n\"Not billed yet\" shows bills the system will create (mainly next month's) — nothing is posted early.\nMetered fees (electricity, water) need a meter reading entered before they can be billed; missing readings are listed here so none are forgotten.\nThe reminder count only includes contracts that are active or expiring soon — draft and terminated contracts never generate reminders.\nAn Admin can edit the copyright line shown at the bottom of the page by clicking the pencil icon next to it.",
     },
     properties: {
       list: {
@@ -536,13 +586,18 @@ const en = {
         },
         receipts: {
           title: "Receipts",
-          body: "Payments received from the tenant. A receipt can be allocated to one or more specific charges, or left unallocated until you know which invoice it covers. Reversing a receipt undoes its allocations and requires a reason, for audit purposes.",
-          tips: "Recording a receipt doesn't automatically allocate it to a charge — use \"Allocate\" afterward to apply it against a specific outstanding charge.",
+          body: "Payments received from the tenant. \"Record payment\" is the normal way: enter the amount, date and method and the money is applied to the oldest unpaid charges first (you can adjust the split). \"Bulk payments\" enters many past payments at once. Reversing a receipt undoes its allocations and requires a reason, for audit purposes.",
+          tips: "Any part of a payment that isn't applied to a charge stays as unallocated credit — it never counts as extra income.\n\"Record receipt\" (the older option) saves the money without applying it; use \"Allocate\" afterward.\nFor a tenant whose lease started before this system: run \"Catch up billing\" on the Charges tab, then enter their past payments with Bulk payments to bring the account current.",
+        },
+        usage: {
+          title: "Usage entries",
+          body: "Meter readings for metered fees such as electricity and water. A metered charge can't be created until the month's quantity is entered here — the system then bills it automatically on its next nightly run. Use \"Meter readings grid\" to enter many months for every metered fee at once, or \"Record usage\" for a single reading.",
+          tips: "Once a charge has been created from a reading, the reading is locked. If it was wrong, an Admin can void the charge, correct the reading, and the month is billed again.\nMetered fees are due on the contract's due day in the month after the usage month.\nMissing readings are listed on the Dashboard so none are forgotten.",
         },
         charges: {
           title: "Charges",
-          body: "Generated bills for a given period, one per pricing stream. Use \"Generate charges\" to create the next period's charges based on the current rate schedule — it's safe to run more than once, since charges already generated for a period are skipped rather than duplicated.",
-          tips: "A charge's balance reflects receipts allocated to it; overdue charges (past their due date with an outstanding balance) drive the Overdue balance reminder.",
+          body: "Generated bills, one per pricing stream per month. For contracts on automatic billing the system creates them every night — everything already due plus what falls due this month — so you don't have to. A contract starts automatic billing when an Admin uses \"Catch up billing\" (which first shows every charge it would create since the lease began). \"Generate charges\" still creates a specific month by hand and is safe to repeat — charges already generated are skipped.",
+          tips: "A charge's balance reflects payments applied to it. It counts as overdue only after the contract's grace period past its due date (5 days unless the lease says otherwise).\nAn Admin can Void a charge created in error (with a reason). It stays on record, marked voided, and can't be voided once payments are applied. While automatic billing is on, the period is billed again on the next nightly run — pause automatic billing or correct the contract first if that isn't what you want.\nQuarterly or yearly contracts aren't billed automatically yet; generate their charges manually.",
         },
         amendments: {
           title: "Amendments",
@@ -575,6 +630,11 @@ const en = {
       title: "Audit Log",
       body: "A read-only, complete history of every meaningful action taken in the system — who did what, when, and (where relevant) why. Use the filters to narrow down to a specific entity or date range.",
       tips: "Expand a row to see its full detail payload and any reason text that was recorded with it (e.g. an amendment's approval reason).",
+    },
+    billingRuns: {
+      title: "Billing runs",
+      body: "A log of the nightly billing job. Each night the system creates every charge that is already due or falls due this month for contracts on automatic billing, so staff see what to collect without generating anything by hand. Metered fees (electricity, water) are the exception — they appear once someone enters the month's reading.",
+      tips: "A contract only joins the nightly run after an Admin uses \"Catch up billing\" on it — that's the review step before any history is posted.\n\"Partly failed\" means some contracts were billed and others hit an error — expand the row to see which and why. The other contracts are unaffected.\n\"Run billing now\" does the same thing as the nightly job; it's safe to press repeatedly because nothing is ever billed twice.",
     },
     backups: {
       title: "Backups",
