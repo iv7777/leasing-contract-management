@@ -31,7 +31,7 @@ import { recordContractVersion } from "../lib/contractSnapshot.js";
 import { previewEscalationTiers } from "../billing/chargeEngine.js";
 import { computeMonthlyStatement } from "../billing/ledger.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
-import { daysInMonth } from "@lcm/shared";
+import { daysInMonth, todayInChina } from "@lcm/shared";
 
 export const contractsRouter = Router();
 contractsRouter.use(requireAuth);
@@ -85,8 +85,11 @@ const createContractSchema = z.object({
   billingRules: z.object({
     billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).default("monthly"),
     periodAnchorDay: z.number().default(1),
-    dueDay: z.number(),
+    // House defaults when the lease is silent: rent due on the 1st, and
+    // overdue only after a 5-day grace period.
+    dueDay: z.number().int().min(1).max(31).default(1),
     dueMonthOffset: z.number().default(0),
+    overdueGraceDays: z.number().int().min(0).max(60).default(5),
   }),
 });
 
@@ -696,8 +699,9 @@ contractsRouter.patch("/deposit-terms/:depositTermId/waiver-decision", requireRo
 const billingRulesSchema = z.object({
   billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).optional(),
   periodAnchorDay: z.number().optional(),
-  dueDay: z.number().optional(),
+  dueDay: z.number().int().min(1).max(31).optional(),
   dueMonthOffset: z.number().optional(),
+  overdueGraceDays: z.number().int().min(0).max(60).optional(),
 });
 
 contractsRouter.patch("/:id/billing-rules", requireRole("admin", "manager"), (req, res) => {
@@ -758,6 +762,15 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
   const updated = db.update(contracts).set({ status: "active", updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
   recordContractVersion(id, updated.versionNumber, updated.termStart, null);
   recordAudit({ actorUserId: req.user!.id, action: "contract_activated", entityType: "contract", entityId: id });
+
+  // A lease that hasn't started yet has no history to review, so it joins
+  // the nightly billing straight away. One that started earlier stays off
+  // until an Admin previews and confirms its catch-up.
+  const rules = db.select().from(billingRules).where(eq(billingRules.contractId, id)).get();
+  if (rules?.billingFrequency === "monthly" && updated.termStart.slice(0, 7) >= todayInChina().slice(0, 7)) {
+    db.update(billingRules).set({ autoBilling: true }).where(eq(billingRules.contractId, id)).run();
+    recordAudit({ actorUserId: req.user!.id, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { reason: "activated before term start" } });
+  }
   res.json({ contract: updated });
 });
 

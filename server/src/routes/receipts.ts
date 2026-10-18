@@ -41,7 +41,7 @@ receiptsRouter.get("/contracts/:contractId/ledger", (req, res) => {
   };
 
   const chargeBalances = data.charges.map((c) => {
-    const balance = computeChargeBalance(c, data.adjustments, data.allocations, asOfDate);
+    const balance = computeChargeBalance(c, data.adjustments, data.allocations, asOfDate, data.overdueGraceDays);
     return { ...balance, latePenaltyFen: computeLatePenalty(balance.balanceFen, balance.daysOverdue, penaltyRules) };
   });
   const receiptBalances = data.receipts.map((r) => ({ receiptId: r.id, unallocatedFen: computeUnallocatedFen(r, data.allocations) }));

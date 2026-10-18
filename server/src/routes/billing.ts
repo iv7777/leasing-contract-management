@@ -1,0 +1,162 @@
+import { Router } from "express";
+import { z } from "zod";
+import { desc, eq } from "drizzle-orm";
+import { db } from "../db/client.js";
+import { billingRules, billingRuns, charges, chargeAdjustments, receiptAllocations } from "../db/schema.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
+import { canAccessContract } from "../lib/contractScope.js";
+import { recordAudit } from "../lib/audit.js";
+import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
+import { loadChargeContext } from "../billing/generate.js";
+import { runDailyBilling } from "../jobs/billing.js";
+
+export const billingRouter = Router();
+billingRouter.use(requireAuth);
+
+const forbidden = { error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } };
+
+/** The client never sees the calculation snapshots — only what an Admin
+ * needs to eyeball against the paper ledger before confirming. */
+function previewDto(plan: BillingPlan) {
+  return {
+    cutoff: plan.cutoff,
+    totalFen: plan.totalFen,
+    charges: plan.charges.map(({ snapshotJson: _snapshot, ...c }) => c),
+    missingReadings: plan.missingReadings,
+  };
+}
+
+function loadForCatchUp(contractId: number, res: import("express").Response) {
+  let ctx;
+  try {
+    ctx = loadChargeContext(contractId);
+  } catch {
+    res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+    return null;
+  }
+  const eligibility = billingEligibility(ctx);
+  if (!eligibility.ok) {
+    const message =
+      eligibility.reason === "not_active"
+        ? "Only an active contract can be billed automatically — activate it first."
+        : "Automatic billing covers monthly-billed contracts only; generate quarterly/yearly charges manually.";
+    res.status(409).json({ error: { code: "not_eligible", reason: eligibility.reason, message } });
+    return null;
+  }
+  return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Catch-up: bill a contract from day one, after an Admin has reviewed it
+// ---------------------------------------------------------------------------
+
+billingRouter.post("/contracts/:id/billing/catch-up/preview", requireRole("admin"), (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
+  const ctx = loadForCatchUp(contractId, res);
+  if (!ctx) return;
+
+  res.json(previewDto(planBilling(ctx, currentCutoff())));
+});
+
+const catchUpSchema = z.object({ expectedTotalFen: z.number().int(), expectedCount: z.number().int() });
+
+billingRouter.post("/contracts/:id/billing/catch-up", requireRole("admin"), (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
+  const parsed = catchUpSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Confirm the previewed totals to proceed." } });
+  const ctx = loadForCatchUp(contractId, res);
+  if (!ctx) return;
+
+  // Recomputed server-side; the preview's numbers only confirm the Admin is
+  // approving what is about to be posted, not something that has since changed.
+  const plan = planBilling(ctx, currentCutoff());
+  if (plan.totalFen !== parsed.data.expectedTotalFen || plan.charges.length !== parsed.data.expectedCount) {
+    return res.status(409).json({
+      error: { code: "plan_changed", message: "The contract's terms or readings changed since the preview. Review the new preview and confirm again." },
+    });
+  }
+
+  const created = applyPlan(ctx, plan, true);
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "billing_catch_up",
+    entityType: "contract",
+    entityId: contractId,
+    details: { created, totalFen: plan.totalFen, cutoff: plan.cutoff, missingReadings: plan.missingReadings.length },
+  });
+  res.json({ created, totalFen: plan.totalFen, missingReadings: plan.missingReadings.length });
+});
+
+billingRouter.post("/contracts/:id/billing/pause", requireRole("admin"), (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
+  const updated = db.update(billingRules).set({ autoBilling: false }).where(eq(billingRules.contractId, contractId)).returning().get();
+  if (!updated) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  recordAudit({ actorUserId: req.user!.id, action: "auto_billing_paused", entityType: "contract", entityId: contractId });
+  res.json({ billingRules: updated });
+});
+
+// ---------------------------------------------------------------------------
+// Void: the undo for a mistaken charge (append-only — the row stays, flagged)
+// ---------------------------------------------------------------------------
+
+const voidSchema = z.object({ reason: z.string().trim().min(3) });
+
+billingRouter.post("/charges/:id/void", requireRole("admin"), (req, res) => {
+  const id = Number(req.params.id);
+  const charge = db.select().from(charges).where(eq(charges.id, id)).get();
+  if (!charge) return res.status(404).json({ error: { code: "not_found", message: "Charge not found." } });
+  if (!canAccessContract(req.user!, charge.contractId)) return res.status(403).json(forbidden);
+  const parsed = voidSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "A reason is required to void a charge." } });
+
+  if (charge.status === "voided") {
+    return res.status(409).json({ error: { code: "already_voided", message: "This charge is already voided." } });
+  }
+  const netAllocated = db.select().from(receiptAllocations).where(eq(receiptAllocations.chargeId, id)).all().reduce((s, a) => s + a.amountFen, 0);
+  if (netAllocated !== 0) {
+    return res.status(409).json({
+      error: { code: "has_payments", message: "Payments are applied to this charge. Reverse those allocations first, then void it." },
+    });
+  }
+  if (db.select().from(chargeAdjustments).where(eq(chargeAdjustments.chargeId, id)).all().length > 0) {
+    return res.status(409).json({ error: { code: "has_adjustments", message: "This charge has adjustments from an amendment and can't be voided." } });
+  }
+
+  const updated = db
+    .update(charges)
+    .set({ status: "voided", voidedAt: new Date().toISOString(), voidedBy: req.user!.id, voidReason: parsed.data.reason })
+    .where(eq(charges.id, id))
+    .returning()
+    .get();
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "charge_voided",
+    entityType: "charge",
+    entityId: id,
+    reason: parsed.data.reason,
+    details: { contractId: charge.contractId, amountFen: charge.amountFen, serviceStart: charge.serviceStart, serviceEnd: charge.serviceEnd },
+  });
+  res.json({ charge: updated });
+});
+
+// ---------------------------------------------------------------------------
+// Nightly job history and manual trigger
+// ---------------------------------------------------------------------------
+
+billingRouter.get("/billing/runs", requireRole("admin"), (_req, res) => {
+  const runs = db.select().from(billingRuns).orderBy(desc(billingRuns.id)).limit(100).all();
+  res.json({ runs });
+});
+
+billingRouter.post("/billing/run", requireRole("admin"), (req, res) => {
+  try {
+    const summary = runDailyBilling("manual");
+    recordAudit({ actorUserId: req.user!.id, action: "billing_run_triggered", entityType: "billing_run", entityId: summary.runId, details: summary });
+    res.status(201).json(summary);
+  } catch (err) {
+    res.status(500).json({ error: { code: "billing_run_failed", message: err instanceof Error ? err.message : "Billing run failed." } });
+  }
+});

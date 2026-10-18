@@ -125,3 +125,22 @@ test("monthly statement: opening + new charges + adjustments - receipts applied 
     february.openingReceivableFen + february.newChargesFen + february.adjustmentsFen - february.receiptsAppliedFen,
   );
 });
+
+test("overdue starts only after the grace period, and days overdue count from its end", () => {
+  const c = charge({ dueDate: "2026-02-01" });
+  // 5-day grace: Feb 6 is still inside it, Feb 7 is the first overdue day.
+  assert.equal(computeChargeBalance(c, [], [], "2026-02-06", 5).isOverdue, false);
+  const day1 = computeChargeBalance(c, [], [], "2026-02-07", 5);
+  assert.equal(day1.isOverdue, true);
+  assert.equal(day1.daysOverdue, 1);
+  // Grace 0 keeps the original "overdue the day after the due date" behavior.
+  assert.equal(computeChargeBalance(c, [], [], "2026-02-02").isOverdue, true);
+});
+
+test("a voided charge owes nothing and is never overdue", () => {
+  const c = charge({ status: "voided", dueDate: "2025-01-01" });
+  const b = computeChargeBalance(c, [], [], "2026-06-01", 5);
+  assert.equal(b.balanceFen, 0);
+  assert.equal(b.isOverdue, false);
+  assert.equal(b.daysOverdue, 0);
+});

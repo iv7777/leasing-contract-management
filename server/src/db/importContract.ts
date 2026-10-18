@@ -134,8 +134,9 @@ const importSchema = z
     billingRules: z.object({
       billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).default("monthly"),
       periodAnchorDay: z.number().default(1),
-      dueDay: z.number(),
+      dueDay: z.number().int().min(1).max(31).default(1),
       dueMonthOffset: z.number().default(0),
+      overdueGraceDays: z.number().int().min(0).max(60).default(5),
     }),
     pricingStreams: z.array(pricingStreamSchema).min(1),
     concessions: z.array(concessionSchema).default([]),

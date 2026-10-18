@@ -46,6 +46,7 @@ function chargeAlreadyPosted(contractId: number, pricingStreamId: number, servic
         eq(charges.pricingStreamId, pricingStreamId),
         eq(charges.serviceStart, serviceStart),
         eq(charges.serviceEnd, serviceEnd),
+        eq(charges.status, "posted"),
       ),
     )
     .get();

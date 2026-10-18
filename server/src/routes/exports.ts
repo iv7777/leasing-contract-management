@@ -68,7 +68,7 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
 
   const ledger = loadLedgerInputs(contractId);
   const asOfDate = todayInChina();
-  const chargeBalances = ledger.charges.map((c) => ({ charge: ledger.chargesRaw.find((x) => x.id === c.id)!, balance: computeChargeBalance(c, ledger.adjustments, ledger.allocations, asOfDate) }));
+  const chargeBalances = ledger.charges.map((c) => ({ charge: ledger.chargesRaw.find((x) => x.id === c.id)!, balance: computeChargeBalance(c, ledger.adjustments, ledger.allocations, asOfDate, ledger.overdueGraceDays) }));
 
   recordAudit({ actorUserId: req.user!.id, action: "contract_pdf_exported", entityType: "contract", entityId: contractId });
 
@@ -185,6 +185,7 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
       ledger.adjustments,
       ledger.allocations,
       asOfDate,
+      ledger.overdueGraceDays,
     );
     return {
       [L.csvServiceStart]: c.serviceStart,

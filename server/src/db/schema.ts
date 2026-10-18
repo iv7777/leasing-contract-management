@@ -184,6 +184,13 @@ export const billingRules = sqliteTable("billing_rules", {
   latePenaltyEnabled: integer("late_penalty_enabled", { mode: "boolean" }).notNull().default(false),
   latePenaltyDailyRatePermille: text("late_penalty_daily_rate_permille"),
   latePenaltyCapFen: integer("late_penalty_cap_fen"),
+  // Days after a charge's due date before it counts as overdue. Contracts
+  // that spell out their own grace period override the 5-day house default.
+  overdueGraceDays: integer("overdue_grace_days").notNull().default(5),
+  // Turned on only by the Admin "catch up billing" action (or at activation
+  // of a lease that hasn't started yet) — never implicitly — so deploying
+  // the nightly job can't post history for contracts nobody has reviewed.
+  autoBilling: integer("auto_billing", { mode: "boolean" }).notNull().default(false),
 });
 
 /** Identifies exactly what is being priced: a single unit, an explicit
@@ -293,11 +300,17 @@ export const charges = sqliteTable("charges", {
   calculationSnapshotJson: text("calculation_snapshot_json").notNull(),
   sourceContractVersion: integer("source_contract_version").notNull(),
   status: text("status", { enum: ["posted", "voided"] }).notNull().default("posted"),
+  voidedAt: text("voided_at"),
+  voidedBy: integer("voided_by").references(() => users.id),
+  voidReason: text("void_reason"),
   createdAt: text("created_at").notNull().default(nowIso),
 }, (t) => ({
   // Enforces the idempotent-generation requirement: one charge per billing
-  // item, never duplicated by a retried or repeated job.
-  dedupeIdx: uniqueIndex("charges_dedupe_idx").on(t.contractId, t.pricingStreamId, t.serviceStart, t.serviceEnd),
+  // item, never duplicated by a retried or repeated job. Voided charges are
+  // excluded so a period can be billed again after a mistaken one is voided.
+  dedupeIdx: uniqueIndex("charges_dedupe_idx")
+    .on(t.contractId, t.pricingStreamId, t.serviceStart, t.serviceEnd)
+    .where(sql`${t.status} = 'posted'`),
 }));
 
 /** Posted charges are never edited or deleted; a correction is a linked
@@ -423,6 +436,22 @@ export const backupRuns = sqliteTable("backup_runs", {
   status: text("status", { enum: ["running", "succeeded", "failed"] }).notNull(),
   backupReference: text("backup_reference"),
   includedDocumentCount: integer("included_document_count"),
+  error: text("error"),
+});
+
+/** One row per execution of the daily billing job (scheduled or manual), so
+ * an Admin can see a bad night without reading server logs. */
+export const billingRuns = sqliteTable("billing_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trigger: text("trigger", { enum: ["scheduled", "manual"] }).notNull(),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  status: text("status", { enum: ["running", "succeeded", "partial", "failed"] }).notNull(),
+  contractsProcessed: integer("contracts_processed").notNull().default(0),
+  chargesCreated: integer("charges_created").notNull().default(0),
+  contractsFailed: integer("contracts_failed").notNull().default(0),
+  missingReadings: integer("missing_readings").notNull().default(0),
+  detailsJson: text("details_json"),
   error: text("error"),
 });
 

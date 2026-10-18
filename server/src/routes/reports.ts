@@ -48,7 +48,7 @@ reportsRouter.get("/reminders", (req, res) => {
 
     const ledger = loadLedgerInputs(contract.id);
     const chargeBalances = ledger.charges.map((c) => ({
-      ...computeChargeBalance(c, ledger.adjustments, ledger.allocations, asOfDate),
+      ...computeChargeBalance(c, ledger.adjustments, ledger.allocations, asOfDate, ledger.overdueGraceDays),
       dueDate: c.dueDate,
     }));
 

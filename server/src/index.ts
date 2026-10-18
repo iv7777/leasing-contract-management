@@ -20,6 +20,8 @@ import { exportsRouter } from "./routes/exports.js";
 import { systemInfoRouter } from "./routes/systemInfo.js";
 import { auditRouter } from "./routes/audit.js";
 import { backupsRouter } from "./routes/backups.js";
+import { billingRouter } from "./routes/billing.js";
+import { runDailyBilling } from "./jobs/billing.js";
 import { runBackup, countSucceededRuns, isWeeklyBackupDue, DAILY_RETENTION_LIMIT } from "./jobs/backup.js";
 
 const app = express();
@@ -61,6 +63,7 @@ app.use("/api", amendmentsRouter);
 app.use("/api", receiptsRouter);
 app.use("/api", depositTransactionsRouter);
 app.use("/api", usageEntriesRouter);
+app.use("/api", billingRouter);
 app.use("/api", reportsRouter);
 app.use("/api", exportsRouter);
 app.use("/api/system-info", systemInfoRouter);
@@ -91,6 +94,20 @@ if (process.env.ENABLE_BACKUP_SCHEDULE === "true") {
       return;
     }
     runBackup("weekly").catch((err) => console.error("Scheduled weekly backup failed:", err));
+  }, { timezone: "Asia/Shanghai" });
+}
+
+// Nightly billing at 03:00 China time (after the 02:15 backup). On by default
+// because it only touches contracts an Admin has explicitly switched to
+// automatic billing via "catch up billing"; set =false to turn the job off.
+if (process.env.ENABLE_CHARGE_GENERATION_SCHEDULE !== "false") {
+  cron.schedule("0 3 * * *", () => {
+    try {
+      const r = runDailyBilling("scheduled");
+      console.log(`Nightly billing: ${r.chargesCreated} charge(s) across ${r.contractsProcessed} contract(s), ${r.contractsFailed} failed, ${r.missingReadings} missing reading(s).`);
+    } catch (err) {
+      console.error("Nightly billing failed:", err);
+    }
   }, { timezone: "Asia/Shanghai" });
 }
 

@@ -116,6 +116,10 @@ function totalAreaAt(input: ChargeEngineInput, streamId: number, date: IsoDate):
 export interface GenerateChargeLinesResult {
   lines: ChargeLine[];
   skippedMissingUsage: number[]; // pricingStreamIds skipped for lack of a matching usage entry
+  /** Same streams as skippedMissingUsage, with the due date the charge will
+   * get once a reading is entered — lets callers tell "reading is overdue to
+   * be entered" from "period hasn't ended yet". */
+  missingUsage: { pricingStreamId: number; dueDate: IsoDate }[];
 }
 
 export function generateChargeLines(
@@ -127,9 +131,11 @@ export function generateChargeLines(
   const monthLength = daysInMonth(py, pm);
 
   const dueDate = computeDueDate(periodStart, input.billingRules);
+  const meteredDueDate = computeMeteredDueDate(periodStart, input.billingRules);
 
   const lines: ChargeLine[] = [];
   const skippedMissingUsage: number[] = [];
+  const missingUsage: { pricingStreamId: number; dueDate: IsoDate }[] = [];
 
   for (const stream of input.pricingStreams) {
     const streamRates = input.rateSchedule.filter((r) => r.pricingStreamId === stream.id);
@@ -142,6 +148,7 @@ export function generateChargeLines(
       );
       if (!usage) {
         skippedMissingUsage.push(stream.id);
+        missingUsage.push({ pricingStreamId: stream.id, dueDate: meteredDueDate });
         continue;
       }
 
@@ -159,7 +166,7 @@ export function generateChargeLines(
         feeType: stream.feeType,
         serviceStart: periodStart,
         serviceEnd: periodEnd,
-        dueDate,
+        dueDate: meteredDueDate,
         amountFen: yuanToFen(afterConcession),
         snapshot: {
           subperiods: [
@@ -269,7 +276,16 @@ export function generateChargeLines(
     });
   }
 
-  return { lines, skippedMissingUsage };
+  return { lines, skippedMissingUsage, missingUsage };
+}
+
+/** Metered charges (electricity, water) can only be computed after the
+ * usage month ends, so they are billed in arrears: due on the contract's due
+ * day in the month after the usage month — or later, if the contract's own
+ * offset already puts rent that far out. Due on the rent schedule instead,
+ * a March meter reading entered in April would be born overdue. */
+export function computeMeteredDueDate(periodStart: IsoDate, billingRules: { dueDay: number; dueMonthOffset: number }): IsoDate {
+  return computeDueDate(periodStart, { dueDay: billingRules.dueDay, dueMonthOffset: Math.max(1, billingRules.dueMonthOffset) });
 }
 
 /** "25th of the prior month" == dueDay 25, dueMonthOffset -1 from the

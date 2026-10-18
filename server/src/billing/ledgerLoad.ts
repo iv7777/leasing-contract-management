@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { charges, chargeAdjustments, receipts, receiptAllocations, depositTransactions } from "../db/schema.js";
+import { charges, chargeAdjustments, receipts, receiptAllocations, depositTransactions, billingRules } from "../db/schema.js";
 import type { MonthlyStatementInput } from "./ledger.js";
 
 /** Loads everything computeMonthlyStatement (and the per-charge/per-receipt
@@ -8,6 +8,7 @@ import type { MonthlyStatementInput } from "./ledger.js";
 export function loadLedgerInputs(contractId: number): MonthlyStatementInput & {
   chargesRaw: typeof charges.$inferSelect[];
   receiptsRaw: typeof receipts.$inferSelect[];
+  overdueGraceDays: number;
 } {
   const chargesRaw = db.select().from(charges).where(eq(charges.contractId, contractId)).all();
   const chargeIds = chargesRaw.map((c) => c.id);
@@ -21,9 +22,12 @@ export function loadLedgerInputs(contractId: number): MonthlyStatementInput & {
   const receiptsRaw = db.select().from(receipts).where(eq(receipts.contractId, contractId)).all();
   const depositTransactionsRaw = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, contractId)).all();
 
+  const rules = db.select({ g: billingRules.overdueGraceDays }).from(billingRules).where(eq(billingRules.contractId, contractId)).get();
+
   return {
     chargesRaw,
     receiptsRaw,
+    overdueGraceDays: rules?.g ?? 0,
     charges: chargesRaw.map((c) => ({
       id: c.id,
       amountFen: c.amountFen,

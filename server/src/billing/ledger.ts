@@ -40,12 +40,20 @@ export function computeChargeBalance(
   adjustments: ChargeAdjustmentInput[],
   allocations: ReceiptAllocationInput[],
   asOfDate: IsoDate,
+  graceDays = 0,
 ): ChargeBalance {
   const adjustedFen = adjustments.filter((a) => a.chargeId === charge.id).reduce((s, a) => s + a.amountFen, 0);
   const allocatedFen = allocations.filter((a) => a.chargeId === charge.id).reduce((s, a) => s + a.amountFen, 0);
+  // A voided charge is as if it never existed: nothing owed, never overdue.
+  if (charge.status === "voided") {
+    return { chargeId: charge.id, billedFen: charge.amountFen, adjustedFen, allocatedFen, balanceFen: 0, isOverdue: false, daysOverdue: 0 };
+  }
   const balanceFen = charge.amountFen + adjustedFen - allocatedFen;
-  const isOverdue = balanceFen > 0 && charge.dueDate < asOfDate;
-  const daysOverdue = isOverdue ? daysBetween(charge.dueDate, asOfDate) : 0;
+  // Overdue starts only after the grace period; days overdue count from its
+  // end, so a 5-day grace makes day 6 the first overdue day.
+  const overdueFrom = shiftDate(charge.dueDate, graceDays);
+  const isOverdue = balanceFen > 0 && overdueFrom < asOfDate;
+  const daysOverdue = isOverdue ? daysBetween(overdueFrom, asOfDate) : 0;
 
   return { chargeId: charge.id, billedFen: charge.amountFen, adjustedFen, allocatedFen, balanceFen, isOverdue, daysOverdue };
 }
