@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   Alert,
+  Badge,
   Button,
   Card,
+  Col,
   Descriptions,
   Form,
   Input,
@@ -11,7 +13,9 @@ import {
   List,
   Modal,
   Popconfirm,
+  Row,
   Select,
+  Statistic,
   Space,
   Switch,
   Table,
@@ -157,6 +161,14 @@ interface DepositTransactionDto {
   reason: string;
   reversalOfId: number | null;
 }
+interface DepositStatusDto {
+  requiredFen: number;
+  waivedFen: number;
+  heldFen: number;
+  shortfallFen: number;
+  needsManualCheck: boolean;
+  state: "none" | "ok" | "short" | "manual";
+}
 interface DocumentDto {
   id: number;
   docType: string;
@@ -202,6 +214,7 @@ export default function ContractDetailPage() {
   const [receiptBalances, setReceiptBalances] = useState<ReceiptBalanceDto[]>([]);
   const [depositTxns, setDepositTxns] = useState<DepositTransactionDto[]>([]);
   const [depositBalanceFen, setDepositBalanceFen] = useState(0);
+  const [depositStatus, setDepositStatus] = useState<DepositStatusDto | null>(null);
   const [statement, setStatement] = useState<StatementDto | null>(null);
   const [statementPeriod, setStatementPeriod] = useState(todayInChina().slice(0, 7));
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
@@ -291,10 +304,11 @@ export default function ContractDetailPage() {
         setReceiptBalances(r.receiptBalances);
       });
     void api
-      .get<{ transactions: DepositTransactionDto[]; balanceFen: number }>(`/contracts/${id}/deposit-transactions`)
+      .get<{ transactions: DepositTransactionDto[]; balanceFen: number; status: DepositStatusDto }>(`/contracts/${id}/deposit-transactions`)
       .then((r) => {
         setDepositTxns(r.transactions);
         setDepositBalanceFen(r.balanceFen);
+        setDepositStatus(r.status);
       });
     void api.get<{ amendments: AmendmentDto[] }>(`/contracts/${id}/amendments`).then((r) => setAmendments(r.amendments));
     void api.get<{ documents: DocumentDto[] }>(`/documents?ownerType=contract&ownerId=${id}`).then((r) => setDocuments(r.documents));
@@ -882,6 +896,16 @@ export default function ContractDetailPage() {
         <Space wrap>
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           <Tag>v{contract.versionNumber}</Tag>
+          {contract.status === "active" && depositStatus?.state === "short" && (
+            <Tag color="red" style={{ cursor: "pointer" }} onClick={() => setActiveTab("deposit")}>
+              {t("billing.deposit.shortTag", { amount: yuan(depositStatus.shortfallFen) })}
+            </Tag>
+          )}
+          {contract.status === "active" && depositStatus?.state === "manual" && (
+            <Tag color="orange" style={{ cursor: "pointer" }} onClick={() => setActiveTab("deposit")}>
+              {t("billing.deposit.manualTag")}
+            </Tag>
+          )}
           {(user?.canDownloadPdf || user?.role === "admin" || user?.role === "manager") && (
             <Button icon={<FilePdfOutlined />} onClick={() => window.open(`/api/contracts/${id}/pdf-summary?lang=${exportLang}`, "_blank")}>
               {t("contracts.exportPdf")}
@@ -1227,9 +1251,75 @@ export default function ContractDetailPage() {
           },
           {
             key: "deposit",
-            label: t("contracts.depositTerms"),
+            label:
+              contract.status === "active" && (depositStatus?.state === "short" || depositStatus?.state === "manual") ? (
+                <Badge dot color={depositStatus.state === "short" ? "#b3423a" : "#b8860b"} offset={[6, 0]}>
+                  {t("contracts.depositTerms")}
+                </Badge>
+              ) : (
+                t("contracts.depositTerms")
+              ),
             children: (
               <>
+                {depositStatus && depositStatus.state !== "none" && (
+                  <div style={{ marginBottom: 16 }}>
+                    <Row gutter={[12, 12]}>
+                      <Col xs={12} md={6}>
+                        <Card size="small">
+                          <Statistic title={t("billing.deposit.required")} value={yuan(depositStatus.requiredFen)} />
+                        </Card>
+                      </Col>
+                      <Col xs={12} md={6}>
+                        <Card size="small">
+                          <Statistic title={t("billing.deposit.held")} value={yuan(depositStatus.heldFen)} />
+                        </Card>
+                      </Col>
+                      <Col xs={12} md={6}>
+                        <Card size="small">
+                          <Statistic
+                            title={t("billing.deposit.shortfall")}
+                            value={depositStatus.shortfallFen > 0 ? yuan(depositStatus.shortfallFen) : t("billing.deposit.none")}
+                            valueStyle={{ color: depositStatus.shortfallFen > 0 ? "#b3423a" : "#2e7d32" }}
+                          />
+                        </Card>
+                      </Col>
+                      {depositStatus.waivedFen > 0 && (
+                        <Col xs={12} md={6}>
+                          <Card size="small">
+                            <Statistic title={t("billing.deposit.waived")} value={yuan(depositStatus.waivedFen)} />
+                          </Card>
+                        </Col>
+                      )}
+                    </Row>
+                    {depositStatus.state === "short" && (
+                      <Alert
+                        style={{ marginTop: 12 }}
+                        type="error"
+                        showIcon
+                        message={t("billing.deposit.shortTitle", { amount: yuan(depositStatus.shortfallFen) })}
+                        description={t("billing.deposit.shortBody")}
+                        action={
+                          (user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && (
+                            <Button
+                              size="small"
+                              type="primary"
+                              onClick={() => {
+                                setDepositTxnType("receipt");
+                                depositTxnForm.setFieldsValue({ transactionType: "receipt" });
+                                setDepositTxnModal(true);
+                              }}
+                            >
+                              {t("billing.deposit.recordReceipt")}
+                            </Button>
+                          )
+                        }
+                      />
+                    )}
+                    {depositStatus.state === "manual" && (
+                      <Alert style={{ marginTop: 12 }} type="warning" showIcon message={t("billing.deposit.manualTitle")} description={t("billing.deposit.manualBody")} />
+                    )}
+                  </div>
+                )}
                 {canEdit && (
                   <Button icon={<PlusOutlined />} onClick={() => setDepositModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.addDepositTerms")}

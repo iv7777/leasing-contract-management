@@ -34,6 +34,7 @@ interface Overview {
   totals: { overdueFen: number; overdueCount: number; dueFen: number; dueCount: number; upcomingFen: number; projectedFen: number };
   contracts: ContractRow[];
   missingReadings: { contractId: number; referenceNumber: string; tenantName: string; stream: string; feeType: string; month: string }[];
+  depositIssues: { contractId: number; referenceNumber: string; tenantName: string; requiredFen: number; heldFen: number; shortfallFen: number; manual: boolean }[];
   notAutoBilled: { contractId: number; referenceNumber: string; tenantName: string; reason: "off" | "not_monthly" }[];
 }
 
@@ -107,6 +108,23 @@ export default function BillingOverview() {
               ))}
             </>
           }
+        />
+      )}
+
+      {data.depositIssues.length > 0 && (
+        <Alert
+          style={{ marginTop: 16 }}
+          type="warning"
+          showIcon
+          message={t("billing.overview.depositTitle", { count: data.depositIssues.length })}
+          description={data.depositIssues.map((d) => (
+            <div key={d.contractId}>
+              <Link to={`/contracts/${d.contractId}`}>{d.referenceNumber}</Link> · {d.tenantName} ·{" "}
+              {d.manual
+                ? t("billing.overview.depositManual")
+                : t("billing.overview.depositShort", { held: yuan(d.heldFen), required: yuan(d.requiredFen), shortfall: yuan(d.shortfallFen) })}
+            </div>
+          ))}
         />
       )}
 

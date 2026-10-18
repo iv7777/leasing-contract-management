@@ -14,7 +14,8 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
-import { computeChargeBalance, computeDepositBalance } from "../billing/ledger.js";
+import { computeChargeBalance } from "../billing/ledger.js";
+import { loadDepositStatus } from "../billing/depositLoad.js";
 import { computeReminders, type ContractReminderInput } from "../reports/reminders.js";
 import { computeOccupancy } from "../reports/occupancy.js";
 import { todayInChina } from "@lcm/shared";
@@ -38,13 +39,10 @@ reportsRouter.get("/reminders", (req, res) => {
         pricingStreamLabel: streams.find((s) => s.id === r.pricingStreamId)?.label ?? String(r.pricingStreamId),
       }));
 
-    const deposits = db.select().from(depositTerms).where(eq(depositTerms.contractId, contract.id)).all();
-    const latestDeposit = deposits.filter((d) => d.effectiveStart <= asOfDate).sort((a, b) => (a.effectiveStart < b.effectiveStart ? 1 : -1))[0];
-    const depositRequiredFen = latestDeposit?.requirementType === "fixed" ? latestDeposit.fixedAmountFen ?? null : null;
-    const depositWaived = latestDeposit?.waiverMet === true;
-
-    const depositTxns = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, contract.id)).all();
-    const depositHeldFen = computeDepositBalance(depositTxns.map((t) => ({ amountFen: t.amountFen, transactionDate: t.transactionDate })), asOfDate);
+    const deposit = loadDepositStatus(contract.id, asOfDate);
+    const depositRequiredFen = deposit.requiredFen > 0 ? deposit.requiredFen : null;
+    const depositWaived = false; // waived terms are already excluded from requiredFen
+    const depositHeldFen = deposit.heldFen;
 
     const ledger = loadLedgerInputs(contract.id);
     const chargeBalances = ledger.charges.map((c) => ({

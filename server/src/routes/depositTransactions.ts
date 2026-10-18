@@ -8,6 +8,7 @@ import { canAccessContract } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { computeDepositBalance, validateAllocation } from "../billing/ledger.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
+import { loadDepositStatus } from "../billing/depositLoad.js";
 import { todayInChina } from "@lcm/shared";
 
 export const depositTransactionsRouter = Router();
@@ -29,7 +30,7 @@ depositTransactionsRouter.get("/contracts/:contractId/deposit-transactions", (re
     rows.map((r) => ({ amountFen: r.amountFen, transactionDate: r.transactionDate })),
     todayInChina(),
   );
-  res.json({ transactions: rows, balanceFen });
+  res.json({ transactions: rows, balanceFen, status: loadDepositStatus(contractId, todayInChina()) });
 });
 
 const receiptTxnSchema = z.object({

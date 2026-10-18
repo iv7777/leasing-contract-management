@@ -10,6 +10,7 @@ import { applyPlan, billingEligibility, currentCutoff, planBilling, type Billing
 import { loadChargeContext } from "../billing/generate.js";
 import { runDailyBilling } from "../jobs/billing.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
+import { loadDepositStatus } from "../billing/depositLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
 import { buildOverview, type OverviewContractInput } from "../billing/overviewCalc.js";
 import { monthEndOf, monthStartOf } from "../billing/billingSchedule.js";
@@ -186,10 +187,15 @@ billingRouter.get("/billing/overview", (req, res) => {
 
   const inputs: OverviewContractInput[] = [];
   const missingReadings: { contractId: number; referenceNumber: string; tenantName: string; stream: string; feeType: string; month: string }[] = [];
+  const depositIssues: { contractId: number; referenceNumber: string; tenantName: string; requiredFen: number; heldFen: number; shortfallFen: number; manual: boolean }[] = [];
   const notAutoBilled: { contractId: number; referenceNumber: string; tenantName: string; reason: "off" | "not_monthly" }[] = [];
 
   for (const contract of visible) {
     const tenantName = tenantNames.get(contract.tenantPartyId) ?? "";
+    const deposit = loadDepositStatus(contract.id, today);
+    if (deposit.state === "short" || deposit.state === "manual") {
+      depositIssues.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, requiredFen: deposit.requiredFen, heldFen: deposit.heldFen, shortfallFen: deposit.shortfallFen, manual: deposit.state === "manual" });
+    }
     const ledger = loadLedgerInputs(contract.id);
     const rawById = new Map(ledger.chargesRaw.map((c) => [c.id, c]));
 
@@ -222,5 +228,5 @@ billingRouter.get("/billing/overview", (req, res) => {
   }
 
   const { totals, contracts: rows } = buildOverview(inputs, today);
-  res.json({ asOf: today, totals, contracts: rows, missingReadings, notAutoBilled });
+  res.json({ asOf: today, totals, contracts: rows, missingReadings, depositIssues, notAutoBilled });
 });
