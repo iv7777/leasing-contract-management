@@ -24,7 +24,7 @@
 #     --reset-admin-password      set a new password for a user
 #     --restore-backup            pick a backup and restore the database from it
 #     --refresh-backups           drop Backups-list entries whose backup folder was
-#                                 deleted by hand, so the list matches the disk
+#                                 deleted by hand, and verify the rest are working copies
 #     --initialize-db             wipe the business data and the audit log and start
 #                                 fresh (add --keep-contracts to keep Tenants &
 #                                 Landlords, properties and contracts — the contracts
@@ -727,9 +727,10 @@ action_restore_backup() {
 # ---------------------------------------------------------------------------
 action_refresh_backup_list() {
   require_installed || return 1
-  log "Refreshing the backup list from $BACKUP_DIR_PATH"
-  echo "Entries whose backup folder no longer exists will be removed from the Backups list."
-  echo "Nothing on disk is deleted, and $SERVICE_NAME keeps running."
+  log "Refreshing and verifying the backups in $BACKUP_DIR_PATH"
+  echo "Entries whose backup folder no longer exists are removed from the Backups list, and every"
+  echo "remaining backup is checked to be a working copy (a backup that fails is marked Failed)."
+  echo "No backup file is deleted or changed, and $SERVICE_NAME keeps running."
   ( cd "$APP_CODE_DIR/server" && npm run sync-backups --silent )
 }
 
@@ -825,7 +826,7 @@ run_menu() {
   4) Change the admin login email
   5) Reset a user's password
   6) Restore the database from a backup
-  7) Refresh the backup list (after deleting backups by hand)
+  7) Refresh and verify the backups (after deleting any by hand)
   8) Initialize the database (start fresh)
   9) Show service status
   10) Exit
