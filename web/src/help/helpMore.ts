@@ -94,7 +94,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading.", "A reading locks once a bill is made from it."],
+      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A reading locks once a bill is made from it."],
     },
     "contracts.detail.charges": {
       steps: [
@@ -220,7 +220,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数。", "读数一旦生成账单就会锁定。"],
+      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数一旦生成账单就会锁定。"],
     },
     "contracts.detail.charges": {
       steps: [

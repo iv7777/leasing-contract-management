@@ -27,6 +27,8 @@ import {
   message,
 } from "antd";
 import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
+import type { FormInstance } from "antd";
 import { useTranslation } from "react-i18next";
 import { todayInChina, type PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
@@ -190,6 +192,36 @@ interface StatementDto {
   depositBalanceFen: number;
 }
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
+
+/** Usual units for a metered fee, prefilled on a new usage entry. */
+const DEFAULT_METER_UNIT: Record<string, string> = { electricity_base: "kWh", water: "m³" };
+const AUTO_UNITS = Object.values(DEFAULT_METER_UNIT);
+
+/** First and last day of the month `offset` months from today ("YYYY-MM-DD"). */
+function monthRange(offset: number): { start: string; end: string } {
+  const m = dayjs(todayInChina()).add(offset, "month");
+  return { start: m.startOf("month").format("YYYY-MM-DD"), end: m.endOf("month").format("YYYY-MM-DD") };
+}
+
+/** One-tap fill of Service start / Service end with a whole month. */
+function MonthShortcuts({ form }: { form: FormInstance }) {
+  const { t } = useTranslation();
+  const fill = (offset: number) => {
+    const { start, end } = monthRange(offset);
+    form.setFieldsValue({ serviceStart: start, serviceEnd: end });
+  };
+  return (
+    <Space size={8} style={{ marginBottom: 12 }} wrap>
+      <Typography.Text type="secondary">{t("contracts.quickFill")}</Typography.Text>
+      <Button size="small" onClick={() => fill(-1)}>
+        {t("contracts.lastMonth")}
+      </Button>
+      <Button size="small" onClick={() => fill(0)}>
+        {t("contracts.thisMonth")}
+      </Button>
+    </Space>
+  );
+}
 
 const feeTypes = ["rent", "management", "electricity_base", "water", "elevator", "other"] as const;
 const rateBases = ["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"] as const;
@@ -2101,7 +2133,18 @@ export default function ContractDetailPage() {
         cancelText={t("common.cancel")}
         destroyOnClose
       >
-        <Form form={usageEntryForm} layout="vertical">
+        <Form
+          form={usageEntryForm}
+          layout="vertical"
+          onValuesChange={(changed) => {
+            // Picking a stream prefills the usual unit (kWh / m³), but never overwrites one the user typed.
+            if (changed.pricingStreamId === undefined) return;
+            const stream = streams.find((s) => s.id === changed.pricingStreamId);
+            const suggested = stream ? DEFAULT_METER_UNIT[stream.feeType] : undefined;
+            const current = usageEntryForm.getFieldValue("unit");
+            if (suggested && (!current || AUTO_UNITS.includes(current))) usageEntryForm.setFieldsValue({ unit: suggested });
+          }}
+        >
           <Form.Item name="pricingStreamId" label={t("contracts.usageEntryStream")} rules={[{ required: true }]}>
             <Select
               options={streams
@@ -2109,6 +2152,7 @@ export default function ContractDetailPage() {
                 .map((s) => ({ value: s.id, label: s.label ?? t(`contracts.${camel(s.feeType)}`) }))}
             />
           </Form.Item>
+          <MonthShortcuts form={usageEntryForm} />
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
             <DateField />
           </Form.Item>
@@ -2137,6 +2181,7 @@ export default function ContractDetailPage() {
         destroyOnClose
       >
         <Form form={editUsageEntryForm} layout="vertical">
+          <MonthShortcuts form={editUsageEntryForm} />
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
             <DateField />
           </Form.Item>
