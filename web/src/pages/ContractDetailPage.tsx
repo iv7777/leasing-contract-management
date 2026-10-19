@@ -444,7 +444,7 @@ export default function ContractDetailPage() {
 
   // The deposit amount a transaction usually carries: what is still short, or what is held.
   const depositAmountFor = (type: string): number | undefined => {
-    if (type === "receipt" && depositStatus && depositStatus.shortfallFen > 0) return depositStatus.shortfallFen / 100;
+    if (type === "receipt" && contract?.status === "active" && depositStatus && depositStatus.shortfallFen > 0) return depositStatus.shortfallFen / 100;
     if (type === "refund" && depositBalanceFen > 0) return depositBalanceFen / 100;
     return undefined;
   };
@@ -1400,7 +1400,10 @@ export default function ContractDetailPage() {
               ),
             children: (
               <>
-                {depositStatus && depositStatus.state !== "none" && (
+                {contract.status === "draft" && (
+                  <Alert style={{ marginBottom: 16 }} type="info" showIcon message={t("billing.deposit.draftNote")} />
+                )}
+                {contract.status === "active" && depositStatus && depositStatus.state !== "none" && (
                   <div style={{ marginBottom: 16 }}>
                     <Row gutter={[12, 12]}>
                       <Col xs={12} md={6}>
@@ -1498,7 +1501,7 @@ export default function ContractDetailPage() {
                           : []
                       }
                     >
-                      {d.requirementType === "fixed" ? yuan(d.fixedAmountFen ?? 0) : d.formulaBasis} · {t("common.active")}: {d.effectiveStart}
+                      {d.requirementType === "fixed" ? yuan(d.fixedAmountFen ?? 0) : `${t("contracts.formula")}: ${d.formulaBasis ?? ""}`} · {t("common.active")}: {d.effectiveStart}
                     </List.Item>
                   )}
                 />
@@ -1858,7 +1861,7 @@ export default function ContractDetailPage() {
         maskClosable={!uploadingDoc}
       >
         <Form form={docForm} layout="vertical">
-          <Form.Item label="File" required>
+          <Form.Item label={t("contracts.file")} required>
             <Upload
               disabled={uploadingDoc}
               beforeUpload={(file) => {
@@ -1868,7 +1871,7 @@ export default function ContractDetailPage() {
               maxCount={1}
               accept="image/*,.pdf"
             >
-              <Button icon={<UploadOutlined />}>Select file</Button>
+              <Button icon={<UploadOutlined />}>{t("contracts.selectFile")}</Button>
             </Upload>
           </Form.Item>
           <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]} initialValue="signed_lease">
@@ -2324,7 +2327,7 @@ export default function ContractDetailPage() {
       <Modal title={t("contracts.addConcession")} open={concessionModal} onCancel={() => setConcessionModal(false)} onOk={onAddConcession} okText={t("common.create")} cancelText={t("common.cancel")}>
         <Form form={concessionForm} layout="vertical">
           <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
-            <Select allowClear placeholder="All streams" options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
+            <Select allowClear placeholder={t("contracts.allStreams")} options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
             <DateField />
@@ -2376,7 +2379,7 @@ export default function ContractDetailPage() {
       >
         <Form form={editConcessionForm} layout="vertical">
           <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
-            <Select allowClear placeholder="All streams" options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
+            <Select allowClear placeholder={t("contracts.allStreams")} options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
           </Form.Item>
           <Form.Item name="effectiveStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
             <DateField />
@@ -2419,15 +2422,15 @@ export default function ContractDetailPage() {
             <Select
               options={[
                 { value: "fixed", label: t("contracts.fixedAmount") },
-                { value: "formula", label: "Formula" },
+                { value: "formula", label: t("contracts.formula") },
               ]}
             />
           </Form.Item>
-          <Form.Item name="depositAmountYuan" label={t("contracts.fixedAmount")} tooltip="Enter yuan; stored as fen">
+          <Form.Item name="depositAmountYuan" label={t("contracts.fixedAmount")} tooltip={t("contracts.depositAmountTooltip")}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
-          <Form.Item name="formulaBasis" label="Formula basis">
-            <Input placeholder="e.g. 2x monthly rent" />
+          <Form.Item name="formulaBasis" label={t("contracts.formulaBasis")}>
+            <Input placeholder={t("contracts.formulaBasisPlaceholder")} />
           </Form.Item>
           <Space size={8} style={{ marginBottom: 12 }} wrap>
             <Typography.Text type="secondary">{t("contracts.quickPick")}</Typography.Text>
@@ -2465,15 +2468,15 @@ export default function ContractDetailPage() {
             <Select
               options={[
                 { value: "fixed", label: t("contracts.fixedAmount") },
-                { value: "formula", label: "Formula" },
+                { value: "formula", label: t("contracts.formula") },
               ]}
             />
           </Form.Item>
-          <Form.Item name="depositAmountYuan" label={t("contracts.fixedAmount")} tooltip="Enter yuan; stored as fen">
+          <Form.Item name="depositAmountYuan" label={t("contracts.fixedAmount")} tooltip={t("contracts.depositAmountTooltip")}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
-          <Form.Item name="formulaBasis" label="Formula basis">
-            <Input placeholder="e.g. 2x monthly rent" />
+          <Form.Item name="formulaBasis" label={t("contracts.formulaBasis")}>
+            <Input placeholder={t("contracts.formulaBasisPlaceholder")} />
           </Form.Item>
         </Form>
       </Modal>
@@ -2548,7 +2551,7 @@ export default function ContractDetailPage() {
       >
         <Form form={reverseReceiptForm} layout="vertical">
           <Form.Item name="reason" label={t("contracts.reversalReason")} rules={[{ required: true }]}>
-            <Input.TextArea rows={2} placeholder="e.g. check bounced" />
+            <Input.TextArea rows={2} placeholder={t("contracts.reversalReasonPlaceholder")} />
           </Form.Item>
         </Form>
       </Modal>

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { depositTransactions, receipts, receiptAllocations, charges } from "../db/schema.js";
+import { contracts, depositTransactions, receipts, receiptAllocations, charges } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
@@ -30,7 +30,11 @@ depositTransactionsRouter.get("/contracts/:contractId/deposit-transactions", (re
     rows.map((r) => ({ amountFen: r.amountFen, transactionDate: r.transactionDate })),
     todayInChina(),
   );
-  res.json({ transactions: rows, balanceFen, status: loadDepositStatus(contractId, todayInChina()) });
+  // A shortfall only means something once the lease is in force; a draft has none.
+  const contract = db.select({ status: contracts.status }).from(contracts).where(eq(contracts.id, contractId)).get();
+  const loaded = loadDepositStatus(contractId, todayInChina());
+  const status = contract?.status === "active" ? loaded : { ...loaded, shortfallFen: 0, needsManualCheck: false, state: "none" as const };
+  res.json({ transactions: rows, balanceFen, status });
 });
 
 const receiptTxnSchema = z.object({

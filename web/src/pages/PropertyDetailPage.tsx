@@ -429,7 +429,7 @@ export default function PropertyDetailPage() {
         maskClosable={!uploadingDoc}
       >
         <Form form={docForm} layout="vertical">
-          <Form.Item label="File" required>
+          <Form.Item label={t("contracts.file")} required>
             <Upload
               disabled={uploadingDoc}
               beforeUpload={(file) => {
@@ -440,7 +440,7 @@ export default function PropertyDetailPage() {
               accept="image/*,.pdf"
               capture="environment"
             >
-              <Button icon={<UploadOutlined />}>Select file</Button>
+              <Button icon={<UploadOutlined />}>{t("contracts.selectFile")}</Button>
             </Upload>
           </Form.Item>
           <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]}>
