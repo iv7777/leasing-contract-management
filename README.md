@@ -56,6 +56,8 @@ cd server && npm run restore-backup -- <backup ID | path-to-backup-dir>
 
 Either way, the systemd service (if present) is stopped and restarted automatically around the restore, and a safety copy of the current database is saved first. Document files under `DOCUMENT_STORAGE_DIR` are never touched by a restore — recover those separately from `documents.manifest.json` in the backup folder if needed.
 
+**Refreshing the backup list**: if you delete backup folders by hand, use the control panel's "Refresh the backup list" (or `--refresh-backups`, or `cd server && npm run sync-backups`) to remove the entries whose folder no longer exists, so the Backups page and the restore menu show what's really there. It deletes no files and the server can keep running; folders on disk that aren't listed are reported only.
+
 **Opening the control panel**: once installed, run `sudo lcm` from anywhere (a link in `/usr/local/bin` to `deploy/vps-deploy.sh` in the app checkout, created automatically by the script; override the name with `COMMAND_NAME`). The menu header and `--status` show the installed app version, and "Check for updates" reports the version it updates to. Because the link points into the checkout, it always runs the script version that the last update pulled.
 
 **Initializing the database (start fresh)**: `deploy/vps-deploy.sh` has a menu option "Initialize the database (start fresh)" (or `--initialize-db`, plus `--keep-contracts`), or on the server directly `cd server && npm run initialize-db [-- --keep-contracts]`. It asks which to clear:

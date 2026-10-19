@@ -17,6 +17,7 @@
     "backup": "tsx src/jobs/backup.ts",
     "restore-backup": "tsx src/db/restoreBackup.ts",
     "initialize-db": "tsx src/db/initializeDatabase.ts",
+    "sync-backups": "tsx src/db/syncBackups.ts",
     "pretest": "cd .. && npm run build --workspace=shared",
     "test": "tsx --test src/**/*.test.ts"
   },

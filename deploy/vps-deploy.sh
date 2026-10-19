@@ -23,6 +23,8 @@
 #     --change-admin-email        rename the admin's login email
 #     --reset-admin-password      set a new password for a user
 #     --restore-backup            pick a backup and restore the database from it
+#     --refresh-backups           drop Backups-list entries whose backup folder was
+#                                 deleted by hand, so the list matches the disk
 #     --initialize-db             wipe the business data and the audit log and start
 #                                 fresh (add --keep-contracts to keep Tenants &
 #                                 Landlords, properties and contracts — the contracts
@@ -72,6 +74,7 @@ for arg in "$@"; do
     --change-admin-email) ACTION="change-admin-email" ;;
     --reset-admin-password) ACTION="reset-admin-password" ;;
     --restore-backup) ACTION="restore-backup" ;;
+    --refresh-backups) ACTION="refresh-backups" ;;
     --initialize-db) ACTION="initialize-db" ;;
     --keep-contracts) KEEP_CONTRACTS=1 ;;
     --status) ACTION="status" ;;
@@ -720,6 +723,17 @@ action_restore_backup() {
 }
 
 # ---------------------------------------------------------------------------
+# Action: refresh the backup list (after deleting backup folders by hand)
+# ---------------------------------------------------------------------------
+action_refresh_backup_list() {
+  require_installed || return 1
+  log "Refreshing the backup list from $BACKUP_DIR_PATH"
+  echo "Entries whose backup folder no longer exists will be removed from the Backups list."
+  echo "Nothing on disk is deleted, and $SERVICE_NAME keeps running."
+  ( cd "$APP_CODE_DIR/server" && npm run sync-backups --silent )
+}
+
+# ---------------------------------------------------------------------------
 # Action: initialize the database (start fresh)
 # ---------------------------------------------------------------------------
 action_initialize_database() {
@@ -811,11 +825,12 @@ run_menu() {
   4) Change the admin login email
   5) Reset a user's password
   6) Restore the database from a backup
-  7) Initialize the database (start fresh)
-  8) Show service status
-  9) Exit
+  7) Refresh the backup list (after deleting backups by hand)
+  8) Initialize the database (start fresh)
+  9) Show service status
+  10) Exit
 MENU
-    read -rp "Choose an option [1-9, or Enter to exit]: " choice
+    read -rp "Choose an option [1-10, or Enter to exit]: " choice
     case "$choice" in
       1) action_change_domain || warn "Domain change did not complete." ;;
       2) action_check_update || warn "Update check did not complete." ;;
@@ -823,9 +838,10 @@ MENU
       4) action_change_admin_email || warn "Email change did not complete." ;;
       5) action_reset_admin_password || warn "Password reset did not complete." ;;
       6) action_restore_backup || warn "Restore did not complete." ;;
-      7) action_initialize_database || warn "Initialization did not complete." ;;
-      8) action_show_status || true ;;
-      9|"") echo "Bye."; exit 0 ;;
+      7) action_refresh_backup_list || warn "Refreshing the backup list did not complete." ;;
+      8) action_initialize_database || warn "Initialization did not complete." ;;
+      9) action_show_status || true ;;
+      10|"") echo "Bye."; exit 0 ;;
       *) echo "Invalid option." ;;
     esac
   done
@@ -866,6 +882,7 @@ main() {
     change-admin-email) action_change_admin_email ;;
     reset-admin-password) action_reset_admin_password ;;
     restore-backup) action_restore_backup ;;
+    refresh-backups) action_refresh_backup_list ;;
     initialize-db) action_initialize_database ;;
     status) action_show_status ;;
     menu) run_menu ;;
