@@ -196,6 +196,7 @@ const zh: Translations = {
     reversalReasonPlaceholder: "例如：录入错误",
     statementDraftNote: "合同生效后才有月度对账单——在此之前尚未产生任何账单或收款。",
     draftActionsNote: "合同生效后才能录入收款、收据、账单、押金和抄表读数。",
+    amendmentsDraftNote: "草稿合同直接编辑即可（编辑合同）。合同生效后才能提交变更。",
     meteredUnit: "计量单位",
     meteredUnitPlaceholder: "例如：度、吨、立方米",
     amountOrRate: "金额/费率（元）",

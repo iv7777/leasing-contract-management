@@ -1752,7 +1752,8 @@ export default function ContractDetailPage() {
             label: t("contracts.amendments"),
             children: (
               <>
-                {canPropose && (
+                {canPropose && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.amendmentsDraftNote")} />}
+                {canPropose && contract.status !== "draft" && (
                   <Button icon={<PlusOutlined />} onClick={() => setAmendmentModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.proposeAmendment")}
                   </Button>

@@ -14,7 +14,7 @@ import {
   chargeAdjustments,
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { canAccessContract } from "../lib/contractScope.js";
+import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
 import {
   contractUnitBelongsToContract,
@@ -125,6 +125,8 @@ const createAmendmentSchema = z.object({
   supportingDocumentId: z.number().optional(),
 });
 
+const DRAFT_AMENDMENT_MESSAGE = "A draft contract is edited directly. Amendments are for changing a contract after it has been activated.";
+
 amendmentsRouter.get("/contracts/:contractId/amendments", (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!canAccessContract(req.user!, contractId)) {
@@ -141,6 +143,8 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
   if (!canAccessContract(req.user!, contractId)) {
     return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
   }
+
+  if (rejectIfDraft(res, contractId, DRAFT_AMENDMENT_MESSAGE)) return;
 
   const parsed = createAmendmentSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -173,6 +177,7 @@ amendmentsRouter.post("/amendments/:id/submit", requireRole("admin", "manager"),
   if (amendment.status !== "draft") {
     return res.status(409).json({ error: { code: "invalid_state", message: "Only a draft amendment can be submitted." } });
   }
+  if (rejectIfDraft(res, amendment.contractId, DRAFT_AMENDMENT_MESSAGE)) return;
 
   const isInternalCorrection = amendment.type === "internal_correction";
   if (!isInternalCorrection && !amendment.supportingDocumentId) {
@@ -209,6 +214,7 @@ function applyApproval(req: import("express").Request, res: import("express").Re
   }
 
   const contract = db.select().from(contracts).where(eq(contracts.id, amendment.contractId)).get()!;
+  if (rejectIfDraft(res, amendment.contractId, DRAFT_AMENDMENT_MESSAGE)) return;
   if (amendment.baseContractVersion !== contract.versionNumber) {
     return res.status(409).json({
       error: {

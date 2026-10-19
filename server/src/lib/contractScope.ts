@@ -29,11 +29,15 @@ export function canAccessContract(user: AuthedUser, contractId: number): boolean
  * their access check; it sends the 409 and returns true when the contract is
  * still a draft. Expired and terminated contracts are deliberately not blocked
  * (arrears are still collected and deposits settled after a lease ends). */
-export function rejectIfDraft(res: Response, contractId: number): boolean {
+export function rejectIfDraft(
+  res: Response,
+  contractId: number,
+  message = "This contract is still a draft. Activate it before recording payments, receipts, charges, deposits or meter readings.",
+): boolean {
   const row = db.select({ status: contracts.status }).from(contracts).where(eq(contracts.id, contractId)).get();
   if (row?.status !== "draft") return false;
   res.status(409).json({
-    error: { code: "contract_not_active", message: "This contract is still a draft. Activate it before recording payments, receipts, charges, deposits or meter readings." },
+    error: { code: "contract_not_active", message },
   });
   return true;
 }

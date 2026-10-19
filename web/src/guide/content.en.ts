@@ -679,7 +679,7 @@ export const guideEn: GuideContent = {
           type: "table",
           head: ["You see", "It means"],
           rows: [
-            ["{amber:Draft}", "Contract still being set up — editable, never billed; payments, receipts, deposits and meter readings are locked until it is activated"],
+            ["{amber:Draft}", "Contract still being set up — editable, never billed; payments, receipts, deposits, meter readings and amendments are locked until it is activated"],
             ["{green:Active}", "Contract in force and billed"],
             ["Expired / Terminated", "Contract has ended — no further bills"],
             ["{red:N days overdue}", "Unpaid past the grace period; N counts from its end"],
