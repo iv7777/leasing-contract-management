@@ -15,8 +15,8 @@ import { sqlite } from "./client.js";
  *                                            every contract back to draft
  *
  * Always kept, in both modes: user accounts and sessions, app settings and the
- * backup list. The audit log is wiped by the full reset and kept when contracts
- * are kept; either way an entry recording this initialization is added.
+ * backup list. The audit log is wiped in both modes; one entry recording this
+ * initialization is added afterwards.
  * Document FILES on disk are never deleted by this script.
  *
  * Like restore-backup, it stops the systemd service, saves a safety copy of
@@ -63,7 +63,7 @@ const MASTER_DATA_TABLES = [
   "properties",
 ];
 
-const toDelete = keepContracts ? ACTIVITY_TABLES : [...ACTIVITY_TABLES, ...MASTER_DATA_TABLES, "audit_events"];
+const toDelete = [...ACTIVITY_TABLES, ...(keepContracts ? [] : MASTER_DATA_TABLES), "audit_events"];
 
 function count(table: string): number {
   return (sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
@@ -93,7 +93,7 @@ for (const c of counts.filter((x) => x.rows > 0)) console.log(`  ${c.table.padEn
 if (counts.every((c) => c.rows === 0)) console.log("  (nothing — these tables are already empty)");
 console.log("");
 console.log("Will be KEPT:");
-console.log(keepContracts ? "  user accounts and sessions, app settings, the audit log, the backup list" : "  user accounts and sessions, app settings, the backup list");
+console.log("  user accounts and sessions, app settings, the backup list");
 if (keepContracts) {
   console.log(`  Tenants & Landlords (${count("parties")}), properties (${count("properties")}), units (${count("units")}),`);
   console.log(`  contracts (${count("contracts")}) with their pricing, deposit terms, amendments and documents`);
