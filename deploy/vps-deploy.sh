@@ -23,6 +23,9 @@
 #     --change-admin-email        rename the admin's login email
 #     --reset-admin-password      set a new password for a user
 #     --restore-backup            pick a backup and restore the database from it
+#     --initialize-db             wipe the business data and start fresh (add
+#                                 --keep-contracts to keep Tenants & Landlords,
+#                                 properties and contracts)
 #     --status                    service/health/TLS summary
 #     --menu                      force the menu even without a TTY
 #     -y / --yes                  don't ask for confirmation
@@ -50,6 +53,7 @@ DOMAIN="${DOMAIN:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-$ADMIN_EMAIL}"
 ASSUME_YES="${ASSUME_YES:-0}"
+KEEP_CONTRACTS="${KEEP_CONTRACTS:-}"
 ACTION=""
 
 for arg in "$@"; do
@@ -61,6 +65,8 @@ for arg in "$@"; do
     --change-admin-email) ACTION="change-admin-email" ;;
     --reset-admin-password) ACTION="reset-admin-password" ;;
     --restore-backup) ACTION="restore-backup" ;;
+    --initialize-db) ACTION="initialize-db" ;;
+    --keep-contracts) KEEP_CONTRACTS=1 ;;
     --status) ACTION="status" ;;
     --menu) ACTION="menu" ;;
     *) echo "Unknown argument: $arg" >&2; exit 1 ;;
@@ -629,7 +635,10 @@ action_restore_backup() {
         docs_count="$(grep -o '"id"' "$d/documents.manifest.json" | wc -l)"
       fi
       kind="backup"
-      case "$name" in pre-restore-*) kind="safety copy taken before an earlier restore" ;; esac
+      case "$name" in
+        pre-restore-*) kind="safety copy taken before an earlier restore" ;;
+        pre-init-*) kind="safety copy taken before the database was initialized" ;;
+      esac
       valid_dirs+=("$d")
       labels+=("$name — $kind (${size:-?}, ${docs_count} documents referenced)")
     else
@@ -673,6 +682,53 @@ action_restore_backup() {
 }
 
 # ---------------------------------------------------------------------------
+# Action: initialize the database (start fresh)
+# ---------------------------------------------------------------------------
+action_initialize_database() {
+  require_installed || return 1
+
+  # Mode: asked in the menu; the --keep-contracts flag answers it up front
+  # for a non-interactive run.
+  local keep="$KEEP_CONTRACTS"
+  if [ -z "$keep" ]; then
+    if [ "$ASSUME_YES" = "1" ] || [ ! -t 0 ]; then
+      keep=0
+    else
+      echo
+      echo "What should be cleared?"
+      echo "  1) Everything — Tenants & Landlords, properties, units, contracts, bills, payments..."
+      echo "  2) Keep Tenants & Landlords, properties and contracts — clear only the bills,"
+      echo "     payments, meter readings, deposit movements and billing-run history"
+      read -rp "Choose [1-2], or blank to cancel: " mode
+      case "$mode" in
+        1) keep=0 ;;
+        2) keep=1 ;;
+        *) echo "Cancelled."; return 0 ;;
+      esac
+    fi
+  fi
+
+  echo
+  if [ "$keep" = "1" ]; then
+    warn "This will DELETE every bill, payment, meter reading, deposit movement and billing-run record."
+    warn "Tenants & Landlords, properties, units and contracts (with pricing, deposit terms, amendments"
+    warn "and documents) are KEPT, and automatic billing is switched off on every contract."
+  else
+    warn "This will DELETE all Tenants & Landlords, properties, units, contracts, bills, payments and so on."
+  fi
+  warn "User accounts, settings and the audit log are kept. Document files on disk are not deleted."
+  warn "$SERVICE_NAME will be stopped and started again automatically; a safety copy is saved first"
+  warn "(restorable with option 6) in $BACKUP_DIR_PATH/pre-init-<time>."
+  confirm "Initialize the database now?" || { echo "Aborted."; return 1; }
+
+  # initializeDatabase.ts has its own typed confirmation; the operator has
+  # just confirmed with the consequences spelled out, so answer it here.
+  local args=()
+  [ "$keep" = "1" ] && args+=(--keep-contracts)
+  ( cd "$APP_CODE_DIR/server" && echo "INITIALIZE" | SERVICE_NAME="$SERVICE_NAME" npm run initialize-db -- "${args[@]}" )
+}
+
+# ---------------------------------------------------------------------------
 # Action: status summary
 # ---------------------------------------------------------------------------
 action_show_status() {
@@ -711,10 +767,11 @@ run_menu() {
   4) Change the admin login email
   5) Reset a user's password
   6) Restore the database from a backup
-  7) Show service status
-  8) Exit
+  7) Initialize the database (start fresh)
+  8) Show service status
+  9) Exit
 MENU
-    read -rp "Choose an option [1-8, or Enter to exit]: " choice
+    read -rp "Choose an option [1-9, or Enter to exit]: " choice
     case "$choice" in
       1) action_change_domain || warn "Domain change did not complete." ;;
       2) action_check_update || warn "Update check did not complete." ;;
@@ -722,8 +779,9 @@ MENU
       4) action_change_admin_email || warn "Email change did not complete." ;;
       5) action_reset_admin_password || warn "Password reset did not complete." ;;
       6) action_restore_backup || warn "Restore did not complete." ;;
-      7) action_show_status || true ;;
-      8|"") echo "Bye."; exit 0 ;;
+      7) action_initialize_database || warn "Initialization did not complete." ;;
+      8) action_show_status || true ;;
+      9|"") echo "Bye."; exit 0 ;;
       *) echo "Invalid option." ;;
     esac
   done
@@ -755,6 +813,7 @@ case "$ACTION" in
   change-admin-email) action_change_admin_email ;;
   reset-admin-password) action_reset_admin_password ;;
   restore-backup) action_restore_backup ;;
+  initialize-db) action_initialize_database ;;
   status) action_show_status ;;
   menu) run_menu ;;
 esac

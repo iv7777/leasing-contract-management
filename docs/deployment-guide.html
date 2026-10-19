@@ -925,6 +925,7 @@ curl http://127.0.0.1:4000/api/health</code></pre>
             <tr class="svc-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo -u lcm npm run backup</code></td></tr>
             <tr class="root-only"><td>Manual backup</td><td><code class="inline">cd /opt/lcm/app/server && sudo npm run backup</code></td></tr>
             <tr><td>Restore from a backup</td><td><code class="inline">sudo bash vps-deploy.sh --restore-backup</code></td></tr>
+            <tr><td>Initialize the database (start fresh; add <code class="inline">--keep-contracts</code> to keep Tenants &amp; Landlords, properties and contracts)</td><td><code class="inline">sudo bash vps-deploy.sh --initialize-db</code></td></tr>
             <tr class="svc-only"><td>Reset a password</td><td><code class="inline">sudo -u lcm npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr class="root-only"><td>Reset a password</td><td><code class="inline">sudo npm run reset-password -- &lt;email&gt; &lt;new-password&gt;</code></td></tr>
             <tr class="svc-only"><td>Rename a login email</td><td><code class="inline">sudo -u lcm npm run set-email -- &lt;old-email&gt; &lt;new-email&gt;</code></td></tr>
