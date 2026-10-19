@@ -10,12 +10,14 @@ import { sqlite } from "./client.js";
  *   npm run initialize-db                    wipe everything below
  *   npm run initialize-db -- --keep-contracts  keep Tenants & Landlords, properties,
  *                                            units and contracts (with their pricing,
- *                                            deposit terms, amendments and documents)
- *                                            and wipe only what happened under them
+ *                                            deposit terms, amendments and documents),
+ *                                            wipe only what happened under them, and put
+ *                                            every contract back to draft
  *
- * Always kept, in both modes: user accounts and sessions, app settings, the
- * audit log (an entry recording this initialization is added) and the backup
- * list. Document FILES on disk are never deleted by this script.
+ * Always kept, in both modes: user accounts and sessions, app settings and the
+ * backup list. The audit log is wiped by the full reset and kept when contracts
+ * are kept; either way an entry recording this initialization is added.
+ * Document FILES on disk are never deleted by this script.
  *
  * Like restore-backup, it stops the systemd service, saves a safety copy of
  * the current database first, restarts the service afterwards, and needs a
@@ -61,7 +63,7 @@ const MASTER_DATA_TABLES = [
   "properties",
 ];
 
-const toDelete = keepContracts ? ACTIVITY_TABLES : [...ACTIVITY_TABLES, ...MASTER_DATA_TABLES];
+const toDelete = keepContracts ? ACTIVITY_TABLES : [...ACTIVITY_TABLES, ...MASTER_DATA_TABLES, "audit_events"];
 
 function count(table: string): number {
   return (sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
@@ -91,11 +93,11 @@ for (const c of counts.filter((x) => x.rows > 0)) console.log(`  ${c.table.padEn
 if (counts.every((c) => c.rows === 0)) console.log("  (nothing — these tables are already empty)");
 console.log("");
 console.log("Will be KEPT:");
-console.log("  user accounts and sessions, app settings, the audit log, the backup list");
+console.log(keepContracts ? "  user accounts and sessions, app settings, the audit log, the backup list" : "  user accounts and sessions, app settings, the backup list");
 if (keepContracts) {
   console.log(`  Tenants & Landlords (${count("parties")}), properties (${count("properties")}), units (${count("units")}),`);
   console.log(`  contracts (${count("contracts")}) with their pricing, deposit terms, amendments and documents`);
-  console.log("  Automatic billing is switched OFF on every contract — run Catch up billing again.");
+  console.log("  Every contract is set back to DRAFT and automatic billing is switched OFF.");
 }
 console.log("");
 if (manageService) {
@@ -147,7 +149,10 @@ try {
         work.prepare(`DELETE FROM ${table}`).run();
         work.prepare(`DELETE FROM sqlite_sequence WHERE name = ?`).run(table);
       }
-      if (keepContracts) work.prepare(`UPDATE billing_rules SET auto_billing = 0`).run();
+      if (keepContracts) {
+        work.prepare(`UPDATE billing_rules SET auto_billing = 0`).run();
+        work.prepare(`UPDATE contracts SET status = 'draft', updated_at = ?`).run(new Date().toISOString());
+      }
       work
         .prepare(`INSERT INTO audit_events (actor_user_id, action, entity_type, details_json, created_at) VALUES (NULL, ?, 'database', ?, ?)`)
         .run("database_initialized", JSON.stringify({ keepContracts, deleted: counts.filter((c) => c.rows > 0) }), new Date().toISOString());
@@ -162,7 +167,7 @@ try {
 
   console.log("");
   console.log("Database initialized.");
-  if (keepContracts) console.log("Next: open each contract's Charges tab and use Catch up billing, then enter payments.");
+  if (keepContracts) console.log("Next: check each draft contract, activate it, then use Catch up billing on its Charges tab and enter payments.");
 } finally {
   try {
     startService();

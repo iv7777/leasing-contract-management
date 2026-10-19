@@ -58,10 +58,10 @@ Either way, the systemd service (if present) is stopped and restarted automatica
 
 **Initializing the database (start fresh)**: `deploy/vps-deploy.sh` has a menu option "Initialize the database (start fresh)" (or `--initialize-db`, plus `--keep-contracts`), or on the server directly `cd server && npm run initialize-db [-- --keep-contracts]`. It asks which to clear:
 
-- **Everything**: Tenants & Landlords, properties, units, contracts (with pricing, deposit terms, amendments, versions, documents), bills, payments, readings, deposit movements and billing-run history.
-- **Keep contracts and Tenants & Landlords** (`--keep-contracts`): clears only what happened under them — bills, adjustments, payments and allocations, meter readings, deposit movements and the billing-run log — and switches automatic billing off on every contract, so each one is brought up to date again with Catch up billing and the payments entered anew.
+- **Everything**: Tenants & Landlords, properties, units, contracts (with pricing, deposit terms, amendments, versions, documents), bills, payments, readings, deposit movements, billing-run history **and the audit log**.
+- **Keep contracts and Tenants & Landlords** (`--keep-contracts`): clears only what happened under them — bills, adjustments, payments and allocations, meter readings, deposit movements and the billing-run log — sets every contract back to **draft** and switches automatic billing off, so each one is checked, activated again and brought up to date with Catch up billing and the payments entered anew. The audit log is kept in this mode.
 
-In both modes user accounts and sessions, app settings, the audit log (an "initialized" entry is added) and the backup list are kept, and document files on disk are never deleted. The script stops the service, saves a safety copy to `BACKUP_DIR/pre-init-<time>` first (listed by, and restorable with, the restore option), requires a typed `INITIALIZE`, and restarts the service.
+In both modes user accounts and sessions, app settings and the backup list are kept, an "initialized" entry is added to the audit log (a fresh one after the full reset), and document files on disk are never deleted. The script stops the service, saves a safety copy to `BACKUP_DIR/pre-init-<time>` first (listed by, and restorable with, the restore option), requires a typed `INITIALIZE`, and restarts the service.
 
 An off-site copy outside China and a documented restore drill are required before production use per the project brief — neither is automated yet. If you set one up with `rclone`, prefer `rclone copy` over `rclone sync`: since local retention now prunes on its own, a `sync` would mirror those deletions off-site too, defeating the point of a separate off-site archive.
 

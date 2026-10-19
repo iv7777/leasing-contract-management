@@ -23,9 +23,10 @@
 #     --change-admin-email        rename the admin's login email
 #     --reset-admin-password      set a new password for a user
 #     --restore-backup            pick a backup and restore the database from it
-#     --initialize-db             wipe the business data and start fresh (add
-#                                 --keep-contracts to keep Tenants & Landlords,
-#                                 properties and contracts)
+#     --initialize-db             wipe the business data and the audit log and start
+#                                 fresh (add --keep-contracts to keep Tenants &
+#                                 Landlords, properties and contracts — the contracts
+#                                 go back to draft and the audit log is kept)
 #     --status                    service/health/TLS summary
 #     --menu                      force the menu even without a TTY
 #     -y / --yes                  don't ask for confirmation
@@ -696,9 +697,11 @@ action_initialize_database() {
     else
       echo
       echo "What should be cleared?"
-      echo "  1) Everything — Tenants & Landlords, properties, units, contracts, bills, payments..."
-      echo "  2) Keep Tenants & Landlords, properties and contracts — clear only the bills,"
-      echo "     payments, meter readings, deposit movements and billing-run history"
+      echo "  1) Everything — Tenants & Landlords, properties, units, contracts, bills, payments,"
+      echo "     and the audit log"
+      echo "  2) Keep Tenants & Landlords, properties and contracts — clear the bills, payments,"
+      echo "     meter readings, deposit movements and billing-run history, and set every"
+      echo "     contract back to draft"
       read -rp "Choose [1-2], or blank to cancel: " mode
       case "$mode" in
         1) keep=0 ;;
@@ -712,11 +715,13 @@ action_initialize_database() {
   if [ "$keep" = "1" ]; then
     warn "This will DELETE every bill, payment, meter reading, deposit movement and billing-run record."
     warn "Tenants & Landlords, properties, units and contracts (with pricing, deposit terms, amendments"
-    warn "and documents) are KEPT, and automatic billing is switched off on every contract."
+    warn "and documents) are KEPT, but every contract goes back to DRAFT and automatic billing is switched off."
+    warn "User accounts, settings and the audit log are kept."
   else
-    warn "This will DELETE all Tenants & Landlords, properties, units, contracts, bills, payments and so on."
+    warn "This will DELETE all Tenants & Landlords, properties, units, contracts, bills, payments and so on,"
+    warn "and WIPE the audit log. User accounts and settings are kept."
   fi
-  warn "User accounts, settings and the audit log are kept. Document files on disk are not deleted."
+  warn "Document files on disk are not deleted."
   warn "$SERVICE_NAME will be stopped and started again automatically; a safety copy is saved first"
   warn "(restorable with option 6) in $BACKUP_DIR_PATH/pre-init-<time>."
   confirm "Initialize the database now?" || { echo "Aborted."; return 1; }
