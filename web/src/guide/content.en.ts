@@ -656,6 +656,7 @@ export const guideEn: GuideContent = {
             { q: "Why is there a ¥0 bill?", a: "It's a month covered by a 100% concession (free rent). The bill exists so the history shows the rent was waived." },
             { q: "I need to change a rate on an active contract", a: "Direct edits are locked. Use **Propose amendment** → change a rate, attach the signed supplement, and have an Admin approve it." },
             { q: "A bill has the wrong amount", a: "Admin: void it (reverse any payments applied first), correct the contract's terms, and the month is billed again at the next run. Pause automatic billing first if you don't want the old terms re-billed." },
+            { q: "Record payment / Generate charges aren't there", a: "The contract is still a **Draft**. Money and meter readings unlock once an Admin activates it. Expired and terminated contracts stay open so arrears can still be collected." },
             { q: "I can't edit the contract", a: "Only **Draft** contracts can be edited directly. An Active contract changes through amendments." },
             { q: "I can't see a contract that a colleague can", a: "You see only properties assigned to you — and a contract spanning several properties only if you're assigned to all of them. Ask an Admin." },
             { q: "The PDF / CSV buttons are missing", a: "Export is switched on per account for Collectors and Viewers. Ask an Admin to enable it for you." },
@@ -678,7 +679,7 @@ export const guideEn: GuideContent = {
           type: "table",
           head: ["You see", "It means"],
           rows: [
-            ["{amber:Draft}", "Contract still being set up — editable, never billed"],
+            ["{amber:Draft}", "Contract still being set up — editable, never billed; payments, receipts, deposits and meter readings are locked until it is activated"],
             ["{green:Active}", "Contract in force and billed"],
             ["Expired / Terminated", "Contract has ended — no further bills"],
             ["{red:N days overdue}", "Unpaid past the grace period; N counts from its end"],

@@ -131,6 +131,7 @@ export const apiErrorByCode: Record<string, string> = {
   invalid_reference: "所选数据不属于此合同，请检查后重试。",
   invalid_state: "当前状态下无法执行此操作。",
   allocation_rejected: "核销被拒绝，请检查金额。",
+  contract_not_active: "合同尚未生效，请先生效后再录入收款、收据、账单、押金或读数。",
   not_draft: "只有草稿状态的合同才能执行此操作。",
   stale_amendment: "合同已发生变化，请刷新后重新提交。",
   plan_changed: "合同条款或读数已变化，请重新预览并确认。",

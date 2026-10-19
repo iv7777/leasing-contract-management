@@ -195,6 +195,7 @@ const zh: Translations = {
     formulaBasisPlaceholder: "例如：3 个月租金",
     reversalReasonPlaceholder: "例如：录入错误",
     statementDraftNote: "合同生效后才有月度对账单——在此之前尚未产生任何账单或收款。",
+    draftActionsNote: "合同生效后才能录入收款、收据、账单、押金和抄表读数。",
     meteredUnit: "计量单位",
     meteredUnitPlaceholder: "例如：度、吨、立方米",
     amountOrRate: "金额/费率（元）",

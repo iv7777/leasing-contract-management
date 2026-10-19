@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contracts, depositTransactions, receipts, receiptAllocations, charges } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { canAccessContract } from "../lib/contractScope.js";
+import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { computeDepositBalance, validateAllocation } from "../billing/ledger.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
@@ -67,6 +67,7 @@ const transferSchema = z.object({
 depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", requireRole("admin", "manager", "collector"), (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!ensureContractAccess(req, res, contractId)) return;
+  if (rejectIfDraft(res, contractId)) return;
 
   const type = req.body?.transactionType;
 
@@ -175,6 +176,7 @@ depositTransactionsRouter.post("/deposit-transactions/:id/reverse", requireRole(
   const id = Number(req.params.id);
   const original = db.select().from(depositTransactions).where(eq(depositTransactions.id, id)).get();
   if (!original) return res.status(404).json({ error: { code: "not_found", message: "Deposit transaction not found." } });
+  if (rejectIfDraft(res, original.contractId)) return;
 
   const alreadyReversed = db.select().from(depositTransactions).all().some((t) => t.reversalOfId === id);
   if (alreadyReversed) return res.status(409).json({ error: { code: "already_reversed", message: "Already reversed." } });

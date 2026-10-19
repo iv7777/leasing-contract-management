@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { receipts, receiptAllocations } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { canAccessContract } from "../lib/contractScope.js";
+import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, validateAllocation } from "../billing/ledger.js";
@@ -90,7 +90,7 @@ function guard(req: import("express").Request, res: import("express").Response, 
     res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
     return false;
   }
-  return true;
+  return !rejectIfDraft(res, contractId);
 }
 
 // Preview how a payment would be applied, without recording anything.

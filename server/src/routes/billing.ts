@@ -4,7 +4,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { billingRules, billingRuns, charges, chargeAdjustments, contracts, parties, receiptAllocations } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { canAccessContract } from "../lib/contractScope.js";
+import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
 import { loadChargeContext } from "../billing/generate.js";
@@ -116,6 +116,7 @@ billingRouter.post("/charges/:id/void", requireRole("admin"), (req, res) => {
   const charge = db.select().from(charges).where(eq(charges.id, id)).get();
   if (!charge) return res.status(404).json({ error: { code: "not_found", message: "Charge not found." } });
   if (!canAccessContract(req.user!, charge.contractId)) return res.status(403).json(forbidden);
+  if (rejectIfDraft(res, charge.contractId)) return;
   const parsed = voidSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "A reason is required to void a charge." } });
 

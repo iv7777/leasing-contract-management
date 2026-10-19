@@ -23,7 +23,7 @@ import {
   usageEntries,
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { getContractPropertyIds, canAccessContract } from "../lib/contractScope.js";
+import { getContractPropertyIds, canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { contractUnitBelongsToContract, pricingStreamBelongsToContract, rateScheduleBelongsToStream } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
@@ -787,6 +787,7 @@ contractsRouter.post("/:id/generate-charges", requireRole("admin", "manager"), (
   if (!canAccessContract(req.user!, contractId)) {
     return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
   }
+  if (rejectIfDraft(res, contractId)) return;
   const parsed = generateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid period." } });
 

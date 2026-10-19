@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { receipts, receiptAllocations, charges, billingRules } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { canAccessContract } from "../lib/contractScope.js";
+import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, computeUnallocatedFen, validateAllocation } from "../billing/ledger.js";
@@ -69,6 +69,7 @@ const createReceiptSchema = z.object({
 receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "manager", "collector"), (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!ensureContractAccess(req, res, contractId)) return;
+  if (rejectIfDraft(res, contractId)) return;
 
   const parsed = createReceiptSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid receipt payload." } });
@@ -94,6 +95,7 @@ receiptsRouter.post("/receipts/:id/allocate", requireRole("admin", "manager", "c
   const receipt = db.select().from(receipts).where(eq(receipts.id, receiptId)).get();
   if (!receipt) return res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
   if (!ensureContractAccess(req, res, receipt.contractId)) return;
+  if (rejectIfDraft(res, receipt.contractId)) return;
 
   const parsed = allocateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid allocation payload." } });
@@ -164,6 +166,7 @@ receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) =>
   const receipt = db.select().from(receipts).where(eq(receipts.id, id)).get();
   if (!receipt) return res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
   if (!ensureContractAccess(req, res, receipt.contractId)) return;
+  if (rejectIfDraft(res, receipt.contractId)) return;
   if (receipt.status === "reversed") {
     return res.status(409).json({ error: { code: "already_reversed", message: "This receipt has already been reversed." } });
   }

@@ -1285,7 +1285,8 @@ export default function ContractDetailPage() {
               };
               return (
                 <>
-                  {canManageUsage && (
+                  {canManageUsage && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                  {canManageUsage && contract.status !== "draft" && (
                     <Button
                       icon={<PlusOutlined />}
                       disabled={meteredStreams.length === 0}
@@ -1295,12 +1296,12 @@ export default function ContractDetailPage() {
                       {t("contracts.addUsageEntry")}
                     </Button>
                   )}
-                  {canManageUsage && meteredStreams.length > 0 && (
+                  {canManageUsage && contract.status !== "draft" && meteredStreams.length > 0 && (
                     <Button onClick={() => setReadingsGridOpen(true)} style={{ marginBottom: 12, marginLeft: 8 }}>
                       {t("billing.readings.button")}
                     </Button>
                   )}
-                  {canManageUsage && meteredStreams.length === 0 && (
+                  {canManageUsage && contract.status !== "draft" && meteredStreams.length === 0 && (
                     <Typography.Paragraph type="secondary">{t("contracts.usageEntryNoMeteredStreams")}</Typography.Paragraph>
                   )}
                   <Table
@@ -1517,7 +1518,7 @@ export default function ContractDetailPage() {
                   <Typography.Text strong>
                     {t("contracts.depositBalance")}: {yuan(depositBalanceFen)}
                   </Typography.Text>
-                  {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && (
+                  {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && contract.status !== "draft" && (
                     <Button icon={<PlusOutlined />} onClick={() => setDepositTxnModal(true)}>
                       {t("contracts.recordDepositTxn")}
                     </Button>
@@ -1585,7 +1586,8 @@ export default function ContractDetailPage() {
             label: t("contracts.receipts"),
             children: (
               <>
-                {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && (
+                {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                {(user?.role === "admin" || user?.role === "manager" || user?.role === "collector") && contract.status !== "draft" && (
                   <Space wrap style={{ marginBottom: 12 }}>
                     <Button type="primary" icon={<PlusOutlined />} onClick={() => setPaymentOpen(true)}>
                       {t("billing.payment.button")}
@@ -1682,7 +1684,8 @@ export default function ContractDetailPage() {
                     />
                   )
                 )}
-                {(user?.role === "admin" || user?.role === "manager") && (
+                {(user?.role === "admin" || user?.role === "manager") && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                {(user?.role === "admin" || user?.role === "manager") && contract.status !== "draft" && (
                   <Button icon={<PlusOutlined />} onClick={() => setGenerateModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.generateCharges")}
                   </Button>

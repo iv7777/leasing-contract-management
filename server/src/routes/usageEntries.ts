@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { usageEntries, rateSchedule, charges } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
-import { canAccessContract } from "../lib/contractScope.js";
+import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { Decimal, daysInMonth } from "@lcm/shared";
@@ -72,6 +72,7 @@ const addUsageEntrySchema = z.object({
 usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("admin", "manager"), (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!ensureContractAccess(req, res, contractId)) return;
+  if (rejectIfDraft(res, contractId)) return;
 
   const parsed = addUsageEntrySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid usage entry payload.", details: parsed.error.flatten() } });
@@ -115,6 +116,7 @@ usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), 
   const existing = db.select().from(usageEntries).where(eq(usageEntries.id, id)).get();
   if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Usage entry not found." } });
   if (!ensureContractAccess(req, res, existing.contractId)) return;
+  if (rejectIfDraft(res, existing.contractId)) return;
 
   if (chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd)) {
     return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
@@ -138,6 +140,7 @@ usageEntriesRouter.delete("/usage-entries/:id", requireRole("admin", "manager"),
   const existing = db.select().from(usageEntries).where(eq(usageEntries.id, id)).get();
   if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Usage entry not found." } });
   if (!ensureContractAccess(req, res, existing.contractId)) return;
+  if (rejectIfDraft(res, existing.contractId)) return;
 
   if (chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd)) {
     return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
@@ -164,6 +167,7 @@ const bulkUsageSchema = z.object({
 usageEntriesRouter.post("/contracts/:contractId/usage-entries/bulk", requireRole("admin", "manager"), (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!ensureContractAccess(req, res, contractId)) return;
+  if (rejectIfDraft(res, contractId)) return;
 
   const parsed = bulkUsageSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid readings payload." } });
