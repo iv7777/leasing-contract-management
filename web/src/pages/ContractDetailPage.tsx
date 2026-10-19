@@ -1093,7 +1093,14 @@ export default function ContractDetailPage() {
           )}
         </Space>
       </Space>
-      {isDraft && <Alert type="info" showIcon message={t("contracts.activateHint")} style={{ marginBottom: 12 }} />}
+      {isDraft &&
+        (documents.some((d) => d.docType === "signed_lease") ? (
+          <Alert type="success" showIcon message={t("contracts.activateReady")} style={{ marginBottom: 12 }} />
+        ) : documents.length > 0 ? (
+          <Alert type="warning" showIcon message={t("contracts.activateWrongType")} style={{ marginBottom: 12 }} />
+        ) : (
+          <Alert type="info" showIcon message={t("contracts.activateHint")} style={{ marginBottom: 12 }} />
+        ))}
       {!isDraft && <Alert type="info" showIcon message={t("contracts.documentRequired")} style={{ marginBottom: 12 }} />}
 
       <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
