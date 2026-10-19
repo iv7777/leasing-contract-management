@@ -918,7 +918,7 @@ curl http://127.0.0.1:4000/api/health</code></pre>
         <table>
           <thead><tr><th>Task</th><th>Command</th></tr></thead>
           <tbody>
-            <tr class="root-only"><td>Open the control panel menu</td><td><code class="inline">sudo bash /opt/lcm/app/deploy/vps-deploy.sh</code></td></tr>
+            <tr class="root-only"><td>Open the control panel menu (the menu shows the installed app version)</td><td><code class="inline">sudo lcm</code> <span style="opacity:.7">— or <code class="inline">sudo bash /opt/lcm/app/deploy/vps-deploy.sh</code></span></td></tr>
             <tr class="root-only"><td>Check for updates (no prompts)</td><td><code class="inline">sudo bash vps-deploy.sh --check-update -y</code></td></tr>
             <tr><td>Start / stop / restart</td><td><code class="inline">sudo systemctl restart lcm.service</code></td></tr>
             <tr><td>Follow logs</td><td><code class="inline">sudo journalctl -u lcm.service -f</code></td></tr>

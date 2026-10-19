@@ -56,6 +56,8 @@ cd server && npm run restore-backup -- <backup ID | path-to-backup-dir>
 
 Either way, the systemd service (if present) is stopped and restarted automatically around the restore, and a safety copy of the current database is saved first. Document files under `DOCUMENT_STORAGE_DIR` are never touched by a restore — recover those separately from `documents.manifest.json` in the backup folder if needed.
 
+**Opening the control panel**: once installed, run `sudo lcm` from anywhere (a link in `/usr/local/bin` to `deploy/vps-deploy.sh` in the app checkout, created automatically by the script; override the name with `COMMAND_NAME`). The menu header and `--status` show the installed app version, and "Check for updates" reports the version it updates to. Because the link points into the checkout, it always runs the script version that the last update pulled.
+
 **Initializing the database (start fresh)**: `deploy/vps-deploy.sh` has a menu option "Initialize the database (start fresh)" (or `--initialize-db`, plus `--keep-contracts`), or on the server directly `cd server && npm run initialize-db [-- --keep-contracts]`. It asks which to clear:
 
 - **Everything**: Tenants & Landlords, properties, units, contracts (with pricing, deposit terms, amendments, versions, documents), bills, payments, readings, deposit movements, billing-run history.

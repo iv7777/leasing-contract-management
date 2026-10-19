@@ -31,6 +31,11 @@
 #     --menu                      force the menu even without a TTY
 #     -y / --yes                  don't ask for confirmation
 #
+# Once installed, the control panel is also available as a plain command, from
+# anywhere: `sudo lcm` (a link in /usr/local/bin to the copy in the app checkout,
+# which "Check for updates" keeps current). The menu shows the installed app
+# version. Override the command name with COMMAND_NAME=...
+#
 # Safe to re-run: every step here detects what's already in place (checkout,
 # .env, TLS config) and leaves it alone instead of clobbering it.
 #
@@ -55,6 +60,7 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-$ADMIN_EMAIL}"
 ASSUME_YES="${ASSUME_YES:-0}"
 KEEP_CONTRACTS="${KEEP_CONTRACTS:-}"
+COMMAND_NAME="${COMMAND_NAME:-lcm}"   # short command that opens this control panel from anywhere
 ACTION=""
 
 for arg in "$@"; do
@@ -115,6 +121,33 @@ detect_existing() {
     EXISTING_ADMIN_EMAIL="$(grep '^SEED_ADMIN_EMAIL=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)"
   fi
   if [ -d "$APP_CODE_DIR/.git" ]; then INSTALLED=1; else INSTALLED=0; fi
+}
+
+# The installed app's version ("1.29 (build 78, commit abc1234)"), read from
+# the checkout so it is the version actually on disk, not this script's age.
+app_version() {
+  local f="$APP_CODE_DIR/server/src/lib/buildInfo.ts" v build commit
+  v="$(grep -oP '(?<=APP_VERSION = ")[^"]+' "$f" 2>/dev/null | head -1 || true)"
+  if [ -z "$v" ]; then echo "unknown"; return; fi
+  build="$(git -C "$APP_CODE_DIR" rev-list --count HEAD 2>/dev/null || true)"
+  commit="$(git -C "$APP_CODE_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+  echo "$v${build:+ (build $build${commit:+, commit $commit})}"
+}
+
+# Puts this control panel on the PATH as "$COMMAND_NAME" (a symlink into the
+# app checkout), so it can be opened with just `sudo lcm` from anywhere, and so
+# the command always runs the copy that "Check for updates" keeps current.
+ensure_command_link() {
+  local target="$APP_CODE_DIR/deploy/vps-deploy.sh" link="/usr/local/bin/$COMMAND_NAME"
+  [ -f "$target" ] || return 0
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then return 0; fi
+  if [ -e "$link" ] && [ ! -L "$link" ]; then
+    warn "$link already exists and is not a link to this script — not touching it."
+    return 0
+  fi
+  chmod +x "$target"
+  ln -sf "$target" "$link"
+  echo "Installed the command '$COMMAND_NAME' — from now on just run: sudo $COMMAND_NAME"
 }
 
 require_installed() {
@@ -302,6 +335,7 @@ PLAN
   ensure_export_fonts
   fetch_code
   build_app
+  ensure_command_link
 
   log "Configuring environment"
   NEW_ADMIN_PASSWORD=""
@@ -432,6 +466,7 @@ SUMMARY
 action_check_update() {
   require_installed || return 1
   log "Checking for updates"
+  echo "Installed version: $(app_version)"
   git -C "$APP_CODE_DIR" fetch origin "$GIT_REF"
   local current remote
   current="$(git -C "$APP_CODE_DIR" rev-parse HEAD)"
@@ -439,6 +474,7 @@ action_check_update() {
 
   if [ "$current" = "$remote" ]; then
     echo "Already up to date (commit ${current:0:7})."
+    ensure_command_link
     return 0
   fi
 
@@ -452,7 +488,8 @@ action_check_update() {
   build_app
   run_migrations_and_seed
   restart_service
-  log "Update complete — now on commit $(git -C "$APP_CODE_DIR" rev-parse --short HEAD)."
+  ensure_command_link
+  log "Update complete — now on version $(app_version)."
 }
 
 # ---------------------------------------------------------------------------
@@ -745,6 +782,7 @@ action_show_status() {
   else
     warn "API health check failed."
   fi
+  echo "App version       : $(app_version)"
   echo "Domain            : ${EXISTING_DOMAIN:-<not configured>}"
   echo "Admin login email : ${EXISTING_ADMIN_EMAIL:-<not configured>}"
   echo "Current commit    : $(git -C "$APP_CODE_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -762,6 +800,8 @@ run_menu() {
     cat <<MENU
 
   ── Lease Contract Management — server control panel ──
+  App version       : $(app_version)
+  Open this panel   : sudo $COMMAND_NAME
   Domain            : ${EXISTING_DOMAIN:-<not configured>}
   Admin login email : ${EXISTING_ADMIN_EMAIL:-<not configured>}
 
@@ -794,30 +834,42 @@ MENU
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
-detect_existing
+# Wrapped in a function and ended with `main; exit` so bash has read the whole
+# thing before running it: "Check for updates" rewrites this very file when the
+# script is run from the app checkout, and bash must not read on into the new
+# contents after the pull.
+main() {
+  detect_existing
+  # Offer the short command on every run once the app is installed (this is how
+  # servers installed before the command existed pick it up).
+  if [ "$INSTALLED" = "1" ]; then ensure_command_link; fi
 
-if [ -z "$ACTION" ]; then
-  if [ "$INSTALLED" != "1" ]; then
-    ACTION="install"
-  elif [ -t 0 ]; then
-    ACTION="menu"
-  else
-    # No TTY (cron, CI, a piped `curl | bash`, etc.) and nothing installed
-    # yet — keep the historical behavior: a full reinstall using whatever
-    # DOMAIN/ADMIN_EMAIL are already on file, so existing automation that
-    # calls this script unattended keeps working unchanged.
-    ACTION="install"
+
+  if [ -z "$ACTION" ]; then
+    if [ "$INSTALLED" != "1" ]; then
+      ACTION="install"
+    elif [ -t 0 ]; then
+      ACTION="menu"
+    else
+      # No TTY (cron, CI, a piped `curl | bash`, etc.) and nothing installed
+      # yet — keep the historical behavior: a full reinstall using whatever
+      # DOMAIN/ADMIN_EMAIL are already on file, so existing automation that
+      # calls this script unattended keeps working unchanged.
+      ACTION="install"
+    fi
   fi
-fi
 
-case "$ACTION" in
-  install) action_full_install ;;
-  check-update) action_check_update ;;
-  change-domain) action_change_domain ;;
-  change-admin-email) action_change_admin_email ;;
-  reset-admin-password) action_reset_admin_password ;;
-  restore-backup) action_restore_backup ;;
-  initialize-db) action_initialize_database ;;
-  status) action_show_status ;;
-  menu) run_menu ;;
-esac
+  case "$ACTION" in
+    install) action_full_install ;;
+    check-update) action_check_update ;;
+    change-domain) action_change_domain ;;
+    change-admin-email) action_change_admin_email ;;
+    reset-admin-password) action_reset_admin_password ;;
+    restore-backup) action_restore_backup ;;
+    initialize-db) action_initialize_database ;;
+    status) action_show_status ;;
+    menu) run_menu ;;
+  esac
+}
+
+main; exit $?
