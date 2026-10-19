@@ -1549,7 +1549,10 @@ export default function ContractDetailPage() {
           {
             key: "statement",
             label: t("contracts.statement"),
-            children: (
+            children:
+              contract.status === "draft" ? (
+                <Alert type="info" showIcon message={t("contracts.statementDraftNote")} />
+              ) : (
               <>
                 <Space style={{ marginBottom: 16 }}>
                   <MonthField value={statementPeriod} onChange={(v) => v && setStatementPeriod(v)} style={{ width: 160 }} />
@@ -1568,7 +1571,7 @@ export default function ContractDetailPage() {
                   </Descriptions>
                 )}
               </>
-            ),
+              ),
           },
           {
             key: "receipts",

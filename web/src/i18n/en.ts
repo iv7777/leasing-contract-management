@@ -190,6 +190,7 @@ const en = {
     formulaBasis: "Formula basis",
     formulaBasisPlaceholder: "e.g. 3 months' rent",
     reversalReasonPlaceholder: "e.g. entered by mistake",
+    statementDraftNote: "The monthly statement is available once the contract is activated — until then nothing has been billed or paid.",
     meteredUnit: "Unit of measure",
     meteredUnitPlaceholder: "e.g. kWh, ton, m³",
     amountOrRate: "Amount / rate (yuan)",
