@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
 
-export const APP_VERSION = "1.31";
+export const APP_VERSION = "1.32";
 
 const SERVER_START_TIME = new Date().toISOString();
 
