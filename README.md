@@ -91,6 +91,10 @@ Charges are created automatically so staff see what is due the moment they log i
 
 Note: this generates history from day one and relies on entered payments to reconcile, rather than the brief's opening-balance import at a cutover date. The catch-up preview and void exist as the guard rails for that choice.
 
+### Form prefills
+
+Forms open with what is almost always typed, always editable: a new unit takes the contract's start date and the unit's rentable area; a new pricing item takes the contract start, the contract's units and the fee's name, and choosing *Metered* sets the basis to per unit and the unit (度 / 立方米 in Chinese, kWh / m³ in English); a new rate row continues the previous one (start the day after it ends, same method, basis and unit); concessions start at the contract start at 100% with 1/2/3-month quick-picks; deposit terms offer 1/2/3 months' rent; a deposit receipt/refund fills the shortfall/held balance; *Allocate* fills the smaller of the credit and the bill; a new contract keeps the latest landlord and offers 1/3/5/6-year term quick-picks; *Record usage* opens on last month with the stream and unit filled in; the bulk-payments grid starts at the earliest due date and amount. (`web/src/pages/ContractDetailPage.tsx`, `ContractsPage.tsx`, `components/billing/*`.)
+
 ### Charge generation engine
 
 `server/src/billing/chargeEngine.ts` is pure and unit-tested (`server/src/billing/chargeEngine.test.ts`, run with `npx tsx --test src/billing/chargeEngine.test.ts` from `server/`) against the brief's §12 acceptance scenarios: two units at different per-sqm rates, a mid-month rate change with correct proration, percentage escalation compounding, and free rent on one fee component while another (e.g. management fee) stays payable. Charge generation is idempotent — repeating it for an already-billed period creates nothing new — and every charge carries a `calculation_snapshot` recording exactly which rate, area, and dates produced it.

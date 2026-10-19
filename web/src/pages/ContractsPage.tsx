@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import dayjs from "dayjs";
 import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Tooltip, Typography, Card } from "antd";
 import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
@@ -69,6 +70,13 @@ export default function ContractsPage() {
   };
 
   useEffect(load, []);
+
+  // A new contract usually has the same landlord as the latest one.
+  useEffect(() => {
+    if (!modalOpen || contracts.length === 0) return;
+    const latest = contracts.reduce((a, b) => (b.id > a.id ? b : a));
+    form.setFieldsValue({ landlordPartyId: latest.landlordPartyId });
+  }, [modalOpen]);
 
   const partyName = (id: number) => parties.find((p) => p.id === id)?.name ?? id;
   const partyLink = (id: number) => (
@@ -239,6 +247,21 @@ export default function ContractsPage() {
           <Form.Item name="termEnd" label={t("contracts.termEnd")} rules={[{ required: true }]}>
             <DateField />
           </Form.Item>
+          <Space size={8} style={{ marginBottom: 12 }} wrap>
+            <Typography.Text type="secondary">{t("contracts.termQuick")}</Typography.Text>
+            {[1, 3, 5, 6].map((n) => (
+              <Button
+                key={n}
+                size="small"
+                onClick={() => {
+                  const start = form.getFieldValue("termStart");
+                  if (start) form.setFieldsValue({ termEnd: dayjs(start).add(n, "year").subtract(1, "day").format("YYYY-MM-DD") });
+                }}
+              >
+                {t("contracts.nYears", { count: n })}
+              </Button>
+            ))}
+          </Space>
           <Form.Item name="dueDay" label={t("contracts.dueDay")} rules={[{ required: true }]} initialValue={1}>
             <InputNumber min={1} max={31} style={{ width: "100%" }} />
           </Form.Item>

@@ -193,9 +193,20 @@ interface StatementDto {
 }
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
-/** Usual units for a metered fee, prefilled on a new usage entry. */
-const DEFAULT_METER_UNIT: Record<string, string> = { electricity_base: "kWh", water: "m³" };
-const AUTO_UNITS = Object.values(DEFAULT_METER_UNIT);
+/** Usual unit for a metered fee, prefilled on a new usage entry or metered rate:
+ * 度 / 立方米 in Chinese, kWh / m³ in English. */
+const METER_UNITS: Record<"en" | "zh", Record<string, string>> = {
+  en: { electricity_base: "kWh", water: "m³" },
+  zh: { electricity_base: "度", water: "立方米" },
+};
+const AUTO_UNITS = ["kWh", "m³", "度", "立方米"];
+const defaultMeterUnit = (feeType: string | undefined, lang: string): string | undefined =>
+  feeType ? METER_UNITS[lang.startsWith("zh") ? "zh" : "en"][feeType] : undefined;
+
+const isoDay = (d: dayjs.Dayjs) => d.format("YYYY-MM-DD");
+/** "YYYY-MM-DD" + n months − 1 day: the last day of an n-month stretch starting on `start`. */
+const monthsFrom = (start: string, n: number) => isoDay(dayjs(start).add(n, "month").subtract(1, "day"));
+const firstOfNextMonth = () => isoDay(dayjs(todayInChina()).add(1, "month").startOf("month"));
 
 /** First and last day of the month `offset` months from today ("YYYY-MM-DD"). */
 function monthRange(offset: number): { start: string; end: string } {
@@ -253,7 +264,7 @@ export default function ContractDetailPage() {
   const [statementPeriod, setStatementPeriod] = useState(todayInChina().slice(0, 7));
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
-  const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number }[]>([]);
+  const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number; rentableAreaSqm?: string }[]>([]);
   const [documents, setDocuments] = useState<DocumentDto[]>([]);
   const [activeTab, setActiveTab] = useState("units");
   useHelpTopic(`contracts.detail.${activeTab}`);
@@ -349,7 +360,7 @@ export default function ContractDetailPage() {
     void api.get<{ parties: PartyDto[] }>("/parties").then((r) => setParties(r.parties));
     void api.get<{ properties: { id: number }[] }>("/properties").then(async (r) => {
       const allUnits = await Promise.all(
-        r.properties.map((p) => api.get<{ units: { id: number; unitLabel: string }[] }>(`/properties/${p.id}`).then((u) => u.units.map((x) => ({ ...x, propertyId: p.id })))),
+        r.properties.map((p) => api.get<{ units: { id: number; unitLabel: string; rentableAreaSqm?: string }[] }>(`/properties/${p.id}`).then((u) => u.units.map((x) => ({ ...x, propertyId: p.id })))),
       );
       setAvailableUnits(allUnits.flat());
     });
@@ -365,6 +376,82 @@ export default function ContractDetailPage() {
       .then((r) => setStatement(r.statement))
       .catch((err) => message.error(apiErrorMessage(err, t)));
   }, [id, statementPeriod, receipts.length, charges.length]);
+
+  // ---- Prefills: each form opens with the values you would almost always type. ----
+  const termStart = contract?.termStart;
+  const areaOfUnit = (unitId?: number) => availableUnits.find((u) => u.id === unitId)?.rentableAreaSqm;
+  const feeName = (feeType: string) => t(`contracts.${camel(feeType)}`);
+
+  useEffect(() => {
+    if (unitModal && termStart) unitForm.setFieldsValue({ effectiveStart: termStart });
+  }, [unitModal]);
+
+  useEffect(() => {
+    if (!streamModal) return;
+    streamForm.setFieldsValue({ effectiveStart: termStart, contractUnitIds: units.map((u) => u.id), label: feeName("rent") });
+  }, [streamModal]);
+
+  useEffect(() => {
+    if (!rateModal || rateModal.rate) return;
+    // A new rate row continues the stream: it starts the day after the latest row ends and copies its method, basis and unit.
+    const latest = rates
+      .filter((r) => r.pricingStreamId === rateModal.streamId)
+      .sort((a, b) => (b.effectiveEnd ?? "9999").localeCompare(a.effectiveEnd ?? "9999") || b.effectiveStart.localeCompare(a.effectiveStart))[0];
+    if (!latest) return;
+    rateForm.setFieldsValue({
+      calculationMethod: latest.calculationMethod,
+      rateBasis: latest.rateBasis,
+      unit: latest.unit ?? undefined,
+      effectiveStart: latest.effectiveEnd ? isoDay(dayjs(latest.effectiveEnd).add(1, "day")) : undefined,
+    });
+  }, [rateModal]);
+
+  useEffect(() => {
+    if (concessionModal) concessionForm.setFieldsValue({ effectiveStart: termStart, discountPercentage: 100, reason: t("contracts.freeRentReason") });
+  }, [concessionModal]);
+
+  useEffect(() => {
+    if (depositModal && termStart) depositForm.setFieldsValue({ effectiveStart: termStart });
+  }, [depositModal]);
+
+  useEffect(() => {
+    if (receiptModal) receiptForm.setFieldsValue({ receivedDate: todayInChina(), paymentMethod: "bank_transfer" });
+  }, [receiptModal]);
+
+  useEffect(() => {
+    if (amendmentModal) {
+      amendmentForm.setFieldsValue({ effectiveDate: firstOfNextMonth(), amendStreamContractUnitIds: units.map((u) => u.id) });
+    }
+  }, [amendmentModal]);
+
+  useEffect(() => {
+    if (!docModal) return;
+    // The signed lease is required to activate, so it is the default until one is on file.
+    docForm.setFieldsValue({ docType: documents.some((d) => d.docType === "signed_lease") ? "other" : "signed_lease" });
+  }, [docModal]);
+
+  useEffect(() => {
+    if (!usageEntryModal) return;
+    // Usage is normally entered for the month that just ended.
+    const { start, end } = monthRange(-1);
+    const metered = streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"));
+    usageEntryForm.setFieldsValue({
+      serviceStart: start,
+      serviceEnd: end,
+      ...(metered.length === 1 ? { pricingStreamId: metered[0].id, unit: defaultMeterUnit(metered[0].feeType, i18n.language) } : {}),
+    });
+  }, [usageEntryModal]);
+
+  // The deposit amount a transaction usually carries: what is still short, or what is held.
+  const depositAmountFor = (type: string): number | undefined => {
+    if (type === "receipt" && depositStatus && depositStatus.shortfallFen > 0) return depositStatus.shortfallFen / 100;
+    if (type === "refund" && depositBalanceFen > 0) return depositBalanceFen / 100;
+    return undefined;
+  };
+  useEffect(() => {
+    if (!depositTxnModal) return;
+    depositTxnForm.setFieldsValue({ transactionDate: todayInChina(), amountFen: depositAmountFor(depositTxnForm.getFieldValue("transactionType") ?? "receipt") });
+  }, [depositTxnModal]);
 
   if (!contract) return <Typography.Text>{t("common.loading")}</Typography.Text>;
 
@@ -1923,7 +2010,13 @@ export default function ContractDetailPage() {
       </Modal>
 
       <Modal title={t("contracts.addUnit")} open={unitModal} onCancel={() => setUnitModal(false)} onOk={onAddUnit} okText={t("common.create")} cancelText={t("common.cancel")}>
-        <Form form={unitForm} layout="vertical">
+        <Form
+          form={unitForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            if (v.unitId !== undefined && areaOfUnit(v.unitId)) unitForm.setFieldsValue({ contractedAreaSqm: areaOfUnit(v.unitId) });
+          }}
+        >
           <Form.Item name="unitId" label={t("properties.unitLabel")} rules={[{ required: true }]}>
             <Select options={availableUnits.map((u) => ({ value: u.id, label: u.unitLabel }))} />
           </Form.Item>
@@ -1962,7 +2055,23 @@ export default function ContractDetailPage() {
       </Modal>
 
       <Modal title={t("contracts.addPricingStream")} open={streamModal} onCancel={() => setStreamModal(false)} onOk={onAddStream} okText={t("common.create")} cancelText={t("common.cancel")} width={560}>
-        <Form form={streamForm} layout="vertical">
+        <Form
+          form={streamForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            const names = ["rent", "management", "electricity_base", "water", "elevator", "other"].map(feeName);
+            if (v.feeType) {
+              const current = streamForm.getFieldValue("label");
+              if (!current || names.includes(current)) streamForm.setFieldsValue({ label: feeName(v.feeType) });
+            }
+            if (v.calculationMethod === "metered") {
+              streamForm.setFieldsValue({ rateBasis: "per_unit" });
+              const unit = defaultMeterUnit(streamForm.getFieldValue("feeType"), i18n.language);
+              const cur = streamForm.getFieldValue("unit");
+              if (unit && (!cur || AUTO_UNITS.includes(cur))) streamForm.setFieldsValue({ unit });
+            }
+          }}
+        >
           <Form.Item name="feeType" label={t("contracts.feeType")} rules={[{ required: true }]} initialValue="rent">
             <Select options={feeTypes.map((f) => ({ value: f, label: t(`contracts.${camel(f)}`) }))} />
           </Form.Item>
@@ -2071,7 +2180,19 @@ export default function ContractDetailPage() {
         cancelText={t("common.cancel")}
         destroyOnClose
       >
-        <Form form={rateForm} layout="vertical">
+        <Form
+          form={rateForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            if (v.calculationMethod === "metered" && !rateModal?.rate) {
+              rateForm.setFieldsValue({ rateBasis: "per_unit" });
+              const stream = streams.find((st) => st.id === rateModal?.streamId);
+              const unit = defaultMeterUnit(stream?.feeType, i18n.language);
+              const cur = rateForm.getFieldValue("unit");
+              if (unit && (!cur || AUTO_UNITS.includes(cur))) rateForm.setFieldsValue({ unit });
+            }
+          }}
+        >
           <Form.Item
             name="calculationMethod"
             label={
@@ -2140,7 +2261,7 @@ export default function ContractDetailPage() {
             // Picking a stream prefills the usual unit (kWh / m³), but never overwrites one the user typed.
             if (changed.pricingStreamId === undefined) return;
             const stream = streams.find((s) => s.id === changed.pricingStreamId);
-            const suggested = stream ? DEFAULT_METER_UNIT[stream.feeType] : undefined;
+            const suggested = defaultMeterUnit(stream?.feeType, i18n.language);
             const current = usageEntryForm.getFieldValue("unit");
             if (suggested && (!current || AUTO_UNITS.includes(current))) usageEntryForm.setFieldsValue({ unit: suggested });
           }}
@@ -2211,6 +2332,21 @@ export default function ContractDetailPage() {
           <Form.Item name="effectiveEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
             <DateField />
           </Form.Item>
+          <Space size={8} style={{ marginBottom: 12 }} wrap>
+            <Typography.Text type="secondary">{t("contracts.freeRentQuick")}</Typography.Text>
+            {[1, 2, 3].map((n) => (
+              <Button
+                key={n}
+                size="small"
+                onClick={() => {
+                  const start = concessionForm.getFieldValue("effectiveStart") ?? termStart;
+                  if (start) concessionForm.setFieldsValue({ effectiveStart: start, effectiveEnd: monthsFrom(start, n) });
+                }}
+              >
+                {t("contracts.nMonths", { count: n })}
+              </Button>
+            ))}
+          </Space>
           <Form.Item
             name="discountPercentage"
             label={
@@ -2293,6 +2429,14 @@ export default function ContractDetailPage() {
           <Form.Item name="formulaBasis" label="Formula basis">
             <Input placeholder="e.g. 2x monthly rent" />
           </Form.Item>
+          <Space size={8} style={{ marginBottom: 12 }} wrap>
+            <Typography.Text type="secondary">{t("contracts.quickPick")}</Typography.Text>
+            {[1, 2, 3].map((n) => (
+              <Button key={n} size="small" onClick={() => depositForm.setFieldsValue({ requirementType: "formula", formulaBasis: t("contracts.monthsRent", { count: n }) })}>
+                {t("contracts.monthsRent", { count: n })}
+              </Button>
+            ))}
+          </Space>
         </Form>
       </Modal>
 
@@ -2367,7 +2511,18 @@ export default function ContractDetailPage() {
         okText={t("contracts.allocate")}
         cancelText={t("common.cancel")}
       >
-        <Form form={allocateForm} layout="vertical">
+        <Form
+          form={allocateForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            if (v.chargeId === undefined || !allocateModal) return;
+            // The most this receipt can put on that bill: its unallocated credit or the bill's balance, whichever is smaller.
+            const credit = receiptBalances.find((r) => r.receiptId === allocateModal.receiptId)?.unallocatedFen ?? 0;
+            const owed = chargeBalances.find((c) => c.chargeId === v.chargeId)?.balanceFen ?? 0;
+            const fen = Math.min(credit, owed);
+            if (fen > 0) allocateForm.setFieldsValue({ amountFen: fen / 100 });
+          }}
+        >
           <Form.Item name="chargeId" label={t("contracts.charges")} rules={[{ required: true }]}>
             <Select
               options={charges.map((c) => {
@@ -2438,7 +2593,15 @@ export default function ContractDetailPage() {
         okText={t("common.create")}
         cancelText={t("common.cancel")}
       >
-        <Form form={depositTxnForm} layout="vertical" onValuesChange={(v) => v.transactionType && setDepositTxnType(v.transactionType)}>
+        <Form
+          form={depositTxnForm}
+          layout="vertical"
+          onValuesChange={(v) => {
+            if (!v.transactionType) return;
+            setDepositTxnType(v.transactionType);
+            depositTxnForm.setFieldsValue({ amountFen: depositAmountFor(v.transactionType) });
+          }}
+        >
           <Form.Item
             name="transactionType"
             label={
@@ -2497,6 +2660,7 @@ export default function ContractDetailPage() {
           onValuesChange={(v) => {
             if (v.amendmentKind) setAmendmentKind(v.amendmentKind);
             if (v.amendStreamTargetType) setAmendmentStreamTargetType(v.amendStreamTargetType);
+            if (v.amendUnitId !== undefined && areaOfUnit(v.amendUnitId)) amendmentForm.setFieldsValue({ amendContractedAreaSqm: Number(areaOfUnit(v.amendUnitId)) });
           }}
         >
           <Form.Item
@@ -2547,6 +2711,16 @@ export default function ContractDetailPage() {
             <>
               <Form.Item name="pricingStreamId" label={t("contracts.pricingStreams")}>
                 <Select allowClear options={streams.map((s) => ({ value: s.id, label: s.label ?? s.feeType }))} />
+              </Form.Item>
+              <Form.Item noStyle shouldUpdate={(prev, cur) => prev.pricingStreamId !== cur.pricingStreamId}>
+                {({ getFieldValue }) => {
+                  const cur = rates.find((r) => r.pricingStreamId === getFieldValue("pricingStreamId") && !r.effectiveEnd);
+                  return cur ? (
+                    <Typography.Paragraph type="secondary" style={{ marginTop: -12 }}>
+                      {t("contracts.currentRate", { rate: `${cur.amountOrRate} (${t(`contracts.${camel(cur.rateBasis)}`)}${cur.unit ? ` / ${cur.unit}` : ""})` })}
+                    </Typography.Paragraph>
+                  ) : null;
+                }}
               </Form.Item>
               <Form.Item name="newAmountOrRate" label={t("contracts.newAmountOrRate")}>
                 <InputNumber style={{ width: "100%" }} min={0} />

@@ -79,6 +79,9 @@ export default function MeterReadingsGridModal({
     }
   }, [open, initial]);
 
+  // The month just ended is the one being read; the current month is still running.
+  const lastMonth = addMonths(`${todayInChina().slice(0, 7)}-01`, -1).slice(0, 7);
+
   const changed = Object.entries(values).filter(([k, v]) => v !== null && v !== undefined && v !== initial[k]);
 
   const onOk = async () => {
@@ -134,6 +137,7 @@ export default function MeterReadingsGridModal({
                   min={0}
                   disabled={locked.has(k)}
                   title={locked.has(k) ? t("billing.readings.locked") : undefined}
+                  autoFocus={m === lastMonth && s.id === streams[0]?.id && !locked.has(k)}
                   value={values[k] ?? null}
                   onChange={(v) => setValues((cur) => ({ ...cur, [k]: v as number | null }))}
                 />

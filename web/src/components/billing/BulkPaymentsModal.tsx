@@ -38,10 +38,22 @@ export default function BulkPaymentsModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) {
-      setRows([blankRow()]);
-      setError(null);
-    }
+    if (!open) return;
+    setRows([blankRow()]);
+    setError(null);
+    // The first row starts at the earliest bill's due date, for what fell due that day, so
+    // "Add next month" can carry a regular payment forward.
+    void api
+      .get<{ charges: { status: string; dueDate: string; amountFen: number }[] }>(`/contracts/${contractId}/charges`)
+      .then((r) => {
+        const posted = r.charges.filter((c) => c.status === "posted");
+        if (posted.length === 0) return;
+        const first = posted.map((c) => c.dueDate).sort()[0];
+        const fen = posted.filter((c) => c.dueDate === first).reduce((sum, c) => sum + c.amountFen, 0);
+        const today = todayInChina();
+        setRows((rs) => (rs.length === 1 && !rs[0].receivedDate && !rs[0].amount ? [{ ...rs[0], receivedDate: first > today ? today : first, amount: fen / 100 }] : rs));
+      })
+      .catch(() => undefined);
   }, [open]);
 
   const update = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
