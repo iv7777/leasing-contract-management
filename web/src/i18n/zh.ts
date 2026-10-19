@@ -512,6 +512,8 @@ const zh: Translations = {
   },
   help: {
     drawerTitle: "帮助",
+    stepsHeading: "常见操作",
+    learnMore: "在指南中了解更多",
     tipsHeading: "小提示",
     noContent: "该页面暂无帮助内容。",
     guideLinkText: "查看完整用户指南",

@@ -510,6 +510,8 @@ const en = {
   },
   help: {
     drawerTitle: "Help",
+    stepsHeading: "Common tasks",
+    learnMore: "Learn more in the guide",
     tipsHeading: "Good to know",
     noContent: "No help topic for this page yet.",
     guideLinkText: "Read the full guide",

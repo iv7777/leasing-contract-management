@@ -34,24 +34,38 @@ export function topicFallbackChain(topic: string): string[] {
   return chain;
 }
 
-// Which handbook chapter explains a help topic best (anchor ids in guide/content.*.ts).
-const topicChapters: Record<string, string> = {
-  dashboard: "billing",
-  "properties.list": "prepare",
-  "properties.detail": "prepare",
-  "parties.list": "prepare",
-  "contracts.list": "create",
-  "contracts.detail": "create",
-  reminders: "monthly",
-  occupancy: "monthly",
-  users: "roles",
-  audit: "monthly",
-  backups: "monthly",
-  billingRuns: "billing",
+// Which handbook chapters explain a help topic, most relevant first (anchor ids
+// in guide/content.*.ts). Topics without an entry fall back to their parent's.
+const topicChapters: Record<string, string[]> = {
+  dashboard: ["billing", "collect", "interface"],
+  "properties.list": ["prepare", "interface"],
+  "properties.detail": ["prepare"],
+  "parties.list": ["prepare", "concepts"],
+  "contracts.list": ["create", "interface"],
+  "contracts.detail": ["create", "interface"],
+  "contracts.detail.units": ["create"],
+  "contracts.detail.pricing": ["create"],
+  "contracts.detail.concessions": ["create"],
+  "contracts.detail.deposit": ["deposit"],
+  "contracts.detail.statement": ["monthly", "collect"],
+  "contracts.detail.receipts": ["collect"],
+  "contracts.detail.usage": ["billing"],
+  "contracts.detail.charges": ["billing", "collect"],
+  "contracts.detail.upcoming": ["billing"],
+  "contracts.detail.amendments": ["change"],
+  "contracts.detail.documents": ["create", "roles"],
+  reminders: ["monthly", "deposit"],
+  occupancy: ["monthly"],
+  users: ["roles", "welcome"],
+  audit: ["monthly"],
+  billingRuns: ["billing"],
+  backups: ["monthly"],
+  guide: ["interface", "welcome"],
 };
 
-export function guideChapterForTopic(topic: string): string | undefined {
-  return topicFallbackChain(topic)
+export function guideChaptersForTopic(topic: string): string[] {
+  const hit = topicFallbackChain(topic)
     .map((key) => topicChapters[key])
     .find(Boolean);
+  return hit ?? ["interface"];
 }
