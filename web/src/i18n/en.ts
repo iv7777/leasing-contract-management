@@ -274,6 +274,7 @@ const en = {
     depositBalance: "Deposit balance held",
     recordDepositTxn: "Record transaction",
     transactionType: "Type",
+    amountYuan: "Amount (yuan)",
     transactionDate: "Date",
     depositReceipt: "Deposit received",
     refund: "Refund",

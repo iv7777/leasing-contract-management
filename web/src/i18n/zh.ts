@@ -276,6 +276,7 @@ const zh: Translations = {
     depositBalance: "押金余额",
     recordDepositTxn: "登记交易",
     transactionType: "类型",
+    amountYuan: "金额（元）",
     transactionDate: "日期",
     depositReceipt: "收取押金",
     refund: "退还",
