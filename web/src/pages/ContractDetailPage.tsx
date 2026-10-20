@@ -1067,9 +1067,20 @@ export default function ContractDetailPage() {
               {t("contracts.exportCsv")}
             </Button>
           )}
-          {user?.role === "admin" && (contract.status === "expired" || contract.status === "terminated") && (
-            <Button onClick={onToggleArchived}>{contract.archived ? t("common.unarchive") : t("common.archive")}</Button>
-          )}
+          {user?.role === "admin" &&
+            (() => {
+              const ended = contract.status === "expired" || contract.status === "terminated";
+              const locked = !contract.archived && !ended;
+              return (
+                <Tooltip title={locked ? t("contracts.archiveOnlyEnded") : undefined}>
+                  <span>
+                    <Button disabled={locked} onClick={onToggleArchived}>
+                      {contract.archived ? t("common.unarchive") : t("common.archive")}
+                    </Button>
+                  </span>
+                </Tooltip>
+              );
+            })()}
           {isDraft && user?.role === "admin" && (
             <Button icon={<ThunderboltOutlined />} onClick={onActivate}>
               {t("contracts.activate")}

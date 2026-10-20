@@ -196,6 +196,7 @@ const en = {
     draftActionsNote: "Payments, receipts, charges, deposits and meter readings can be recorded once the contract is activated.",
     amendmentsDraftNote: "A draft contract is edited directly (Edit contract). Amendments are available once it is activated.",
     archivedBanner: "Archived — hidden from the contract list. Unarchive to bring it back.",
+    archiveOnlyEnded: "Only an expired or terminated contract can be archived. A draft can be deleted instead; an active contract has to end first.",
     meteredUnit: "Unit of measure",
     meteredUnitPlaceholder: "e.g. kWh, ton, m³",
     amountOrRate: "Amount / rate (yuan)",
