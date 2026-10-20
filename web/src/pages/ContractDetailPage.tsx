@@ -53,6 +53,7 @@ interface ContractDto {
   termEnd: string;
   status: "draft" | "active" | "expired" | "terminated";
   versionNumber: number;
+  archived: boolean;
   specialTerms: string | null;
 }
 interface BillingRulesDto {
@@ -733,6 +734,16 @@ export default function ContractDetailPage() {
     }
   };
 
+  const onToggleArchived = async () => {
+    try {
+      await api.post(`/contracts/${id}/${contract.archived ? "unarchive" : "archive"}`);
+      message.success(contract.archived ? t("common.unarchived") : t("common.archived"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
   const onUploadDocument = async () => {
     if (!pendingFile || uploadingDoc) return;
     setUploadingDoc(true);
@@ -1027,6 +1038,7 @@ export default function ContractDetailPage() {
         </Typography.Title>
         <Space wrap>
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
+          {contract.archived && <Tag>{t("common.archived")}</Tag>}
           <Tag>v{contract.versionNumber}</Tag>
           {overdue && (
             <Tooltip title={t("billing.overdueTip", { count: overdue.count, amount: yuan(overdue.fen), days: overdue.days })}>
@@ -1054,6 +1066,9 @@ export default function ContractDetailPage() {
             <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts/${id}/ledger.csv?lang=${exportLang}`, "_blank")}>
               {t("contracts.exportCsv")}
             </Button>
+          )}
+          {user?.role === "admin" && (contract.status === "expired" || contract.status === "terminated") && (
+            <Button onClick={onToggleArchived}>{contract.archived ? t("common.unarchive") : t("common.archive")}</Button>
           )}
           {isDraft && user?.role === "admin" && (
             <Button icon={<ThunderboltOutlined />} onClick={onActivate}>
@@ -1093,6 +1108,7 @@ export default function ContractDetailPage() {
           )}
         </Space>
       </Space>
+      {contract.archived && <Alert type="info" showIcon message={t("contracts.archivedBanner")} style={{ marginBottom: 12 }} />}
       {isDraft &&
         (documents.some((d) => d.docType === "signed_lease") ? (
           <Alert type="success" showIcon message={t("contracts.activateReady")} style={{ marginBottom: 12 }} />

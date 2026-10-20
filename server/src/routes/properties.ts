@@ -6,6 +6,7 @@ import { properties, units, contractUnits, contracts, documents as documentsTabl
 import { eq, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { liveContractsForProperty, liveContractsForUnit, describeRefs } from "../lib/archiveGuards.js";
 
 export const propertiesRouter = Router();
 propertiesRouter.use(requireAuth);
@@ -86,6 +87,21 @@ propertiesRouter.patch("/:id", requireRole("admin"), (req, res) => {
   }
   const existing = db.select().from(properties).where(eq(properties.id, id)).get();
   if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Property not found." } });
+
+  // Archiving hides the property; it can't be hidden while a draft or active
+  // contract still covers one of its units.
+  if (parsed.data.archived === true && !existing.archived) {
+    const live = liveContractsForProperty(id);
+    if (live.length > 0) {
+      return res.status(409).json({
+        error: {
+          code: "property_in_use",
+          message: `This property has contracts still in use (${describeRefs(live)}) and cannot be archived until they have ended.`,
+          details: { contracts: live },
+        },
+      });
+    }
+  }
 
   const updated = db
     .update(properties)
@@ -180,6 +196,19 @@ propertiesRouter.patch("/:propertyId/units/:unitId", requireRole("admin", "manag
   const parsed = updateUnitSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid unit payload." } });
+  }
+  // "Unavailable" is how a unit is archived; not while a draft or active contract covers it.
+  if (parsed.data.availability === "unavailable" && existing.availability !== "unavailable") {
+    const live = liveContractsForUnit(unitId);
+    if (live.length > 0) {
+      return res.status(409).json({
+        error: {
+          code: "unit_in_use_live",
+          message: `This unit is covered by contracts still in use (${describeRefs(live)}) and cannot be archived until they have ended.`,
+          details: { contracts: live },
+        },
+      });
+    }
   }
   const updated = db
     .update(units)

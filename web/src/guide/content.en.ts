@@ -663,6 +663,7 @@ export const guideEn: GuideContent = {
             { q: "The deposit shows a shortfall but we waived it", a: "A waiver must be **recorded** by an Admin on the deposit term (condition met, with a reason). Until then the full amount counts as required." },
             { q: "An overdue reminder disappeared", a: "That's the system working: it vanishes as soon as the bills are paid, adjusted or voided. Reminders are never dismissed by hand." },
             { q: "How do I fix a payment I entered wrongly?", a: "An Admin presses **Reverse** on the receipt (with a reason). Both the original and the reversal stay visible; then enter the correct payment." },
+            { q: "How do I archive a contract?", a: "Open an **expired or terminated** contract and click **Archive** (Admin). It is refused while a bill is unpaid or a deposit is still held, so nothing owed drops out of sight. Archived contracts are hidden from the Contracts list — turn on **Show archived** to see them, or click **Unarchive** to bring one back. Properties, units and Tenants & Landlords follow the same rule: they can't be archived while a draft or active contract still uses them." },
             { q: "Can anything be deleted?", a: "Drafts can be deleted if they have no financial activity. Bills, payments and amendments are never deleted — they are voided, reversed or superseded so the history stays complete." },
           ],
         },

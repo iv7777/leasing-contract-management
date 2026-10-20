@@ -144,6 +144,8 @@ export const contracts = sqliteTable("contracts", {
   specialTerms: text("special_terms"),
   status: text("status", { enum: ["draft", "active", "expired", "terminated"] }).notNull().default("draft"),
   versionNumber: integer("version_number").notNull().default(1),
+  // Hidden from the default list once an ended contract is put away; a flag, not a status.
+  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(nowIso),
   updatedAt: text("updated_at").notNull().default(nowIso),
 }, (t) => ({

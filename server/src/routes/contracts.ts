@@ -26,6 +26,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getContractPropertyIds, canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { contractUnitBelongsToContract, pricingStreamBelongsToContract, rateScheduleBelongsToStream } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { contractOutstanding } from "../lib/archiveGuards.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
 import { previewEscalationTiers } from "../billing/chargeEngine.js";
@@ -73,6 +74,42 @@ contractsRouter.get("/", (req, res) => {
     contracts: visible.map((c) => ({ ...c, unitLabels: unitLabelsByContract[c.id] ?? [] })),
   });
 });
+
+const setArchived = (archived: boolean): import("express").RequestHandler => (req, res) => {
+  const id = Number(req.params.id);
+  const contract = db.select().from(contracts).where(eq(contracts.id, id)).get();
+  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!canAccessContract(req.user!, id)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+  }
+  if (contract.archived === archived) return res.json({ contract });
+
+  if (archived) {
+    // Only a finished lease can be put away; an active or draft one is still in use.
+    if (contract.status !== "expired" && contract.status !== "terminated") {
+      return res.status(409).json({
+        error: { code: "contract_not_ended", message: "Only an expired or terminated contract can be archived. A draft can be deleted instead." },
+      });
+    }
+    const { unpaidFen, depositHeldFen } = contractOutstanding(id);
+    if (unpaidFen > 0 || depositHeldFen > 0) {
+      return res.status(409).json({
+        error: {
+          code: "has_outstanding_balance",
+          message: "This contract still has an unpaid balance or a deposit that has not been refunded or applied. Settle it before archiving.",
+          details: { unpaidFen, depositHeldFen },
+        },
+      });
+    }
+  }
+
+  const updated = db.update(contracts).set({ archived, updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
+  recordAudit({ actorUserId: req.user!.id, action: archived ? "contract_archived" : "contract_unarchived", entityType: "contract", entityId: id });
+  res.json({ contract: updated });
+};
+
+contractsRouter.post("/:id/archive", requireRole("admin"), setArchived(true));
+contractsRouter.post("/:id/unarchive", requireRole("admin"), setArchived(false));
 
 const createContractSchema = z.object({
   referenceNumber: z.string().min(1),

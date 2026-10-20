@@ -1,0 +1,1 @@
+ALTER TABLE `contracts` ADD `archived` integer DEFAULT false NOT NULL;

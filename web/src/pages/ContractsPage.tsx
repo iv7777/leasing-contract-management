@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Table, Tag, Tooltip, Typography, Card } from "antd";
+import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, Card } from "antd";
 import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -21,6 +21,7 @@ interface ContractDto {
   termEnd: string;
   status: "draft" | "active" | "expired" | "terminated";
   versionNumber: number;
+  archived: boolean;
   unitLabels: string[];
 }
 
@@ -45,6 +46,7 @@ export default function ContractsPage() {
   const [contracts, setContracts] = useState<ContractDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [form] = Form.useForm();
   const { byContract: overdueByContract } = useOverdueSummary();
@@ -85,9 +87,9 @@ export default function ContractsPage() {
     </Link>
   );
 
-  const visibleContracts = filterPartyId
-    ? contracts.filter((c) => c.landlordPartyId === filterPartyId || c.tenantPartyId === filterPartyId)
-    : contracts;
+  const visibleContracts = contracts
+    .filter((c) => showArchived || !c.archived)
+    .filter((c) => !filterPartyId || c.landlordPartyId === filterPartyId || c.tenantPartyId === filterPartyId);
 
   const onCreate = async () => {
     const values = await form.validateFields();
@@ -106,7 +108,11 @@ export default function ContractsPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>
           {t("contracts.title")}
         </Typography.Title>
-        <Space>
+        <Space wrap>
+          <Space size={4}>
+            <Switch size="small" checked={showArchived} onChange={setShowArchived} />
+            <Typography.Text type="secondary">{t("common.showArchived")}</Typography.Text>
+          </Space>
           <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts.csv?lang=${exportLang}`, "_blank")}>
             {t("contracts.exportCsv")}
           </Button>
@@ -154,6 +160,7 @@ export default function ContractsPage() {
           renderItem={(c) => (
             <Card style={{ marginBottom: 12 }} onClick={() => navigate(`/contracts/${c.id}`)}>
               <Typography.Text strong>{c.referenceNumber}</Typography.Text> <Tag color={statusColor[c.status]}>{t(`contracts.${c.status}`)}</Tag>
+              {c.archived && <Tag>{t("common.archived")}</Tag>}
               {overdueTag(c.id)}
               <br />
               <Typography.Text type="secondary">
@@ -213,6 +220,7 @@ export default function ContractsPage() {
               render: (s: ContractDto["status"], c: ContractDto) => (
                 <>
                   <Tag color={statusColor[s]}>{t(`contracts.${s}`)}</Tag>
+                  {c.archived && <Tag>{t("common.archived")}</Tag>}
                   {!wide && overdueTag(c.id, true)}
                 </>
               ),

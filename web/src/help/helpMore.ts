@@ -26,7 +26,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: [
         "Admin: **Add property** and enter its name and address.",
         "Click a row to open the property and add its units.",
-        "Turn on **Show archived** to see archived properties.",
+        "Turn on **Show archived** to see archived properties. A property can't be archived while a draft or active contract still covers one of its units.",
       ],
     },
     "properties.detail": {
@@ -49,6 +49,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "**Add contract** (Admin / Manager) creates a draft; fill its tabs, then an Admin activates it.",
         "Use the filter to see one tenant's or landlord's contracts; **Clear filter** removes it.",
         "A red tag means overdue money — click the row to see which bills.",
+        "An Admin can archive an **expired or terminated** contract (once nothing is owed and the deposit is settled); turn on **Show archived** to see them.",
         "**Export CSV** downloads the list.",
       ],
     },
@@ -162,7 +163,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       ],
     },
     "properties.list": {
-      steps: ["管理员：点**新增物业**，填写名称和地址。", "点击某一行进入物业，添加它的单元。", "打开**显示已归档**可查看已归档的物业。"],
+      steps: ["管理员：点**新增物业**，填写名称和地址。", "点击某一行进入物业，添加它的单元。", "打开**显示已归档**可查看已归档的物业；仍有草稿或生效中合同占用其单元的物业不能归档。"],
     },
     "properties.detail": {
       steps: ["用**新增单元**添加每个可出租的空间（名称、类型、可出租面积）。", "不再出租的单元请停用，不要删除。", "在**文件**页签上传产权证、许可证和平面图。"],
@@ -180,6 +181,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "**新增合同**（管理员/经理）会创建草稿；填写各页签后由管理员生效。",
         "用筛选查看某个租户或出租方的合同；点**清除筛选**取消。",
         "红色标签表示有逾期款——点击该行查看是哪些账单。",
+        "管理员可归档**已到期或已终止**的合同（需款项结清、押金已处理）；打开**显示已归档**可查看。",
         "**导出CSV**可下载列表。",
       ],
     },

@@ -5,6 +5,7 @@ import { parties, partySensitiveDetails, contracts } from "../db/schema.js";
 import { eq, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { liveContractsForParty, describeRefs } from "../lib/archiveGuards.js";
 
 export const partiesRouter = Router();
 partiesRouter.use(requireAuth);
@@ -75,6 +76,18 @@ partiesRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
   const parsed = updatePartySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload.", details: parsed.error.flatten() } });
+  }
+  if (parsed.data.archived === true && !existing.archived) {
+    const live = liveContractsForParty(id);
+    if (live.length > 0) {
+      return res.status(409).json({
+        error: {
+          code: "party_in_live_contract",
+          message: `This party is on contracts still in use (${describeRefs(live)}) and cannot be archived until they have ended.`,
+          details: { contracts: live },
+        },
+      });
+    }
   }
   const updated = db
     .update(parties)

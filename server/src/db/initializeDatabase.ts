@@ -151,7 +151,7 @@ try {
       }
       if (keepContracts) {
         work.prepare(`UPDATE billing_rules SET auto_billing = 0`).run();
-        work.prepare(`UPDATE contracts SET status = 'draft', updated_at = ?`).run(new Date().toISOString());
+        work.prepare(`UPDATE contracts SET status = 'draft', archived = 0, updated_at = ?`).run(new Date().toISOString());
       }
       work
         .prepare(`INSERT INTO audit_events (actor_user_id, action, entity_type, details_json, created_at) VALUES (NULL, ?, 'database', ?, ?)`)

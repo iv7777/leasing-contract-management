@@ -195,6 +195,7 @@ const en = {
     statementDraftNote: "The monthly statement is available once the contract is activated — until then nothing has been billed or paid.",
     draftActionsNote: "Payments, receipts, charges, deposits and meter readings can be recorded once the contract is activated.",
     amendmentsDraftNote: "A draft contract is edited directly (Edit contract). Amendments are available once it is activated.",
+    archivedBanner: "Archived — hidden from the contract list. Unarchive to bring it back.",
     meteredUnit: "Unit of measure",
     meteredUnitPlaceholder: "e.g. kWh, ton, m³",
     amountOrRate: "Amount / rate (yuan)",
