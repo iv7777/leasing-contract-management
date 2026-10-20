@@ -199,6 +199,7 @@ const zh: Translations = {
     amendmentsDraftNote: "草稿合同直接编辑即可（编辑合同）。合同生效后才能提交变更。",
     archivedBanner: "已归档——不在合同列表中显示。取消归档即可恢复。",
     archiveOnlyEnded: "只有已到期或已终止的合同才能归档。草稿可直接删除；生效中的合同需先结束。",
+    amendTypeNames: { rent_change: "租金调整", add_unit: "新增单元", add_pricing_stream: "新增费用", terminate: "提前终止", internal_correction: "内部更正" },
     meteredUnit: "计量单位",
     meteredUnitPlaceholder: "例如：度、吨、立方米",
     amountOrRate: "金额/费率（元）",

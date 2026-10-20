@@ -197,6 +197,7 @@ const en = {
     amendmentsDraftNote: "A draft contract is edited directly (Edit contract). Amendments are available once it is activated.",
     archivedBanner: "Archived — hidden from the contract list. Unarchive to bring it back.",
     archiveOnlyEnded: "Only an expired or terminated contract can be archived. A draft can be deleted instead; an active contract has to end first.",
+    amendTypeNames: { rent_change: "Rent change", add_unit: "Add unit", add_pricing_stream: "Add fee", terminate: "Early termination", internal_correction: "Internal correction" },
     meteredUnit: "Unit of measure",
     meteredUnitPlaceholder: "e.g. kWh, ton, m³",
     amountOrRate: "Amount / rate (yuan)",

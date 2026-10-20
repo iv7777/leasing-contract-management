@@ -1815,7 +1815,7 @@ export default function ContractDetailPage() {
                     >
                       <Space direction="vertical" size={0}>
                         <span>
-                          <Tag>{a.type}</Tag> {a.reason}
+                          <Tag>{t(`contracts.amendTypeNames.${a.type}`, { defaultValue: a.type })}</Tag> {a.reason}
                         </span>
                         <Typography.Text type="secondary">
                           {t("contracts.effectiveDate")}: {a.effectiveDate} · {t(`contracts.${a.status}`)}

@@ -104,7 +104,9 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
   for (const s of streams) {
     doc.text(`  ${s.label ?? (L[s.feeType] ?? s.feeType)} (${L[s.feeType] ?? s.feeType})`);
     for (const r of rates.filter((r) => r.pricingStreamId === s.id)) {
-      doc.text(`    ${L[r.calculationMethod] ?? r.calculationMethod} — ${r.amountOrRate} (${L[r.rateBasis] ?? r.rateBasis}), ${L.from} ${r.effectiveStart}${r.effectiveEnd ? ` ${L.to} ${r.effectiveEnd}` : ""}`);
+      // A metered price is per unit of use (kWh, ton…), not per month.
+      const basis = r.calculationMethod === "metered" ? `${L.yuan}/${r.unit ?? L.per_unit}` : (L[r.rateBasis] ?? r.rateBasis);
+      doc.text(`    ${L[r.calculationMethod] ?? r.calculationMethod} — ${r.amountOrRate} (${basis}), ${L.from} ${r.effectiveStart}${r.effectiveEnd ? ` ${L.to} ${r.effectiveEnd}` : ""}`);
     }
   }
   doc.moveDown();
@@ -128,7 +130,7 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
   doc.fontSize(14).text(L.amendmentHistory);
   doc.fontSize(10);
   for (const a of amendmentRows) {
-    doc.text(`  ${a.effectiveDate}  ${a.type}  [${L[a.status] ?? a.status}]  ${a.reason}`);
+    doc.text(`  ${a.effectiveDate}  ${L[a.type] ?? a.type}  [${L[a.status] ?? a.status}]  ${a.reason}`);
   }
 
   doc.end();
