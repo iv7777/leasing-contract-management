@@ -7,4 +7,17 @@ export function streamName(t: (key: string) => string, label: string, feeType: s
   return label === feeType ? t(`contracts.${camel(feeType)}`) : label;
 }
 
+/** Payment methods are stored as the English names above; show them in the
+ * viewer's language. Anything else (older or free-typed values) is shown as is. */
+export function paymentMethodLabel(t: (key: string) => string, method: string): string {
+  return (PAYMENT_METHODS as readonly string[]).includes(method) ? t(`billing.methods.${camel(method.toLowerCase().replace(/ /g, "_"))}`) : method;
+}
+
+/** Document types the app itself offers; any other value is the user's own wording. */
+export function docTypeLabel(t: (key: string) => string, docType: string): string {
+  if (docType === "signed_lease") return t("contracts.signedLease");
+  if (docType === "other") return t("contracts.otherDocumentType");
+  return docType;
+}
+
 export const PAYMENT_METHODS = ["Bank transfer", "Cash", "WeChat Pay", "Alipay", "Cheque", "Other"] as const;

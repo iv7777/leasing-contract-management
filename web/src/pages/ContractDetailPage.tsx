@@ -41,6 +41,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
+import { paymentMethodLabel, docTypeLabel } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -691,7 +692,7 @@ export default function ContractDetailPage() {
     try {
       const values = await generateForm.validateFields();
       const result = await api.post<{ created: number; skippedExisting: number }>(`/contracts/${id}/generate-charges`, values);
-      message.success(`${result.created} created, ${result.skippedExisting} already existed`);
+      message.success(t("contracts.generateResult", { created: result.created, skipped: result.skippedExisting }));
       setGenerateModal(false);
       generateForm.resetFields();
       load();
@@ -1557,7 +1558,7 @@ export default function ContractDetailPage() {
                   dataSource={depositTxns}
                   columns={[
                     { title: t("contracts.transactionDate"), dataIndex: "transactionDate" },
-                    { title: t("contracts.transactionType"), dataIndex: "transactionType" },
+                    { title: t("contracts.transactionType"), dataIndex: "transactionType", render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
                     { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
                     { title: t("contracts.reason"), dataIndex: "reason" },
                     {
@@ -1631,14 +1632,14 @@ export default function ContractDetailPage() {
                   dataSource={receipts}
                   columns={[
                     { title: t("contracts.receivedDate"), dataIndex: "receivedDate" },
-                    { title: t("contracts.paymentMethod"), dataIndex: "paymentMethod" },
+                    { title: t("contracts.paymentMethod"), dataIndex: "paymentMethod", render: (v: string) => paymentMethodLabel(t, v) },
                     { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
                     {
                       title: t("contracts.unallocated"),
                       key: "unallocated",
                       render: (_: unknown, r: ReceiptDto) => yuan(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0),
                     },
-                    { title: t("common.actions"), dataIndex: "status", render: (s: string) => (s === "reversed" ? <Tag color="red">{s}</Tag> : <Tag>{s}</Tag>) },
+                    { title: t("common.actions"), dataIndex: "status", render: (s: string) => (s === "reversed" ? <Tag color="red">{t("contracts.reversed")}</Tag> : <Tag>{t(`contracts.receiptStatus.${s}`, { defaultValue: s })}</Tag>) },
                     {
                       title: "",
                       key: "action",
@@ -1876,7 +1877,7 @@ export default function ContractDetailPage() {
                     >
                       <Space>
                         {d.classification === "sensitive" && <LockOutlined />}
-                        <Typography.Text>{d.docType === "signed_lease" ? t("contracts.signedLease") : d.docType}</Typography.Text>
+                        <Typography.Text>{docTypeLabel(t, d.docType)}</Typography.Text>
                         {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
                       </Space>
                     </List.Item>
@@ -2736,7 +2737,7 @@ export default function ContractDetailPage() {
               optionFilterProp="label"
               options={documents.map((d) => ({
                 value: d.id,
-                label: `${d.docType === "signed_lease" ? t("contracts.signedLease") : d.docType} (${d.uploadedAt.slice(0, 10)})`,
+                label: `${docTypeLabel(t, d.docType)} (${d.uploadedAt.slice(0, 10)})`,
               }))}
             />
           </Form.Item>

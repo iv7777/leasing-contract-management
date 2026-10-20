@@ -71,7 +71,7 @@ export default function UsersPage() {
   const toggleActive = async (u: PublicUser) => {
     try {
       await api.patch(`/users/${u.id}`, { active: !u.active });
-      message.success(u.active ? "User deactivated" : "User activated");
+      message.success(u.active ? t("users.deactivatedToast") : t("users.activatedToast"));
       load();
     } catch (err) {
       if (err instanceof ApiError) message.error(apiErrorMessage(err, t));

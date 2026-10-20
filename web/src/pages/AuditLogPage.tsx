@@ -67,7 +67,7 @@ export default function AuditLogPage() {
           style={{ width: 180 }}
           value={entityType}
           onChange={setEntityType}
-          options={entityTypes.map((e) => ({ value: e, label: e }))}
+          options={entityTypes.map((e) => ({ value: e, label: t(`audit.entities.${e}`, { defaultValue: e }) }))}
         />
         <Input placeholder={t("audit.entityId")} style={{ width: 120 }} value={entityId} onChange={(e) => setEntityId(e.target.value)} />
         <DateField placeholder={t("audit.from")} style={{ width: 160 }} value={from || undefined} onChange={(v) => setFrom(v ?? "")} allowClear />
@@ -105,8 +105,8 @@ export default function AuditLogPage() {
         columns={[
           { title: t("audit.timestamp"), dataIndex: "createdAt", width: 200 },
           { title: t("audit.actor"), dataIndex: "actorName", render: (v: string | null) => v ?? t("audit.system") },
-          { title: t("audit.action"), dataIndex: "action", render: (v: string) => <Tag>{v}</Tag> },
-          { title: t("audit.entityType"), dataIndex: "entityType" },
+          { title: t("audit.action"), dataIndex: "action", render: (v: string) => <Tag>{t(`audit.actions.${v}`, { defaultValue: v })}</Tag> },
+          { title: t("audit.entityType"), dataIndex: "entityType", render: (v: string) => t(`audit.entities.${v}`, { defaultValue: v }) },
           { title: t("audit.entityId"), dataIndex: "entityId" },
         ]}
       />

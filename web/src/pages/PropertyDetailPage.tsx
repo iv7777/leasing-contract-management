@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import type { PropertyDto, UnitDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { apiErrorMessage } from "../api/errorMessage";
+import { docTypeLabel } from "../components/billing/format";
 import { useAuth } from "../auth/AuthContext";
 import { useHelpTopic } from "../help/HelpContext";
 import { HelpIcon } from "../help/HelpIcon";
@@ -373,7 +374,7 @@ export default function PropertyDetailPage() {
                     >
                       <Space>
                         {d.classification === "sensitive" && <LockOutlined />}
-                        <Typography.Text>{d.docType}</Typography.Text>
+                        <Typography.Text>{docTypeLabel(t, d.docType)}</Typography.Text>
                         {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
                       </Space>
                     </List.Item>
@@ -408,7 +409,7 @@ export default function PropertyDetailPage() {
           <Form.Item
             name="rentableAreaSqm"
             label={t("properties.rentableArea")}
-            rules={[{ required: true, pattern: /^\d+(\.\d+)?$/, message: "Enter a decimal number" }]}
+            rules={[{ required: true, pattern: /^\d+(\.\d+)?$/, message: t("properties.decimalRequired") }]}
           >
             <Input />
           </Form.Item>
@@ -536,7 +537,7 @@ export default function PropertyDetailPage() {
           <Form.Item
             name="rentableAreaSqm"
             label={t("properties.rentableArea")}
-            rules={[{ required: true, pattern: /^\d+(\.\d+)?$/, message: "Enter a decimal number" }]}
+            rules={[{ required: true, pattern: /^\d+(\.\d+)?$/, message: t("properties.decimalRequired") }]}
           >
             <Input />
           </Form.Item>
