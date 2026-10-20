@@ -23,6 +23,7 @@ import {
   rateScheduleBelongsToStream,
 } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { todayInChina } from "@lcm/shared";
 
 export const amendmentsRouter = Router();
 amendmentsRouter.use(requireAuth);
@@ -233,7 +234,15 @@ function applyApproval(req: import("express").Request, res: import("express").Re
 
   db.transaction((tx) => {
     if (changes.contract) {
-      tx.update(contracts).set({ ...changes.contract, updatedAt: new Date().toISOString() }).where(eq(contracts.id, contract.id)).run();
+      // Term changes apply at once, but a status change (e.g. an early
+      // termination) waits for the amendment's effective date; the nightly
+      // job in jobs/contractLifecycle.ts applies it then.
+      const { status: requestedStatus, ...termChanges } = changes.contract;
+      const statusNow = requestedStatus !== undefined && amendment.effectiveDate <= todayInChina() ? { status: requestedStatus } : {};
+      const set = { ...termChanges, ...statusNow };
+      if (Object.keys(set).length > 0) {
+        tx.update(contracts).set({ ...set, updatedAt: new Date().toISOString() }).where(eq(contracts.id, contract.id)).run();
+      }
     }
     for (const u of changes.addUnits ?? []) {
       tx.insert(contractUnits).values({ contractId: contract.id, ...u }).run();

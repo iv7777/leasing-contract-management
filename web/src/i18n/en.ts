@@ -233,7 +233,7 @@ const en = {
     amendAddUnitHint: "This attaches an existing unit from the property to this contract. To also price it, propose a second amendment (once this one is approved) adding a pricing stream that targets it.",
     amendAddStreamHint: "Only units already on this contract can be targeted. If you just added a unit in another amendment, wait for that one to be approved first — a still-pending unit can't be targeted yet.",
     amendmentKindTerminate: "Terminate the contract early",
-    amendTerminateHint: "The effective date above is the termination date. Once approved, the contract's status becomes Terminated, its term end is set to that date, and every currently open unit on it is ended as of that date so no further charges get generated. Don't forget to settle the deposit afterward from the Deposit tab.",
+    amendTerminateHint: "The effective date above is the termination date. Once approved, the contract's term end is set to that date and every currently open unit on it is ended as of that date so no further charges get generated. The status becomes Terminated on that date (straight away if it is today or in the past). Don't forget to settle the deposit afterward from the Deposit tab.",
     submit: "Submit",
     approve: "Approve",
     reject: "Reject",

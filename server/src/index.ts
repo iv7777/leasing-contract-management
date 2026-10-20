@@ -23,6 +23,7 @@ import { backupsRouter } from "./routes/backups.js";
 import { billingRouter } from "./routes/billing.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { runDailyBilling } from "./jobs/billing.js";
+import { runContractLifecycle } from "./jobs/contractLifecycle.js";
 import { runBackup, countSucceededRuns, isWeeklyBackupDue, DAILY_RETENTION_LIMIT } from "./jobs/backup.js";
 
 const app = express();
@@ -112,6 +113,21 @@ if (process.env.ENABLE_CHARGE_GENERATION_SCHEDULE !== "false") {
     }
   }, { timezone: "Asia/Shanghai" });
 }
+
+// Nightly status pass at 03:05 China time, right after billing so a contract
+// that ended yesterday still gets its last billing run before it is marked
+// expired. Independent of the billing switch. Also run once at start-up so a
+// restart after downtime catches up straight away.
+function runLifecycle() {
+  try {
+    const r = runContractLifecycle();
+    if (r.expired > 0 || r.statusChanged > 0) console.log(`Contract status pass: ${r.expired} expired, ${r.statusChanged} changed by amendment.`);
+  } catch (err) {
+    console.error("Contract status pass failed:", err);
+  }
+}
+cron.schedule("5 3 * * *", runLifecycle, { timezone: "Asia/Shanghai" });
+runLifecycle();
 
 app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
