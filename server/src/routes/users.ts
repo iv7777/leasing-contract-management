@@ -14,6 +14,7 @@ import {
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { changesBetween } from "../lib/auditDetail.js";
 import { hashPassword } from "../lib/password.js";
 import { ROLES, LOCALES } from "@lcm/shared";
 
@@ -83,7 +84,7 @@ usersRouter.post("/", (req, res) => {
     db.insert(userProperties).values({ userId: inserted.id, propertyId }).run();
   }
 
-  recordAudit({ actorUserId: req.user!.id, action: "user_created", entityType: "user", entityId: inserted.id });
+  recordAudit({ actorUserId: req.user!.id, action: "user_created", entityType: "user", entityId: inserted.id, details: { email: inserted.email, name: inserted.name, role: inserted.role } });
   res.status(201).json({ user: toPublic(inserted, propertyIds) });
 });
 
@@ -153,6 +154,16 @@ usersRouter.patch("/:id", (req, res) => {
     action: deactivated ? "user_deactivated" : "user_updated",
     entityType: "user",
     entityId: id,
+    details: {
+      email: updated.email,
+      changes: {
+        ...changesBetween(
+          { name: existing.name, email: existing.email, role: existing.role, active: existing.active, canDownloadPdf: existing.canDownloadPdf, canPrint: existing.canPrint, preferredLocale: existing.preferredLocale },
+          { name: updated.name, email: updated.email, role: updated.role, active: updated.active, canDownloadPdf: updated.canDownloadPdf, canPrint: updated.canPrint, preferredLocale: updated.preferredLocale },
+        ),
+        ...(propertyIds ? { propertyIds: { from: null, to: propertyIds.join(", ") } } : {}),
+      },
+    },
   });
   const finalPropertyIds =
     propertyIds ?? db.select({ propertyId: userProperties.propertyId }).from(userProperties).where(eq(userProperties.userId, id)).all().map((r) => r.propertyId);
@@ -176,7 +187,7 @@ usersRouter.post("/:id/set-password", (req, res) => {
     .run();
 
   // Never log the password itself, only that a reset happened.
-  recordAudit({ actorUserId: req.user!.id, action: "user_password_reset", entityType: "user", entityId: id });
+  recordAudit({ actorUserId: req.user!.id, action: "user_password_reset", entityType: "user", entityId: id, details: { email: db.select({ e: users.email }).from(users).where(eq(users.id, id)).get()?.e } });
   res.json({ ok: true });
 });
 

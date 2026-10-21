@@ -5,6 +5,7 @@ import { parties, partySensitiveDetails, contracts } from "../db/schema.js";
 import { eq, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { changesBetween } from "../lib/auditDetail.js";
 import { liveContractsForParty, describeRefs } from "../lib/archiveGuards.js";
 
 export const partiesRouter = Router();
@@ -56,7 +57,7 @@ partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
     })
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "party_created", entityType: "party", entityId: inserted.id });
+  recordAudit({ actorUserId: req.user!.id, action: "party_created", entityType: "party", entityId: inserted.id, details: { name: inserted.name, type: inserted.type } });
   res.status(201).json({ party: inserted });
 });
 
@@ -100,7 +101,7 @@ partiesRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
     action: existing.archived !== updated.archived ? (updated.archived ? "party_archived" : "party_unarchived") : "party_updated",
     entityType: "party",
     entityId: id,
-    details: { before: existing, after: updated },
+    details: { name: updated.name, changes: changesBetween(existing, updated) },
   });
   res.json({ party: updated });
 });
@@ -152,6 +153,6 @@ partiesRouter.put("/:id/sensitive-details", requireRole("admin"), (req, res) => 
     })
     .run();
   // Never write the actual sensitive values into the audit log.
-  recordAudit({ actorUserId: req.user!.id, action: "party_sensitive_updated", entityType: "party", entityId: partyId });
+  recordAudit({ actorUserId: req.user!.id, action: "party_sensitive_updated", entityType: "party", entityId: partyId, details: { fieldsChanged: Object.keys(parsed.data) } });
   res.json({ ok: true });
 });

@@ -28,6 +28,7 @@ import { contractUnitBelongsToContract, pricingStreamBelongsToContract, rateSche
 import { recordAudit } from "../lib/audit.js";
 import { rateRuleError } from "../lib/rateRules.js";
 import { contractOutstanding } from "../lib/archiveGuards.js";
+import { changesBetween, contractRef, rateFacts, rateForDiff, streamName, unitName } from "../lib/auditDetail.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
 import { previewEscalationTiers } from "../billing/chargeEngine.js";
@@ -105,7 +106,7 @@ const setArchived = (archived: boolean): import("express").RequestHandler => (re
   }
 
   const updated = db.update(contracts).set({ archived, updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: archived ? "contract_archived" : "contract_unarchived", entityType: "contract", entityId: id });
+  recordAudit({ actorUserId: req.user!.id, action: archived ? "contract_archived" : "contract_unarchived", entityType: "contract", entityId: id, details: { contract: contract.referenceNumber } });
   res.json({ contract: updated });
 };
 
@@ -141,7 +142,7 @@ contractsRouter.post("/", requireRole("admin", "manager"), (req, res) => {
   const inserted = db.insert(contracts).values(contractFields).returning().get();
   db.insert(billingRules).values({ contractId: inserted.id, ...rulesInput }).run();
 
-  recordAudit({ actorUserId: req.user!.id, action: "contract_created", entityType: "contract", entityId: inserted.id });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_created", entityType: "contract", entityId: inserted.id, details: { contract: inserted.referenceNumber, termStart: inserted.termStart, termEnd: inserted.termEnd } });
   res.status(201).json({ contract: inserted });
 });
 
@@ -208,7 +209,7 @@ contractsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
     .where(eq(contracts.id, id))
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "contract_updated", entityType: "contract", entityId: id, details: { before: contract, after: updated } });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_updated", entityType: "contract", entityId: id, details: { contract: updated.referenceNumber, changes: changesBetween(contract, updated) } });
   res.json({ contract: updated });
 });
 
@@ -307,7 +308,7 @@ contractsRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) =
   }
 
   const inserted = db.insert(contractUnits).values({ contractId, ...parsed.data }).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_added", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), unit: unit.unitLabel, contractedAreaSqm: inserted.contractedAreaSqm, effectiveStart: inserted.effectiveStart } });
   res.status(201).json({ contractUnit: inserted });
 });
 
@@ -331,8 +332,9 @@ contractsRouter.patch("/:id/units/:contractUnitId", requireRole("admin", "manage
   const parsed = updateContractUnitSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid contract unit payload." } });
 
+  const beforeUnit = db.select().from(contractUnits).where(eq(contractUnits.id, contractUnitId)).get()!;
   const updated = db.update(contractUnits).set(parsed.data).where(eq(contractUnits.id, contractUnitId)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), unit: unitName(contractUnitId), changes: changesBetween(beforeUnit, updated) } });
   res.json({ contractUnit: updated });
 });
 
@@ -346,6 +348,7 @@ contractsRouter.delete("/:id/units/:contractUnitId", requireRole("admin", "manag
     return res.status(404).json({ error: { code: "not_found", message: "Contract unit not found." } });
   }
 
+  const removedUnit = { unit: unitName(contractUnitId), cu: db.select().from(contractUnits).where(eq(contractUnits.id, contractUnitId)).get() };
   db.transaction(() => {
     // A pricing stream can target this unit directly (pricing_stream_units);
     // removing the unit from the contract also removes it from whatever it
@@ -354,7 +357,7 @@ contractsRouter.delete("/:id/units/:contractUnitId", requireRole("admin", "manag
     db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.contractUnitId, contractUnitId)).run();
     db.delete(contractUnits).where(eq(contractUnits.id, contractUnitId)).run();
   });
-  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_removed", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_unit_removed", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), unit: removedUnit.unit, contractedAreaSqm: removedUnit.cu?.contractedAreaSqm, effectiveStart: removedUnit.cu?.effectiveStart } });
   res.status(204).send();
 });
 
@@ -405,7 +408,7 @@ contractsRouter.post("/:id/pricing-streams", requireRole("admin", "manager"), (r
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_added", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: stream.label ?? stream.feeType, feeType: stream.feeType, rate: rateFacts(rate) } });
   res.status(201).json({ pricingStream: stream, rateSchedule: rate });
 });
 
@@ -438,6 +441,7 @@ contractsRouter.patch("/:id/pricing-streams/:streamId", requireRole("admin", "ma
     }
   }
 
+  const beforeStream = db.select().from(pricingStreams).where(eq(pricingStreams.id, streamId)).get()!;
   const updated = db.transaction(() => {
     const stream = db.update(pricingStreams).set(streamFields).where(eq(pricingStreams.id, streamId)).returning().get();
     if (contractUnitIds) {
@@ -448,7 +452,7 @@ contractsRouter.patch("/:id/pricing-streams/:streamId", requireRole("admin", "ma
     }
     return stream;
   });
-  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: updated.label ?? updated.feeType, changes: { ...changesBetween(beforeStream, updated), ...(contractUnitIds ? { units: { from: null, to: contractUnitIds.map((x) => unitName(x)).join(", ") } } : {}) } } });
   res.json({ pricingStream: updated });
 });
 
@@ -476,12 +480,13 @@ contractsRouter.delete("/:id/pricing-streams/:streamId", requireRole("admin", "m
     return res.status(409).json({ error: { code: "has_dependents", message: "This pricing stream has usage entries or charges recorded against it." } });
   }
 
+  const removedStream = db.select().from(pricingStreams).where(eq(pricingStreams.id, streamId)).get();
   db.transaction(() => {
     db.delete(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).run();
     db.delete(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).run();
     db.delete(pricingStreams).where(eq(pricingStreams.id, streamId)).run();
   });
-  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_removed", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "pricing_stream_removed", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: removedStream?.label ?? removedStream?.feeType, feeType: removedStream?.feeType } });
   res.status(204).send();
 });
 
@@ -516,7 +521,7 @@ contractsRouter.post("/:id/pricing-streams/:streamId/rate-schedule", requireRole
   if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
 
   const inserted = db.insert(rateSchedule).values({ pricingStreamId: streamId, ...parsed.data }).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_added", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(streamId), rate: rateFacts(inserted) } });
   res.status(201).json({ rateSchedule: inserted });
 });
 
@@ -550,7 +555,7 @@ contractsRouter.patch("/:id/pricing-streams/:streamId/rate-schedule/:rateId", re
   if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
 
   const updated = db.update(rateSchedule).set(parsed.data).where(eq(rateSchedule.id, rateId)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(streamId), ratePeriod: `${existingRate.effectiveStart} → ${existingRate.effectiveEnd ?? "…"}`, changes: changesBetween(rateForDiff(existingRate), rateForDiff(updated)) } });
   res.json({ rateSchedule: updated });
 });
 
@@ -565,8 +570,9 @@ contractsRouter.delete("/:id/pricing-streams/:streamId/rate-schedule/:rateId", r
     return res.status(404).json({ error: { code: "not_found", message: "Rate schedule entry not found." } });
   }
 
+  const removedRate = db.select().from(rateSchedule).where(eq(rateSchedule.id, rateId)).get();
   db.delete(rateSchedule).where(eq(rateSchedule.id, rateId)).run();
-  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_removed", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_removed", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(streamId), rate: removedRate ? rateFacts(removedRate) : null } });
   res.status(204).send();
 });
 
@@ -591,7 +597,7 @@ contractsRouter.post("/:id/concessions", requireRole("admin", "manager"), (req, 
   }
 
   const inserted = db.insert(concessions).values({ contractId, ...parsed.data }).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "concession_added", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "concession_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(inserted.pricingStreamId) ?? "ALL", discountPercentage: inserted.discountPercentage, effectiveStart: inserted.effectiveStart, effectiveEnd: inserted.effectiveEnd, reason: inserted.reason } });
   res.status(201).json({ concession: inserted });
 });
 
@@ -621,8 +627,9 @@ contractsRouter.patch("/:id/concessions/:concessionId", requireRole("admin", "ma
     return res.status(400).json({ error: { code: "invalid_reference", message: "Pricing stream does not belong to this contract." } });
   }
 
+  const beforeConcession = db.select().from(concessions).where(eq(concessions.id, concessionId)).get()!;
   const updated = db.update(concessions).set(parsed.data).where(eq(concessions.id, concessionId)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "concession_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "concession_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(updated.pricingStreamId) ?? "ALL", changes: changesBetween({ ...beforeConcession, pricingStreamId: streamName(beforeConcession.pricingStreamId) ?? "ALL" }, { ...updated, pricingStreamId: streamName(updated.pricingStreamId) ?? "ALL" }) } });
   res.json({ concession: updated });
 });
 
@@ -636,8 +643,9 @@ contractsRouter.delete("/:id/concessions/:concessionId", requireRole("admin", "m
     return res.status(404).json({ error: { code: "not_found", message: "Concession not found." } });
   }
 
+  const removedConcession = db.select().from(concessions).where(eq(concessions.id, concessionId)).get();
   db.delete(concessions).where(eq(concessions.id, concessionId)).run();
-  recordAudit({ actorUserId: req.user!.id, action: "concession_removed", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "concession_removed", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(removedConcession?.pricingStreamId ?? null) ?? "ALL", discountPercentage: removedConcession?.discountPercentage, effectiveStart: removedConcession?.effectiveStart, effectiveEnd: removedConcession?.effectiveEnd } });
   res.status(204).send();
 });
 
@@ -661,7 +669,7 @@ contractsRouter.post("/:id/deposit-terms", requireRole("admin", "manager"), (req
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid deposit terms payload." } });
 
   const inserted = db.insert(depositTerms).values({ contractId, ...parsed.data }).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_set", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_set", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), requirementType: inserted.requirementType, fixedAmountFen: inserted.fixedAmountFen, formulaBasis: inserted.formulaBasis, effectiveStart: inserted.effectiveStart, dueDate: inserted.dueDate } });
   res.status(201).json({ depositTerms: inserted });
 });
 
@@ -699,8 +707,9 @@ contractsRouter.patch("/:id/deposit-terms/:depositTermId", requireRole("admin", 
   const parsed = updateDepositTermsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid deposit terms payload." } });
 
+  const beforeTerms = db.select().from(depositTerms).where(eq(depositTerms.id, depositTermId)).get()!;
   const updated = db.update(depositTerms).set(parsed.data).where(eq(depositTerms.id, depositTermId)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), changes: changesBetween(beforeTerms, updated) } });
   res.json({ depositTerms: updated });
 });
 
@@ -714,8 +723,9 @@ contractsRouter.delete("/:id/deposit-terms/:depositTermId", requireRole("admin",
     return res.status(404).json({ error: { code: "not_found", message: "Deposit terms not found." } });
   }
 
+  const removedTerms = db.select().from(depositTerms).where(eq(depositTerms.id, depositTermId)).get();
   db.delete(depositTerms).where(eq(depositTerms.id, depositTermId)).run();
-  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_removed", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_removed", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), requirementType: removedTerms?.requirementType, fixedAmountFen: removedTerms?.fixedAmountFen, formulaBasis: removedTerms?.formulaBasis, effectiveStart: removedTerms?.effectiveStart } });
   res.status(204).send();
 });
 
@@ -742,6 +752,7 @@ contractsRouter.patch("/deposit-terms/:depositTermId/waiver-decision", requireRo
     entityType: "deposit_terms",
     entityId: id,
     reason: parsed.data.notes,
+    details: { contract: contractRef(existing.contractId), waiverMet: parsed.data.waiverMet, fixedAmountFen: existing.fixedAmountFen, effectiveStart: existing.effectiveStart },
   });
   res.json({ depositTerms: updated });
 });
@@ -763,8 +774,9 @@ contractsRouter.patch("/:id/billing-rules", requireRole("admin", "manager"), (re
   const parsed = billingRulesSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid billing rules payload." } });
 
+  const beforeRules = db.select().from(billingRules).where(eq(billingRules.contractId, contractId)).get()!;
   const updated = db.update(billingRules).set(parsed.data).where(eq(billingRules.contractId, contractId)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "billing_rules_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "billing_rules_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), changes: changesBetween(beforeRules, updated) } });
   res.json({ billingRules: updated });
 });
 
@@ -783,8 +795,9 @@ contractsRouter.patch("/:id/late-penalty-rules", requireRole("admin", "manager")
   const parsed = latePenaltySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid late penalty payload." } });
 
+  const beforePenalty = db.select().from(billingRules).where(eq(billingRules.contractId, contractId)).get()!;
   const updated = db.update(billingRules).set(parsed.data).where(eq(billingRules.contractId, contractId)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "late_penalty_rules_updated", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "late_penalty_rules_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), changes: changesBetween(beforePenalty, updated) } });
   res.json({ billingRules: updated });
 });
 
@@ -814,7 +827,7 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
   const updated = db.transaction(() => {
     const row = db.update(contracts).set({ status: "active", updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
     recordContractVersion(id, row.versionNumber, row.termStart, null);
-    recordAudit({ actorUserId: req.user!.id, action: "contract_activated", entityType: "contract", entityId: id });
+    recordAudit({ actorUserId: req.user!.id, action: "contract_activated", entityType: "contract", entityId: id, details: { contract: row.referenceNumber, termStart: row.termStart, termEnd: row.termEnd } });
 
     // A lease that hasn't started yet has no history to review, so it joins
     // the nightly billing straight away. One that started earlier stays off
@@ -822,7 +835,7 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
     const rules = db.select().from(billingRules).where(eq(billingRules.contractId, id)).get();
     if (rules?.billingFrequency === "monthly" && row.termStart.slice(0, 7) >= todayInChina().slice(0, 7)) {
       db.update(billingRules).set({ autoBilling: true }).where(eq(billingRules.contractId, id)).run();
-      recordAudit({ actorUserId: req.user!.id, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { reason: "activated before term start" } });
+      recordAudit({ actorUserId: req.user!.id, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { contract: row.referenceNumber, reason: "activated before term start" } });
     }
     return row;
   });
@@ -857,7 +870,7 @@ contractsRouter.post("/:id/generate-charges", requireRole("admin", "manager"), (
       action: "charges_generated",
       entityType: "contract",
       entityId: contractId,
-      details: { period: parsed.data.period, ...result },
+      details: { contract: contractRef(contractId), period: parsed.data.period, ...result },
     });
     res.json(result);
   } catch (err) {

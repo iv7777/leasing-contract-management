@@ -5,6 +5,7 @@ import { receipts, receiptAllocations } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
+import { contractRef, chargeFacts } from "../lib/auditDetail.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, validateAllocation } from "../billing/ledger.js";
 import { proposeAllocations, type OpenCharge } from "../billing/allocation.js";
@@ -62,7 +63,7 @@ function postPayment(
     .values({ contractId, recordedBy: userId, receivedDate: p.receivedDate, amountFen: p.amountFen, paymentMethod: p.paymentMethod, externalReference: p.externalReference || null })
     .returning()
     .get();
-  recordAudit({ actorUserId: userId, action: "receipt_recorded", entityType: "receipt", entityId: receipt.id, details: { amountFen: receipt.amountFen } });
+  recordAudit({ actorUserId: userId, action: "receipt_recorded", entityType: "receipt", entityId: receipt.id, details: { contract: contractRef(contractId), amountFen: receipt.amountFen, receivedDate: receipt.receivedDate, paymentMethod: receipt.paymentMethod } });
 
   const asOf = todayInChina();
   for (const a of allocations) {
@@ -80,7 +81,7 @@ function postPayment(
     });
     if (!validation.ok) throw new PaymentError(validation.reason);
     const inserted = tx.insert(receiptAllocations).values({ receiptId: receipt.id, chargeId: a.chargeId, amountFen: a.amountFen, createdBy: userId }).returning().get();
-    recordAudit({ actorUserId: userId, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId: receipt.id, chargeId: a.chargeId, amountFen: a.amountFen } });
+    recordAudit({ actorUserId: userId, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId: receipt.id, ...chargeFacts(a.chargeId), amountFen: a.amountFen } });
   }
   return receipt;
 }
@@ -173,7 +174,7 @@ paymentsRouter.post("/contracts/:id/payments/bulk", requireRole(...WRITERS), (re
       action: "payments_bulk_recorded",
       entityType: "contract",
       entityId: contractId,
-      details: { count: rows.length, totalFen: parsed.data.payments.reduce((s, p) => s + p.amountFen, 0) },
+      details: { contract: contractRef(contractId), count: rows.length, totalFen: parsed.data.payments.reduce((s, p) => s + p.amountFen, 0) },
     });
     res.status(201).json({ results: rows });
   } catch (err) {

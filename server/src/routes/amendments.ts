@@ -24,6 +24,7 @@ import {
   rateScheduleBelongsToStream,
 } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { amendmentFacts, contractRef } from "../lib/auditDetail.js";
 import { rateRuleError } from "../lib/rateRules.js";
 import { citedDocumentIds, liveSignedLeaseIds } from "../lib/documentRules.js";
 import { todayInChina } from "@lcm/shared";
@@ -223,7 +224,7 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_drafted", entityType: "amendment", entityId: inserted.id, reason: parsed.data.reason });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_drafted", entityType: "amendment", entityId: inserted.id, reason: parsed.data.reason, details: amendmentFacts(inserted) });
   res.status(201).json({ amendment: inserted });
 });
 
@@ -270,7 +271,7 @@ amendmentsRouter.patch("/amendments/:id", requireRole("admin", "manager"), (req,
     .where(eq(amendments.id, id))
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_updated", entityType: "amendment", entityId: id, details: { type, supportingDocumentId } });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_updated", entityType: "amendment", entityId: id, details: { ...amendmentFacts(updated), supportingDocumentId } });
   res.json({ amendment: updated });
 });
 
@@ -311,7 +312,7 @@ amendmentsRouter.post("/amendments/:id/submit", requireRole("admin", "manager"),
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_submitted", entityType: "amendment", entityId: id });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_submitted", entityType: "amendment", entityId: id, details: amendmentFacts(updated) });
 
   // An Admin's own changes use the same mechanism and may be auto-approved.
   if (req.user!.role === "admin") {
@@ -393,7 +394,7 @@ function applyApproval(req: import("express").Request, res: import("express").Re
     }
     for (const docId of changes.voidDocuments ?? []) {
       tx.update(documents).set({ voided: true, voidedAt: new Date().toISOString(), voidedByAmendmentId: amendment.id }).where(eq(documents.id, docId)).run();
-      recordAudit({ actorUserId: req.user!.id, action: "document_voided", entityType: "document", entityId: docId, reason: amendment.reason, details: { amendmentId: amendment.id } });
+      recordAudit({ actorUserId: req.user!.id, action: "document_voided", entityType: "document", entityId: docId, reason: amendment.reason, details: { contract: contractRef(contract.id), amendmentId: amendment.id } });
     }
     for (const adj of changes.retroactiveAdjustments ?? []) {
       tx.insert(chargeAdjustments).values({
@@ -414,7 +415,7 @@ function applyApproval(req: import("express").Request, res: import("express").Re
   });
 
   recordContractVersion(contract.id, contract.versionNumber + 1, amendment.effectiveDate, amendment.id);
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_approved", entityType: "amendment", entityId: amendment.id, reason: reviewReason });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_approved", entityType: "amendment", entityId: amendment.id, reason: reviewReason, details: { ...amendmentFacts(amendment), newVersion: contract.versionNumber + 1 } });
 
   const updatedAmendment = db.select().from(amendments).where(eq(amendments.id, amendment.id)).get();
   res.json({ amendment: updatedAmendment });
@@ -487,7 +488,7 @@ amendmentsRouter.post("/amendments/:id/reject", requireRole("admin"), (req, res)
     .where(eq(amendments.id, id))
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_rejected", entityType: "amendment", entityId: id, reason: reviewReason });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_rejected", entityType: "amendment", entityId: id, reason: reviewReason, details: amendmentFacts(updated) });
   res.json({ amendment: updated });
 });
 
@@ -503,6 +504,6 @@ amendmentsRouter.post("/amendments/:id/withdraw", requireRole("admin", "manager"
   }
 
   const updated = db.update(amendments).set({ status: "withdrawn" }).where(eq(amendments.id, id)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_withdrawn", entityType: "amendment", entityId: id });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_withdrawn", entityType: "amendment", entityId: id, details: amendmentFacts(updated) });
   res.json({ amendment: updated });
 });

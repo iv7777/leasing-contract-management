@@ -9,6 +9,7 @@ import { documents, units, users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { changesBetween, ownerLabel } from "../lib/auditDetail.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { citedDocumentIds, contractStatusOf } from "../lib/documentRules.js";
 
@@ -101,7 +102,7 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
     action: "document_uploaded",
     entityType: "document",
     entityId: inserted.id,
-    details: { ownerType, ownerId, docType, name, classification },
+    details: { owner: ownerLabel(ownerType, ownerId), ownerType, docType, name, classification },
   });
 
   res.status(201).json({ document: { ...inserted, filePath: undefined } });
@@ -149,7 +150,7 @@ documentsRouter.get("/:id/download", (req, res) => {
     return res.status(410).json({ error: { code: "file_missing", message: "Stored file is missing." } });
   }
 
-  recordAudit({ actorUserId: req.user!.id, action: "document_downloaded", entityType: "document", entityId: id });
+  recordAudit({ actorUserId: req.user!.id, action: "document_downloaded", entityType: "document", entityId: id, details: { document: doc.name ?? doc.docType, owner: ownerLabel(doc.ownerType, doc.ownerId) } });
   res.setHeader("Content-Type", doc.mimeType);
   res.sendFile(path.resolve(doc.filePath));
 });
@@ -199,7 +200,7 @@ documentsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
     action: "document_updated",
     entityType: "document",
     entityId: id,
-    details: { before: { name: doc.name, docType: doc.docType, classification: doc.classification }, after: changes },
+    details: { owner: ownerLabel(doc.ownerType, doc.ownerId), document: doc.name ?? doc.docType, changes: changesBetween({ name: doc.name, docType: doc.docType, classification: doc.classification }, { ...{ name: doc.name, docType: doc.docType, classification: doc.classification }, ...changes }) },
   });
   res.json({ document: { ...updated, filePath: undefined } });
 });
@@ -238,7 +239,7 @@ documentsRouter.delete("/:id", requireRole("admin", "manager"), (req, res) => {
     action: "document_deleted",
     entityType: "document",
     entityId: id,
-    details: { ownerType: doc.ownerType, ownerId: doc.ownerId, docType: doc.docType, name: doc.name, checksumSha256: doc.checksumSha256 },
+    details: { owner: ownerLabel(doc.ownerType, doc.ownerId), ownerType: doc.ownerType, docType: doc.docType, name: doc.name },
   });
   res.status(204).send();
 });

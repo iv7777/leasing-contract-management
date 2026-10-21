@@ -6,6 +6,7 @@ import { properties, units, contractUnits, contracts, documents as documentsTabl
 import { eq, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { changesBetween } from "../lib/auditDetail.js";
 import { liveContractsForProperty, liveContractsForUnit, describeRefs } from "../lib/archiveGuards.js";
 
 export const propertiesRouter = Router();
@@ -71,7 +72,7 @@ propertiesRouter.post("/", requireRole("admin"), (req, res) => {
     .values({ name: parsed.data.name, nameEn: parsed.data.nameEn ?? null, address: parsed.data.address })
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "property_created", entityType: "property", entityId: inserted.id });
+  recordAudit({ actorUserId: req.user!.id, action: "property_created", entityType: "property", entityId: inserted.id, details: { name: inserted.name, address: inserted.address } });
   res.status(201).json({ property: inserted });
 });
 
@@ -114,7 +115,7 @@ propertiesRouter.patch("/:id", requireRole("admin"), (req, res) => {
     action: "property_updated",
     entityType: "property",
     entityId: id,
-    details: { before: existing, after: updated },
+    details: { name: updated.name, changes: changesBetween(existing, updated) },
   });
   res.json({ property: updated });
 });
@@ -172,7 +173,7 @@ propertiesRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) 
     .values({ propertyId, ...parsed.data })
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "unit_created", entityType: "unit", entityId: inserted.id });
+  recordAudit({ actorUserId: req.user!.id, action: "unit_created", entityType: "unit", entityId: inserted.id, details: { unit: inserted.unitLabel, property: db.select({ n: properties.name }).from(properties).where(eq(properties.id, propertyId)).get()?.n, rentableAreaSqm: inserted.rentableAreaSqm, unitType: inserted.unitType } });
   res.status(201).json({ unit: inserted });
 });
 
@@ -216,7 +217,7 @@ propertiesRouter.patch("/:propertyId/units/:unitId", requireRole("admin", "manag
     .where(eq(units.id, unitId))
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "unit_updated", entityType: "unit", entityId: unitId, details: { before: existing, after: updated } });
+  recordAudit({ actorUserId: req.user!.id, action: "unit_updated", entityType: "unit", entityId: unitId, details: { unit: updated.unitLabel, changes: changesBetween(existing, updated) } });
   res.json({ unit: updated });
 });
 

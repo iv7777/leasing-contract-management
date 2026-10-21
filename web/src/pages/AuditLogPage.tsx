@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button, Input, Select, Space, Table, Tag, Typography } from "antd";
+import { Button, Collapse, Input, Select, Space, Table, Tag, Typography } from "antd";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import DateField from "../components/DateField";
@@ -11,9 +12,139 @@ interface AuditEventDto {
   action: string;
   entityType: string;
   entityId: number | null;
+  entityLabel?: string | null;
   reason: string | null;
   details: unknown;
   createdAt: string;
+}
+
+type Change = { from: unknown; to: unknown };
+type Details = Record<string, unknown>;
+
+/** Facts that say what the entry is about; shown first, as a one-line headline. */
+const IDENTITY_KEYS = ["contract", "item", "unit", "servicePeriod", "period", "name", "owner", "document", "property"];
+/** Keys already shown elsewhere, or only useful in the raw data. */
+const SKIP_KEYS = new Set(["changes", "before", "after", ...IDENTITY_KEYS]);
+
+const isPlainObject = (v: unknown): v is Details => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function fieldLabel(t: TFunction, key: string) {
+  return t(`audit.fields.${key}`, { defaultValue: key });
+}
+
+function formatValue(t: TFunction, key: string, v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return t(v ? "audit.yes" : "audit.no");
+  if (typeof v === "number") return key.endsWith("Fen") ? `¥${(v / 100).toFixed(2)}` : String(v);
+  if (typeof v === "string") {
+    if (v === "ALL" && (key === "item" || key === "pricingStreamId")) return t("audit.allItems");
+    return t(`audit.values.${v}`, { defaultValue: v });
+  }
+  if (Array.isArray(v)) return v.map((x) => formatValue(t, key, x)).join(", ");
+  if (isPlainObject(v)) return Object.entries(v).map(([k, x]) => `${fieldLabel(t, k)}: ${formatValue(t, k, x)}`).join(", ");
+  return String(v);
+}
+
+/** {field: {from, to}} — taken from `changes`, or worked out from an older entry's before/after. */
+function changesOf(details: unknown): Record<string, Change> {
+  if (!isPlainObject(details)) return {};
+  if (isPlainObject(details.changes)) return details.changes as Record<string, Change>;
+  if (isPlainObject(details.before) && isPlainObject(details.after)) {
+    const out: Record<string, Change> = {};
+    for (const [k, to] of Object.entries(details.after)) {
+      const from = (details.before as Details)[k] ?? null;
+      if (from !== (to ?? null)) out[k] = { from, to: to ?? null };
+    }
+    return out;
+  }
+  return {};
+}
+
+/** The remaining facts of an entry (everything except identity and changes). */
+function factsOf(details: unknown): [string, unknown][] {
+  if (!isPlainObject(details)) return [];
+  return Object.entries(details).filter(([k]) => !SKIP_KEYS.has(k));
+}
+
+function identityOf(details: unknown): [string, unknown][] {
+  if (!isPlainObject(details)) return [];
+  return IDENTITY_KEYS.filter((k) => details[k] !== undefined && details[k] !== null && details[k] !== "").map((k) => [k, details[k]]);
+}
+
+function headlineOf(t: TFunction, details: unknown): string {
+  return identityOf(details).map(([k, v]) => formatValue(t, k, v)).join(" · ");
+}
+
+function DetailSummary({ details }: { details: unknown }) {
+  const { t } = useTranslation();
+  if (!details) return null;
+  const changes = Object.entries(changesOf(details));
+  const facts = changes.length ? [] : factsOf(details);
+  return (
+    <div style={{ fontSize: 13 }}>
+      {headlineOf(t, details) && <div><strong>{headlineOf(t, details)}</strong></div>}
+      {changes.map(([k, c]) => (
+        <div key={k}>
+          {fieldLabel(t, k)}: <span style={{ color: "#cf1322" }}>{formatValue(t, k, c.from)}</span> → <span style={{ color: "#389e0d" }}>{formatValue(t, k, c.to)}</span>
+        </div>
+      ))}
+      {facts.map(([k, v]) => (
+        <div key={k}>
+          {fieldLabel(t, k)}: {formatValue(t, k, v)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ExpandedDetail({ event }: { event: AuditEventDto }) {
+  const { t } = useTranslation();
+  const changes = Object.entries(changesOf(event.details));
+  const facts = [...identityOf(event.details), ...factsOf(event.details)];
+  return (
+    <div>
+      {event.reason && (
+        <Typography.Paragraph>
+          <strong>{t("contracts.reason")}:</strong> {event.reason}
+        </Typography.Paragraph>
+      )}
+      {facts.length > 0 && (
+        <Table
+          size="small"
+          pagination={false}
+          showHeader={false}
+          style={{ marginBottom: 12, maxWidth: 640 }}
+          rowKey={(r) => r[0]}
+          dataSource={facts}
+          columns={[
+            { dataIndex: 0, width: 200, render: (k: string) => <strong>{fieldLabel(t, k)}</strong> },
+            { dataIndex: 1, render: (v: unknown, r) => formatValue(t, r[0], v) },
+          ]}
+        />
+      )}
+      {changes.length > 0 && (
+        <Table
+          size="small"
+          pagination={false}
+          style={{ marginBottom: 12, maxWidth: 640 }}
+          rowKey={(r) => r[0]}
+          dataSource={changes}
+          columns={[
+            { title: t("audit.field"), dataIndex: 0, width: 200, render: (k: string) => fieldLabel(t, k) },
+            { title: t("audit.before"), dataIndex: 1, render: (c: Change, r) => formatValue(t, r[0], c.from) },
+            { title: t("audit.after"), dataIndex: 1, render: (c: Change, r) => formatValue(t, r[0], c.to) },
+          ]}
+        />
+      )}
+      {!!event.details && (
+        <Collapse
+          ghost
+          size="small"
+          items={[{ key: "raw", label: t("audit.rawData"), children: <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(event.details, null, 2)}</pre> }]}
+        />
+      )}
+    </div>
+  );
 }
 
 export default function AuditLogPage() {
@@ -91,23 +222,26 @@ export default function AuditLogPage() {
         }}
         expandable={{
           rowExpandable: (e) => !!e.details || !!e.reason,
-          expandedRowRender: (e) => (
-            <div>
-              {e.reason && (
-                <Typography.Paragraph>
-                  <strong>{t("contracts.reason")}:</strong> {e.reason}
-                </Typography.Paragraph>
-              )}
-              {!!e.details && <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(e.details, null, 2)}</pre>}
-            </div>
-          ),
+          expandedRowRender: (e) => <ExpandedDetail event={e} />,
         }}
         columns={[
-          { title: t("audit.timestamp"), dataIndex: "createdAt", width: 200 },
+          { title: t("audit.timestamp"), dataIndex: "createdAt", width: 230, render: (v: string) => <span style={{ whiteSpace: "nowrap" }}>{v}</span> },
           { title: t("audit.actor"), dataIndex: "actorName", render: (v: string | null) => v ?? t("audit.system") },
           { title: t("audit.action"), dataIndex: "action", render: (v: string) => <Tag>{t(`audit.actions.${v}`, { defaultValue: v })}</Tag> },
-          { title: t("audit.entityType"), dataIndex: "entityType", render: (v: string) => t(`audit.entities.${v}`, { defaultValue: v }) },
-          { title: t("audit.entityId"), dataIndex: "entityId" },
+          {
+            title: t("audit.target"),
+            render: (_: unknown, e: AuditEventDto) => (
+              <div>
+                <div>{t(`audit.entities.${e.entityType}`, { defaultValue: e.entityType })}</div>
+                {(e.entityLabel || e.entityId !== null) && (
+                  <Typography.Text type="secondary">
+                    {e.entityLabel ?? ""} {e.entityId !== null && `#${e.entityId}`}
+                  </Typography.Text>
+                )}
+              </div>
+            ),
+          },
+          { title: t("audit.details"), dataIndex: "details", render: (d: unknown) => <DetailSummary details={d} /> },
         ]}
       />
     </div>

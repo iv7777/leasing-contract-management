@@ -52,7 +52,7 @@ export function runContractLifecycle(today = todayInChina()): LifecycleResult {
       action: next === "terminated" ? "contract_terminated" : "contract_status_changed",
       entityType: "contract",
       entityId: contract.id,
-      details: { from: "active", to: next, amendmentId: a.id, effectiveDate: a.effectiveDate },
+      details: { contract: contract.referenceNumber, from: "active", to: next, amendmentId: a.id, effectiveDate: a.effectiveDate },
     });
     statusChanged++;
   }
@@ -65,7 +65,7 @@ export function runContractLifecycle(today = todayInChina()): LifecycleResult {
       action: "contract_expired",
       entityType: "contract",
       entityId: c.id,
-      details: { termEnd: c.termEnd },
+      details: { contract: c.referenceNumber, termEnd: c.termEnd },
     });
     expired++;
   }

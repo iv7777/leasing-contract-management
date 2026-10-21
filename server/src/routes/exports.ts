@@ -17,6 +17,7 @@ import { canAccessContract } from "../lib/contractScope.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
 import { recordAudit } from "../lib/audit.js";
+import { contractRef } from "../lib/auditDetail.js";
 import { todayInChina } from "@lcm/shared";
 import { useCjkFont } from "../lib/pdfFonts.js";
 import { exportLabels, resolveExportLang } from "../lib/exportLabels.js";
@@ -70,7 +71,7 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
   const asOfDate = todayInChina();
   const chargeBalances = ledger.charges.map((c) => ({ charge: ledger.chargesRaw.find((x) => x.id === c.id)!, balance: computeChargeBalance(c, ledger.adjustments, ledger.allocations, asOfDate, ledger.overdueGraceDays) }));
 
-  recordAudit({ actorUserId: req.user!.id, action: "contract_pdf_exported", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_pdf_exported", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId) } });
 
   const lang = resolveExportLang(req.query.lang);
   const L = exportLabels[lang];
@@ -201,7 +202,7 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
     };
   });
 
-  recordAudit({ actorUserId: req.user!.id, action: "contract_ledger_exported_csv", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "contract_ledger_exported_csv", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId) } });
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="contract-${contractId}-ledger.csv"`);
   res.send(

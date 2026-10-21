@@ -6,6 +6,7 @@ import { receipts, receiptAllocations, charges, billingRules } from "../db/schem
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
+import { contractRef, chargeFacts, receiptFacts } from "../lib/auditDetail.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, computeUnallocatedFen, validateAllocation } from "../billing/ledger.js";
 import { computeLatePenalty } from "../billing/latePenalty.js";
@@ -80,7 +81,7 @@ receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "man
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "receipt_recorded", entityType: "receipt", entityId: inserted.id, details: { amountFen: inserted.amountFen } });
+  recordAudit({ actorUserId: req.user!.id, action: "receipt_recorded", entityType: "receipt", entityId: inserted.id, details: { contract: contractRef(contractId), amountFen: inserted.amountFen, receivedDate: inserted.receivedDate, paymentMethod: inserted.paymentMethod } });
   res.status(201).json({ receipt: inserted });
 });
 
@@ -124,7 +125,7 @@ receiptsRouter.post("/receipts/:id/allocate", requireRole("admin", "manager", "c
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId, chargeId: parsed.data.chargeId, amountFen: parsed.data.amountFen } });
+  recordAudit({ actorUserId: req.user!.id, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId, ...chargeFacts(parsed.data.chargeId), amountFen: parsed.data.amountFen } });
   res.status(201).json({ allocation: inserted });
 });
 
@@ -151,7 +152,7 @@ receiptsRouter.post("/receipt-allocations/:id/reverse", requireRole("admin"), (r
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "receipt_allocation_reversed", entityType: "receipt_allocation", entityId: id, reason });
+  recordAudit({ actorUserId: req.user!.id, action: "receipt_allocation_reversed", entityType: "receipt_allocation", entityId: id, reason, details: { ...chargeFacts(allocation.chargeId), ...receiptFacts(allocation.receiptId), amountFen: allocation.amountFen } });
   res.status(201).json({ reversal });
 });
 
@@ -200,7 +201,7 @@ receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) =>
     entityType: "receipt",
     entityId: id,
     reason,
-    details: { reversedAllocationCount: reversals.length },
+    details: { ...receiptFacts(id), reversedAllocationCount: reversals.length },
   });
   res.status(200).json({ reversals });
 });

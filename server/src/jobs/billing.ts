@@ -59,7 +59,7 @@ export function runDailyBilling(trigger: "scheduled" | "manual"): BillingRunSumm
             action: "charges_auto_generated",
             entityType: "contract",
             entityId: contractId,
-            details: { created: n, cutoff, run: run.id },
+            details: { contract: referenceNumber, created: n, cutoff, run: run.id },
           });
         }
       } catch (err) {

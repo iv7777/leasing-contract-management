@@ -7,6 +7,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { changesBetween, contractRef, streamName } from "../lib/auditDetail.js";
 import { Decimal, daysInMonth } from "@lcm/shared";
 
 const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number");
@@ -99,7 +100,7 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("adm
     .values({ contractId, pricingStreamId, serviceStart, serviceEnd, source: source ?? null, enteredBy: req.user!.id, ...rest })
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_recorded", entityType: "contract", entityId: contractId, details: { pricingStreamId, quantity: rest.quantity, unit: rest.unit } });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_recorded", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(pricingStreamId), servicePeriod: `${serviceStart} → ${serviceEnd}`, quantity: rest.quantity, unit: rest.unit } });
   res.status(201).json({ usageEntry: inserted });
 });
 
@@ -131,7 +132,7 @@ usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), 
   }
 
   const updated = db.update(usageEntries).set(parsed.data).where(eq(usageEntries.id, id)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_updated", entityType: "contract", entityId: existing.contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_updated", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, changes: changesBetween(existing, updated) } });
   res.json({ usageEntry: updated });
 });
 
@@ -147,7 +148,7 @@ usageEntriesRouter.delete("/usage-entries/:id", requireRole("admin", "manager"),
   }
 
   db.delete(usageEntries).where(eq(usageEntries.id, id)).run();
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_removed", entityType: "contract", entityId: existing.contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_removed", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, quantity: existing.quantity, unit: existing.unit } });
   res.status(204).send();
 });
 
@@ -224,6 +225,6 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries/bulk", requireRole
 
   const created = ops.filter((o) => o.kind === "insert").length;
   const updated = ops.length - created;
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entries_bulk_recorded", entityType: "contract", entityId: contractId, details: { created, updated, unchanged } });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entries_bulk_recorded", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), created, updated, unchanged } });
   res.status(201).json({ created, updated, unchanged });
 });

@@ -6,6 +6,7 @@ import { contracts, depositTransactions, receipts, receiptAllocations, charges }
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
+import { contractRef, chargeFacts } from "../lib/auditDetail.js";
 import { computeDepositBalance, validateAllocation } from "../billing/ledger.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { loadDepositStatus } from "../billing/depositLoad.js";
@@ -79,7 +80,7 @@ depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", re
       .values({ contractId, transactionType: "receipt", amountFen: parsed.data.amountFen, transactionDate: parsed.data.transactionDate, receiptId: parsed.data.receiptId ?? null, reason: parsed.data.reason, actorUserId: req.user!.id })
       .returning()
       .get();
-    recordAudit({ actorUserId: req.user!.id, action: "deposit_received", entityType: "deposit_transaction", entityId: inserted.id, details: { amountFen: inserted.amountFen } });
+    recordAudit({ actorUserId: req.user!.id, action: "deposit_received", entityType: "deposit_transaction", entityId: inserted.id, details: { contract: contractRef(contractId), amountFen: inserted.amountFen, transactionDate: inserted.transactionDate } });
     return res.status(201).json({ transaction: inserted });
   }
 
@@ -101,7 +102,7 @@ depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", re
       .values({ contractId, transactionType: parsed.data.transactionType, amountFen: -parsed.data.amountFen, transactionDate: parsed.data.transactionDate, reason: parsed.data.reason, actorUserId: req.user!.id, approvedBy: req.user!.id })
       .returning()
       .get();
-    recordAudit({ actorUserId: req.user!.id, action: `deposit_${type}`, entityType: "deposit_transaction", entityId: inserted.id, reason: parsed.data.reason, details: { amountFen: parsed.data.amountFen } });
+    recordAudit({ actorUserId: req.user!.id, action: `deposit_${type}`, entityType: "deposit_transaction", entityId: inserted.id, reason: parsed.data.reason, details: { contract: contractRef(contractId), amountFen: parsed.data.amountFen, transactionDate: parsed.data.transactionDate } });
     return res.status(201).json({ transaction: inserted });
   }
 
@@ -165,7 +166,7 @@ depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", re
       .returning()
       .get();
 
-    recordAudit({ actorUserId: req.user!.id, action: "deposit_transferred_to_rent", entityType: "deposit_transaction", entityId: inserted.id, details: { amountFen: parsed.data.amountFen, chargeId: charge.id } });
+    recordAudit({ actorUserId: req.user!.id, action: "deposit_transferred_to_rent", entityType: "deposit_transaction", entityId: inserted.id, details: { contract: contractRef(contractId), amountFen: parsed.data.amountFen, ...chargeFacts(charge.id) } });
     return res.status(201).json({ transaction: inserted });
   }
 
@@ -199,6 +200,6 @@ depositTransactionsRouter.post("/deposit-transactions/:id/reverse", requireRole(
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "deposit_transaction_reversed", entityType: "deposit_transaction", entityId: id, reason });
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_transaction_reversed", entityType: "deposit_transaction", entityId: id, reason, details: { contract: contractRef(original.contractId), originalType: original.transactionType, amountFen: original.amountFen, transactionDate: original.transactionDate } });
   res.status(201).json({ reversal });
 });

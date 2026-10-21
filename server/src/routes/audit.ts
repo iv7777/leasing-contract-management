@@ -4,6 +4,7 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { auditEvents, users } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { entityLabel } from "../lib/auditDetail.js";
 
 export const auditRouter = Router();
 auditRouter.use(requireAuth, requireRole("admin"));
@@ -64,6 +65,7 @@ auditRouter.get("/", (req, res) => {
       action: r.action,
       entityType: r.entityType,
       entityId: r.entityId,
+      entityLabel: entityLabel(r.entityType, r.entityId),
       reason: r.reason,
       details,
       createdAt: r.createdAt,

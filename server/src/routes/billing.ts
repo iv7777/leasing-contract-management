@@ -6,6 +6,7 @@ import { billingRules, billingRuns, charges, chargeAdjustments, contracts, parti
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
+import { contractRef, chargeFacts } from "../lib/auditDetail.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
 import { loadChargeContext } from "../billing/generate.js";
 import { runDailyBilling } from "../jobs/billing.js";
@@ -91,7 +92,7 @@ billingRouter.post("/contracts/:id/billing/catch-up", requireRole("admin"), (req
     action: "billing_catch_up",
     entityType: "contract",
     entityId: contractId,
-    details: { created, totalFen: plan.totalFen, cutoff: plan.cutoff, missingReadings: plan.missingReadings.length },
+    details: { contract: contractRef(contractId), created, totalFen: plan.totalFen, cutoff: plan.cutoff, missingReadings: plan.missingReadings.length },
   });
   res.json({ created, totalFen: plan.totalFen, missingReadings: plan.missingReadings.length });
 });
@@ -101,7 +102,7 @@ billingRouter.post("/contracts/:id/billing/pause", requireRole("admin"), (req, r
   if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
   const updated = db.update(billingRules).set({ autoBilling: false }).where(eq(billingRules.contractId, contractId)).returning().get();
   if (!updated) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
-  recordAudit({ actorUserId: req.user!.id, action: "auto_billing_paused", entityType: "contract", entityId: contractId });
+  recordAudit({ actorUserId: req.user!.id, action: "auto_billing_paused", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId) } });
   res.json({ billingRules: updated });
 });
 
@@ -145,7 +146,7 @@ billingRouter.post("/charges/:id/void", requireRole("admin"), (req, res) => {
     entityType: "charge",
     entityId: id,
     reason: parsed.data.reason,
-    details: { contractId: charge.contractId, amountFen: charge.amountFen, serviceStart: charge.serviceStart, serviceEnd: charge.serviceEnd },
+    details: { ...chargeFacts(id), amountFen: charge.amountFen },
   });
   res.json({ charge: updated });
 });
