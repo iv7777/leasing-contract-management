@@ -367,6 +367,8 @@ const en = {
     details: "Details",
     exportCsv: "Export CSV",
     exported: "Exported {{count}} records.",
+    expandAll: "Expand all",
+    collapseAll: "Collapse all",
     target: "Target",
     allItems: "All items",
     yes: "Yes",

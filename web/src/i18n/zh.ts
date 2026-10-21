@@ -369,6 +369,8 @@ const zh: Translations = {
     details: "详情",
     exportCsv: "导出CSV",
     exported: "已导出 {{count}} 条记录。",
+    expandAll: "全部展开",
+    collapseAll: "全部收起",
     target: "对象",
     allItems: "所有项目",
     yes: "是",

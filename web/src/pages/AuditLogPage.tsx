@@ -127,49 +127,33 @@ function auditCsv(t: TFunction, events: AuditEventDto[]): string {
   return lines.join("\r\n");
 }
 
-/** The second line of an audit record: the headline and first detail; a + reveals the rest. */
-function DetailLines({ event }: { event: AuditEventDto }) {
+/** What an expanded record shows: the headline, every change / fact / reason, and the raw data. */
+function ExpandedDetail({ event }: { event: AuditEventDto }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const headline = headlineOf(t, event.details);
-  const lines = lineItems(t, event);
-  const visible = open ? lines : lines.slice(0, 1);
-  const more = lines.length > 1;
   return (
     <div style={{ fontSize: 13 }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-        {more && (
-          <Button size="small" type="text" style={{ width: 22, padding: 0 }} aria-label={open ? "−" : "+"} onClick={() => setOpen(!open)}>
-            {open ? "−" : "+"}
-          </Button>
-        )}
-        <div>
-          {headline && <strong>{headline}</strong>}
-          {headline && visible.length > 0 && " — "}
-          {visible[0]}
-        </div>
-      </div>
-      {open && (
-        <div style={{ marginLeft: more ? 30 : 0 }}>
-          {visible.slice(1).map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
-          {!!event.details && (
-            <Collapse
-              ghost
-              size="small"
-              items={[{ key: "raw", label: t("audit.rawData"), children: <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(event.details, null, 2)}</pre> }]}
-            />
-          )}
-        </div>
+      {headline && <div><strong>{headline}</strong></div>}
+      {lineItems(t, event).map((l, i) => (
+        <div key={i}>{l}</div>
+      ))}
+      {!!event.details && (
+        <Collapse
+          ghost
+          size="small"
+          items={[{ key: "raw", label: t("audit.rawData"), children: <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(event.details, null, 2)}</pre> }]}
+        />
       )}
     </div>
   );
 }
 
+const hasDetail = (e: AuditEventDto) => !!e.details || !!e.reason;
+
 export default function AuditLogPage() {
   const { t } = useTranslation();
   const [exporting, setExporting] = useState(false);
+  const [expanded, setExpanded] = useState<readonly React.Key[]>([]);
   const [events, setEvents] = useState<AuditEventDto[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
@@ -193,6 +177,7 @@ export default function AuditLogPage() {
       .get<{ events: AuditEventDto[]; total: number }>(`/audit?${params.toString()}`)
       .then((r) => {
         setEvents(r.events);
+        setExpanded([]);
         setTotal(r.total);
       })
       .finally(() => setLoading(false));
@@ -233,6 +218,9 @@ export default function AuditLogPage() {
     }
   };
 
+  const expandable = events.filter(hasDetail);
+  const allExpanded = expandable.length > 0 && expandable.every((e) => expanded.includes(e.id));
+
   const applyFilters = () => {
     setPage(1);
     load();
@@ -257,6 +245,9 @@ export default function AuditLogPage() {
         <Button type="primary" onClick={applyFilters}>
           {t("audit.applyFilters")}
         </Button>
+        <Button onClick={() => setExpanded(allExpanded ? [] : expandable.map((e) => e.id))} disabled={expandable.length === 0}>
+          {allExpanded ? t("audit.collapseAll") : t("audit.expandAll")}
+        </Button>
         <Button onClick={() => void exportCsv()} loading={exporting}>
           {t("audit.exportCsv")}
         </Button>
@@ -275,10 +266,10 @@ export default function AuditLogPage() {
           showSizeChanger: false,
         }}
         expandable={{
-          // Every record with details carries its detail line right under it.
-          expandedRowKeys: events.filter((e) => !!e.details || !!e.reason).map((e) => e.id),
-          expandIconColumnIndex: -1,
-          expandedRowRender: (e) => <DetailLines event={e} />,
+          rowExpandable: hasDetail,
+          expandedRowKeys: expanded,
+          onExpandedRowsChange: (keys) => setExpanded([...keys]),
+          expandedRowRender: (e) => <ExpandedDetail event={e} />,
         }}
         columns={[
           { title: t("audit.timestamp"), dataIndex: "createdAt", width: 230, render: (v: string) => <span style={{ whiteSpace: "nowrap" }}>{v}</span> },
