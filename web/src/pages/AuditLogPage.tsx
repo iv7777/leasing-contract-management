@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button, Collapse, Input, Select, Space, Table, Tag, Typography } from "antd";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -75,73 +75,58 @@ function headlineOf(t: TFunction, details: unknown): string {
   return identityOf(details).map(([k, v]) => formatValue(t, k, v)).join(" · ");
 }
 
-function DetailSummary({ details }: { details: unknown }) {
-  const { t } = useTranslation();
-  if (!details) return null;
-  const changes = Object.entries(changesOf(details));
-  const facts = changes.length ? [] : factsOf(details);
-  return (
-    <div style={{ fontSize: 13 }}>
-      {headlineOf(t, details) && <div><strong>{headlineOf(t, details)}</strong></div>}
-      {changes.map(([k, c]) => (
-        <div key={k}>
-          {fieldLabel(t, k)}: <span style={{ color: "#cf1322" }}>{formatValue(t, k, c.from)}</span> → <span style={{ color: "#389e0d" }}>{formatValue(t, k, c.to)}</span>
-        </div>
-      ))}
-      {facts.map(([k, v]) => (
-        <div key={k}>
-          {fieldLabel(t, k)}: {formatValue(t, k, v)}
-        </div>
-      ))}
-    </div>
-  );
+/** The detail lines of one entry: what changed first, then the other facts, then the reason. */
+function lineItems(t: TFunction, event: AuditEventDto): ReactNode[] {
+  const lines: ReactNode[] = [];
+  for (const [k, c] of Object.entries(changesOf(event.details))) {
+    lines.push(
+      <span key={`c-${k}`}>
+        {fieldLabel(t, k)}: <span style={{ color: "#cf1322" }}>{formatValue(t, k, c.from)}</span> → <span style={{ color: "#389e0d" }}>{formatValue(t, k, c.to)}</span>
+      </span>,
+    );
+  }
+  for (const [k, v] of factsOf(event.details)) {
+    lines.push(<span key={`f-${k}`}>{fieldLabel(t, k)}: {formatValue(t, k, v)}</span>);
+  }
+  if (event.reason) lines.push(<span key="reason">{t("contracts.reason")}: {event.reason}</span>);
+  return lines;
 }
 
-function ExpandedDetail({ event }: { event: AuditEventDto }) {
+/** The second line of an audit record: the headline and first detail; a + reveals the rest. */
+function DetailLines({ event }: { event: AuditEventDto }) {
   const { t } = useTranslation();
-  const changes = Object.entries(changesOf(event.details));
-  const facts = [...identityOf(event.details), ...factsOf(event.details)];
+  const [open, setOpen] = useState(false);
+  const headline = headlineOf(t, event.details);
+  const lines = lineItems(t, event);
+  const visible = open ? lines : lines.slice(0, 1);
+  const more = lines.length > 1;
   return (
-    <div>
-      {event.reason && (
-        <Typography.Paragraph>
-          <strong>{t("contracts.reason")}:</strong> {event.reason}
-        </Typography.Paragraph>
-      )}
-      {facts.length > 0 && (
-        <Table
-          size="small"
-          pagination={false}
-          showHeader={false}
-          style={{ marginBottom: 12, maxWidth: 640 }}
-          rowKey={(r) => r[0]}
-          dataSource={facts}
-          columns={[
-            { dataIndex: 0, width: 200, render: (k: string) => <strong>{fieldLabel(t, k)}</strong> },
-            { dataIndex: 1, render: (v: unknown, r) => formatValue(t, r[0], v) },
-          ]}
-        />
-      )}
-      {changes.length > 0 && (
-        <Table
-          size="small"
-          pagination={false}
-          style={{ marginBottom: 12, maxWidth: 640 }}
-          rowKey={(r) => r[0]}
-          dataSource={changes}
-          columns={[
-            { title: t("audit.field"), dataIndex: 0, width: 200, render: (k: string) => fieldLabel(t, k) },
-            { title: t("audit.before"), dataIndex: 1, render: (c: Change, r) => formatValue(t, r[0], c.from) },
-            { title: t("audit.after"), dataIndex: 1, render: (c: Change, r) => formatValue(t, r[0], c.to) },
-          ]}
-        />
-      )}
-      {!!event.details && (
-        <Collapse
-          ghost
-          size="small"
-          items={[{ key: "raw", label: t("audit.rawData"), children: <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(event.details, null, 2)}</pre> }]}
-        />
+    <div style={{ fontSize: 13 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+        {more && (
+          <Button size="small" type="text" style={{ width: 22, padding: 0 }} aria-label={open ? "−" : "+"} onClick={() => setOpen(!open)}>
+            {open ? "−" : "+"}
+          </Button>
+        )}
+        <div>
+          {headline && <strong>{headline}</strong>}
+          {headline && visible.length > 0 && " — "}
+          {visible[0]}
+        </div>
+      </div>
+      {open && (
+        <div style={{ marginLeft: more ? 30 : 0 }}>
+          {visible.slice(1).map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
+          {!!event.details && (
+            <Collapse
+              ghost
+              size="small"
+              items={[{ key: "raw", label: t("audit.rawData"), children: <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{JSON.stringify(event.details, null, 2)}</pre> }]}
+            />
+          )}
+        </div>
       )}
     </div>
   );
@@ -221,8 +206,10 @@ export default function AuditLogPage() {
           showSizeChanger: false,
         }}
         expandable={{
-          rowExpandable: (e) => !!e.details || !!e.reason,
-          expandedRowRender: (e) => <ExpandedDetail event={e} />,
+          // Every record with details carries its detail line right under it.
+          expandedRowKeys: events.filter((e) => !!e.details || !!e.reason).map((e) => e.id),
+          expandIconColumnIndex: -1,
+          expandedRowRender: (e) => <DetailLines event={e} />,
         }}
         columns={[
           { title: t("audit.timestamp"), dataIndex: "createdAt", width: 230, render: (v: string) => <span style={{ whiteSpace: "nowrap" }}>{v}</span> },
@@ -241,7 +228,6 @@ export default function AuditLogPage() {
               </div>
             ),
           },
-          { title: t("audit.details"), dataIndex: "details", render: (d: unknown) => <DetailSummary details={d} /> },
         ]}
       />
     </div>
