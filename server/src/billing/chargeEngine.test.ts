@@ -203,3 +203,62 @@ test("metered line gets the arrears due date, and a missing reading reports it",
   const without = generateChargeLines(baseInput({ billingRules: rules, pricingStreams: streams, rateSchedule: [rate] }), "2026-03-01", "2026-03-31");
   assert.deepEqual(without.missingUsage, [{ pricingStreamId: 10, dueDate: "2026-04-01" }]);
 });
+
+// ---------------------------------------------------------------------------
+// Usage service fee: a second line on the same reading
+// ---------------------------------------------------------------------------
+
+const meteredRate = (price: string): RateScheduleInput => ({ id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "metered", amountOrRate: price, rateBasis: "per_unit", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: "kWh" });
+const feeRate = (method: "usage_fee_per_unit" | "usage_fee_percent", value: string, linked: number | null = 10): RateScheduleInput => ({
+  id: 101,
+  pricingStreamId: 11,
+  effectiveStart: "2026-01-01",
+  effectiveEnd: null,
+  calculationMethod: method,
+  amountOrRate: value,
+  rateBasis: method === "usage_fee_per_unit" ? "per_unit" : "percent_of_usage",
+  escalationBase: null,
+  escalationPercentage: null,
+  escalationIntervalMonths: null,
+  unit: null,
+  linkedStreamId: linked,
+});
+const feeInput = (fee: RateScheduleInput, withUsage = true, concessions: ChargeEngineInput["concessions"] = []) =>
+  baseInput({
+    pricingStreams: [
+      { id: 10, feeType: "electricity_base", targetType: "contract" },
+      { id: 11, feeType: "other", targetType: "contract" },
+    ],
+    rateSchedule: [meteredRate("1"), fee],
+    concessions,
+    usageEntries: withUsage ? [{ pricingStreamId: 10, serviceStart: "2026-03-01", serviceEnd: "2026-03-31", quantity: "1000" }] : [],
+  });
+
+test("usage fee per unit: 1000 kWh at 1.00 plus 0.10 per kWh bills 1000.00 and 100.00 as two lines", () => {
+  const { lines } = generateChargeLines(feeInput(feeRate("usage_fee_per_unit", "0.1")), "2026-03-01", "2026-03-31");
+  assert.equal(lines.find((l) => l.pricingStreamId === 10)!.amountFen, 100_000);
+  assert.equal(lines.find((l) => l.pricingStreamId === 11)!.amountFen, 10_000);
+  assert.equal(lines.length, 2);
+});
+
+test("usage fee percent: 10% of the 1000.00 usage charge is 100.00", () => {
+  const { lines } = generateChargeLines(feeInput(feeRate("usage_fee_percent", "10")), "2026-03-01", "2026-03-31");
+  assert.equal(lines.find((l) => l.pricingStreamId === 11)!.amountFen, 10_000);
+});
+
+test("usage fee: no reading means no fee line, and the missing reading is reported once (for the metered item)", () => {
+  const r = generateChargeLines(feeInput(feeRate("usage_fee_percent", "10"), false), "2026-03-01", "2026-03-31");
+  assert.equal(r.lines.length, 0);
+  assert.deepEqual(r.skippedMissingUsage, [10]);
+  assert.equal(r.missingUsage.length, 1);
+});
+
+test("usage fee percent is taken before concessions, and its own concession applies once", () => {
+  const concessions = [{ pricingStreamId: 11, effectiveStart: "2026-03-01", effectiveEnd: "2026-03-31", discountPercentage: "50" }];
+  const { lines } = generateChargeLines(feeInput(feeRate("usage_fee_percent", "10"), true, concessions), "2026-03-01", "2026-03-31");
+  assert.equal(lines.find((l) => l.pricingStreamId === 11)!.amountFen, 5_000); // 100.00 less 50%
+});
+
+test("a usage fee that isn't linked to a metered item is a configuration error, not a silent zero", () => {
+  assert.throws(() => generateChargeLines(feeInput(feeRate("usage_fee_per_unit", "0.1", null)), "2026-03-01", "2026-03-31"), /not linked to a metered item/);
+});

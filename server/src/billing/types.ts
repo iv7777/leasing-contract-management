@@ -1,7 +1,7 @@
 import type { IsoDate } from "@lcm/shared";
 
-export type CalculationMethod = "flat" | "per_sqm" | "percentage_escalation" | "metered";
-export type RateBasis = "per_month" | "per_quarter" | "per_year" | "per_sqm_per_month" | "per_unit";
+export type CalculationMethod = "flat" | "per_sqm" | "percentage_escalation" | "metered" | "usage_fee_per_unit" | "usage_fee_percent";
+export type RateBasis = "per_month" | "per_quarter" | "per_year" | "per_sqm_per_month" | "per_unit" | "percent_of_usage";
 
 export interface ContractUnitInput {
   id: number;
@@ -33,6 +33,7 @@ export interface RateScheduleInput {
   escalationPercentage: string | null; // decimal, e.g. "5" = 5%
   escalationIntervalMonths: number | null;
   unit: string | null; // metered only: the unit amountOrRate is priced per (e.g. "kWh")
+  linkedStreamId?: number | null; // usage_fee_* only: the metered stream this fee follows
 }
 
 export interface ConcessionInput {

@@ -247,6 +247,15 @@ const en = {
     amendmentKindVoidDocument: "Withdraw (void) a document",
     documentsToVoid: "Documents to withdraw",
     voidDocumentHint: "Once approved, the documents are marked Voided and hidden from the list. The files are kept. A document that another amendment relies on, or the only signed lease, can't be withdrawn.",
+    usageFeePerUnit: "Usage service fee (per unit)",
+    usageFeePercent: "Usage service fee (% of usage charge)",
+    percentOfUsage: "% of usage charge",
+    linkedStream: "Follows metered item",
+    pricingScope: "Applies to",
+    linkedStreamHint: "The metered item whose meter readings this fee is charged on. No separate reading is needed.",
+    notLinked: "not linked",
+    usageFeePerUnitHint: "Charged per kWh / ton / unit of usage, e.g. 0.10 per kWh. Billed as its own line from the same reading.",
+    usageFeePercentHint: "A percentage (0–100) of the usage charge, e.g. 10 for 10%. Billed as its own line from the same reading.",
     supportingDocument: "Supporting document",
     supportingDocumentHint: "Pick the signed supplement or other document that justifies this change. Required unless this is an internal correction. If it isn't listed, upload it first on the Documents tab.",
     amendmentKind: "What is this amendment changing?",
@@ -764,7 +773,7 @@ const en = {
       pricingTargetUnits:
         "Only link the unit(s) this rate should actually apply to. Linking a per-sqm stream to more than one unit sums their areas together — correct only when one combined rate genuinely covers all of them.",
       calculationMethod:
-        "Flat charges the same amount every period. Per sqm multiplies the rate by area. Percentage escalation compounds automatically at each rate-schedule tier boundary — configuring a full escalation schedule currently requires the bulk-import tool.",
+        "Flat charges the same amount every period. Per sqm multiplies the rate by area. Percentage escalation compounds automatically at each rate-schedule tier boundary — configuring a full escalation schedule currently requires the bulk-import tool. Metered bills price per unit of usage (kWh, ton). A usage service fee adds its own bill on top of a metered item's reading: either a fixed amount per unit (0.10 per kWh) or a percentage of the usage charge (10%).",
       amendmentType:
         "Turn this on only for an internal correction: a record-keeping fix that needs no signed supplement. Every other amendment is stored with the kind of change you pick below and must have a supporting document.",
       supportingDocument:

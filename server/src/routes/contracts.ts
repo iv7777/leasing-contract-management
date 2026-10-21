@@ -26,6 +26,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { getContractPropertyIds, canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { contractUnitBelongsToContract, pricingStreamBelongsToContract, rateScheduleBelongsToStream } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { rateRuleError } from "../lib/rateRules.js";
 import { contractOutstanding } from "../lib/archiveGuards.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
 import { recordContractVersion } from "../lib/contractSnapshot.js";
@@ -365,13 +366,14 @@ const addPricingStreamSchema = z.object({
   initialRate: z.object({
     effectiveStart: z.string(),
     effectiveEnd: z.string().optional(),
-    calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
+    calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
     amountOrRate: decimalString,
-    rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
+    rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
     escalationBase: z.enum(["initial", "previous"]).optional(),
     escalationPercentage: decimalString.optional(),
     escalationIntervalMonths: z.number().optional(),
     unit: z.string().optional(),
+    linkedStreamId: z.number().optional(),
   }),
 });
 
@@ -389,6 +391,9 @@ contractsRouter.post("/:id/pricing-streams", requireRole("admin", "manager"), (r
   if (invalidUnitId !== undefined) {
     return res.status(400).json({ error: { code: "invalid_reference", message: `Contract unit ${invalidUnitId} does not belong to this contract.` } });
   }
+
+  const rateError = rateRuleError(initialRate, contractId, null);
+  if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
 
   const stream = db.insert(pricingStreams).values({ contractId, ...streamFields }).returning().get();
   for (const contractUnitId of contractUnitIds) {
@@ -483,13 +488,14 @@ contractsRouter.delete("/:id/pricing-streams/:streamId", requireRole("admin", "m
 const rateScheduleTierSchema = z.object({
   effectiveStart: z.string(),
   effectiveEnd: z.string().optional(),
-  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
+  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
   amountOrRate: decimalString,
-  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
+  rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
   escalationBase: z.enum(["initial", "previous"]).optional(),
   escalationPercentage: decimalString.optional(),
   escalationIntervalMonths: z.number().optional(),
   unit: z.string().optional(),
+  linkedStreamId: z.number().optional(),
   notes: z.string().optional(),
 });
 
@@ -505,6 +511,9 @@ contractsRouter.post("/:id/pricing-streams/:streamId/rate-schedule", requireRole
 
   const parsed = rateScheduleTierSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid rate schedule payload." } });
+
+  const rateError = rateRuleError(parsed.data, contractId, streamId);
+  if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
 
   const inserted = db.insert(rateSchedule).values({ pricingStreamId: streamId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_added", entityType: "contract", entityId: contractId });
@@ -535,6 +544,10 @@ contractsRouter.patch("/:id/pricing-streams/:streamId/rate-schedule/:rateId", re
   });
   const parsed = updateRateScheduleTierSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid rate schedule payload." } });
+
+  const existingRate = db.select().from(rateSchedule).where(eq(rateSchedule.id, rateId)).get()!;
+  const rateError = rateRuleError({ ...existingRate, ...parsed.data }, contractId, streamId);
+  if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
 
   const updated = db.update(rateSchedule).set(parsed.data).where(eq(rateSchedule.id, rateId)).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_updated", entityType: "contract", entityId: contractId });

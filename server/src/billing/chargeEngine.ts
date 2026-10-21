@@ -196,6 +196,70 @@ export function generateChargeLines(
       continue;
     }
 
+    // A service fee on a metered item's usage (0.10 per kWh, or 10% of the usage
+    // charge) is billed as its own line from the same reading. The reading is the
+    // linked item's, so a missing one is reported there, not twice.
+    if (rateAtStart?.calculationMethod === "usage_fee_per_unit" || rateAtStart?.calculationMethod === "usage_fee_percent") {
+      const linkedRate = rateAtStart.linkedStreamId
+        ? findRateAt(input.rateSchedule.filter((r) => r.pricingStreamId === rateAtStart.linkedStreamId), rateAtStart.linkedStreamId, periodStart)
+        : undefined;
+      if (!rateAtStart.linkedStreamId || linkedRate?.calculationMethod !== "metered") {
+        throw new Error(`Usage service fee (rate schedule ${rateAtStart.id}) is not linked to a metered item`);
+      }
+      const usage = input.usageEntries.find(
+        (u) => u.pricingStreamId === rateAtStart.linkedStreamId && u.serviceStart === periodStart && u.serviceEnd === periodEnd,
+      );
+      if (!usage) continue;
+
+      const quantity = new Decimal(usage.quantity);
+      const value = new Decimal(rateAtStart.amountOrRate);
+      // Per unit: the fee per kWh/ton times the usage. Percent: a share of the usage charge before
+      // any concession, so a contract-wide discount is applied once (to this fee) and not twice.
+      const rawAmount =
+        rateAtStart.calculationMethod === "usage_fee_per_unit"
+          ? value.times(quantity)
+          : new Decimal(linkedRate.amountOrRate).times(quantity).times(value).dividedBy(100);
+
+      const concession = findConcessionAt(streamConcessions, stream.id, periodStart);
+      const afterConcession = concession
+        ? rawAmount.times(new Decimal(1).minus(new Decimal(concession.discountPercentage).dividedBy(100)))
+        : rawAmount;
+
+      lines.push({
+        pricingStreamId: stream.id,
+        feeType: stream.feeType,
+        serviceStart: periodStart,
+        serviceEnd: periodEnd,
+        dueDate: meteredDueDate,
+        amountFen: yuanToFen(afterConcession),
+        snapshot: {
+          subperiods: [
+            {
+              start: periodStart,
+              end: periodEnd,
+              rateScheduleId: rateAtStart.id,
+              calculationMethod: rateAtStart.calculationMethod,
+              rateBasis: rateAtStart.rateBasis,
+              baseRate: rateAtStart.amountOrRate,
+              effectiveRate: value.toFixed(4),
+              areaSqm: null,
+              daysInSubperiod: daysBetween(periodStart, periodEnd) + 1,
+              daysInMonth: monthLength,
+              monthlyEquivalent: rawAmount.toFixed(4),
+              proratedAmount: rawAmount.toFixed(4),
+              concessionDiscountPercentage: concession?.discountPercentage ?? null,
+              concessionReason: concession?.reason ?? null,
+              amountAfterConcession: afterConcession.toFixed(4),
+              quantity: quantity.toFixed(4),
+              unit: linkedRate.unit,
+            },
+          ],
+          totalBeforeRounding: afterConcession.toFixed(4),
+        },
+      });
+      continue;
+    }
+
     const boundaries = [
       ...streamRates.map((r) => r.effectiveStart),
       ...streamRates.filter((r) => r.effectiveEnd).map((r) => addDays(r.effectiveEnd!, 1)),
@@ -229,9 +293,10 @@ export function generateChargeLines(
           monthlyEquivalent = effectiveRate.times(areaSqm!);
           break;
         case "per_unit":
-          // per_unit only applies to "metered" rates, which are handled in
-          // their own branch above and never reach this sub-period loop.
-          throw new Error(`Unexpected per_unit rate basis outside the metered branch (rate schedule ${rate.id})`);
+        case "percent_of_usage":
+          // These bases only apply to metered prices and usage service fees, which are
+          // handled in their own branches above and never reach this sub-period loop.
+          throw new Error(`Unexpected ${rate.rateBasis} rate basis outside the usage branches (rate schedule ${rate.id})`);
       }
 
       const daysInSub = daysBetween(subStart, subEnd) + 1;

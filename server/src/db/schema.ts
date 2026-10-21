@@ -230,14 +230,18 @@ export const rateSchedule = sqliteTable("rate_schedule", {
   effectiveStart: text("effective_start").notNull(),
   effectiveEnd: text("effective_end"),
   calculationMethod: text("calculation_method", {
-    enum: ["flat", "per_sqm", "percentage_escalation", "metered"],
+    // usage_fee_per_unit / usage_fee_percent: a service fee on a metered item's
+    // usage (e.g. 0.10 per kWh, or 10% of the usage charge), billed as its own line.
+    enum: ["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"],
   }).notNull(),
   // Decimal yuan as text — exact precision, converted to fen only at charge time.
   // For "metered" this is the price per unit (e.g. yuan per kWh), paired with `unit` below.
   amountOrRate: text("amount_or_rate").notNull(),
   rateBasis: text("rate_basis", {
-    enum: ["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"],
+    enum: ["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"],
   }).notNull(),
+  // usage_fee_* only: the metered pricing stream whose readings this fee is charged on.
+  linkedStreamId: integer("linked_stream_id").references(() => pricingStreams.id),
   // percentage_escalation fields (null for flat/per_sqm/metered)
   escalationBase: text("escalation_base", { enum: ["initial", "previous"] }),
   escalationPercentage: text("escalation_percentage"),

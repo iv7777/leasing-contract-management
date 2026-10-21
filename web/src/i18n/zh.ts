@@ -249,6 +249,15 @@ const zh: Translations = {
     amendmentKindVoidDocument: "撤销（作废）文件",
     documentsToVoid: "要撤销的文件",
     voidDocumentHint: "获批后，这些文件将标记为已作废并从列表中隐藏，文件本身会保留。被其他变更引用的文件，或唯一的已签署合同正本，不能撤销。",
+    usageFeePerUnit: "用量服务费（按用量单位）",
+    usageFeePercent: "用量服务费（按用量费用百分比）",
+    percentOfUsage: "用量费用的百分比",
+    linkedStream: "跟随的计量项目",
+    pricingScope: "适用范围",
+    linkedStreamHint: "按哪一个计量计费项的读数收取。无需另外录入读数。",
+    notLinked: "未关联",
+    usageFeePerUnitHint: "按每度电/吨/单位用量收取，例如每度 0.10 元。使用同一读数，单独出一条账单。",
+    usageFeePercentHint: "用量费用的百分比（0–100），例如 10 表示 10%。使用同一读数，单独出一条账单。",
     supportingDocument: "支持性文件",
     supportingDocumentHint: "请选择能证明本次变更的文件（例如已签署的补充协议）；内部更正除外，其他变更都必须选择。如果列表中没有，请先到「文件」标签页上传。",
     amendmentKind: "本次变更的内容是？",
@@ -766,7 +775,7 @@ const zh: Translations = {
       pricingTargetUnits:
         "请只关联该费率实际适用的单元。将一个按平方米计价的计价项关联到多个单元会把它们的面积相加——只有在这些单元确实共用同一个合计费率时才应这样做。",
       calculationMethod:
-        "固定金额每期收取相同费用。按平方米以费率乘以面积计算。百分比递增会在每个费率分段边界自动复利计算——完整配置递增方案目前需使用批量导入工具。",
+        "固定金额每期收取相同费用。按平方米以费率乘以面积计算。百分比递增会在每个费率分段边界自动复利计算——完整配置递增方案目前需使用批量导入工具。。计量计费按用量单位（度、吨）计价。「用量服务费」是在某个计量计费项的读数之上另外出的一条账单：可以按每单位用量收固定金额（每度 0.10 元），也可以按用量费用的百分比收取（10%）。",
       amendmentType:
         "仅在做「内部更正」时开启：即无需已签署补充协议的内部记录更正。其他变更会按下方所选的变更类型保存，且必须附支持性文件。",
       supportingDocument:

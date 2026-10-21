@@ -79,6 +79,7 @@ export function loadChargeContext(contractId: number): ChargeContext {
       escalationPercentage: r.escalationPercentage,
       escalationIntervalMonths: r.escalationIntervalMonths,
       unit: r.unit,
+      linkedStreamId: r.linkedStreamId,
     })),
     concessions: concessionRows.map((c) => ({
       pricingStreamId: c.pricingStreamId,

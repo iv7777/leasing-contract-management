@@ -6,6 +6,15 @@
 const yuan = (fen: string | number) => `¥${(Number(fen) / 100).toFixed(2)}`;
 
 export const apiErrorsZh: Record<string, string> = {
+  "A per-unit basis only applies to a metered price or a usage service fee. Use \"Usage service fee\" for a fee on top of metered usage.": "“按用量单位”只适用于计量计费或用量服务费。要在计量用量之上加收费用，请选择“用量服务费”。",
+  "Only a usage service fee can be linked to a metered item.": "只有用量服务费才能关联到计量计费项。",
+  "A per-unit service fee uses the \"per unit\" basis.": "按单位用量收取的服务费应使用“按用量单位”基准。",
+  "A percentage service fee uses the \"% of usage charge\" basis.": "按百分比收取的服务费应使用“用量费用的百分比”基准。",
+  "A percentage can't be more than 100.": "百分比不能超过 100。",
+  "Choose the metered item this service fee applies to.": "请选择这项服务费适用的计量计费项。",
+  "A service fee can't be linked to itself.": "服务费不能关联到自己。",
+  "The linked item does not belong to this contract.": "所选关联项目不属于该合同。",
+  "A service fee can only follow a metered (usage-based) item.": "服务费只能跟随计量计费（按用量）项目。",
   "A charge has already been generated from this usage entry.": "该用量记录已生成账单，无法修改。",
   "A concession targets this pricing stream — remove or reassign it first.": "有优惠针对该计价项——请先删除或改为其他计价项。",
   "A receipt can only be allocated to a charge on the same contract.": "收款只能核销到同一合同下的账单。",
@@ -161,6 +170,7 @@ export const apiErrorByCode: Record<string, string> = {
   document_type_locked: "已生效合同的签署合同正本不能更改类型，也不能把其他文件改成签署合同正本。",
   document_in_use_by_amendment: "有变更正在引用该文件，不能删除、撤销或更改类型（仍可重命名）。",
   document_voided: "该文件已作废，只能重命名。",
+  invalid_rate: "该费率设置无效，请检查计费方式、基准和关联项目。",
   contract_not_ended: "只有已到期或已终止的合同才能归档；不需要的草稿请直接删除。",
   has_outstanding_balance: "该合同仍有未付款项或未退还/未处理的押金，请先结清再归档。",
   property_in_use: "该物业下仍有使用中的合同（草稿或生效中），合同结束后才能归档。",

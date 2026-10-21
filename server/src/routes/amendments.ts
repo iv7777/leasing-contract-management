@@ -24,6 +24,7 @@ import {
   rateScheduleBelongsToStream,
 } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { rateRuleError } from "../lib/rateRules.js";
 import { citedDocumentIds, liveSignedLeaseIds } from "../lib/documentRules.js";
 import { todayInChina } from "@lcm/shared";
 
@@ -63,13 +64,14 @@ const changesSchema = z.object({
         initialRate: z.object({
           effectiveStart: z.string(),
           effectiveEnd: z.string().optional(),
-          calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
+          calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
           amountOrRate: decimalString,
-          rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
+          rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
           escalationBase: z.enum(["initial", "previous"]).optional(),
           escalationPercentage: decimalString.optional(),
           escalationIntervalMonths: z.number().optional(),
           unit: z.string().optional(),
+          linkedStreamId: z.number().optional(),
         }),
       }),
     )
@@ -81,13 +83,14 @@ const changesSchema = z.object({
         closePreviousRateScheduleId: z.number().optional(),
         effectiveStart: z.string(),
         effectiveEnd: z.string().optional(),
-        calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered"]),
+        calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
         amountOrRate: decimalString,
-        rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit"]),
+        rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
         escalationBase: z.enum(["initial", "previous"]).optional(),
         escalationPercentage: decimalString.optional(),
         escalationIntervalMonths: z.number().optional(),
         unit: z.string().optional(),
+        linkedStreamId: z.number().optional(),
       }),
     )
     .optional(),
@@ -201,6 +204,8 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
   if (docError) return res.status(400).json({ error: docError });
   const voidError = voidDocumentsError(contractId, parsed.data.changes.voidDocuments ?? [], parsed.data.supportingDocumentId ?? null);
   if (voidError) return res.status(409).json({ error: voidError });
+  const referenceError = validateAmendmentReferences(parsed.data.changes, contractId);
+  if (referenceError) return res.status(400).json({ error: { code: "invalid_rate", message: referenceError } });
 
   const inserted = db
     .insert(amendments)
@@ -434,6 +439,8 @@ function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, con
         return `Contract unit ${cuId} does not belong to this contract.`;
       }
     }
+    const rateError = rateRuleError(s.initialRate, contractId, null);
+    if (rateError) return rateError;
   }
   for (const r of changes.addRateSchedule ?? []) {
     if (!pricingStreamBelongsToContract(r.pricingStreamId, contractId)) {
@@ -442,6 +449,8 @@ function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, con
     if (r.closePreviousRateScheduleId && !rateScheduleBelongsToStream(r.closePreviousRateScheduleId, r.pricingStreamId)) {
       return `Rate schedule ${r.closePreviousRateScheduleId} does not belong to pricing stream ${r.pricingStreamId}.`;
     }
+    const rateError = rateRuleError(r, contractId, r.pricingStreamId);
+    if (rateError) return rateError;
   }
   for (const c of changes.addConcessions ?? []) {
     if (c.pricingStreamId !== null && !pricingStreamBelongsToContract(c.pricingStreamId, contractId)) {
