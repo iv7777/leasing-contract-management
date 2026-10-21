@@ -262,3 +262,10 @@ test("usage fee percent is taken before concessions, and its own concession appl
 test("a usage fee that isn't linked to a metered item is a configuration error, not a silent zero", () => {
   assert.throws(() => generateChargeLines(feeInput(feeRate("usage_fee_per_unit", "0.1", null)), "2026-03-01", "2026-03-31"), /not linked to a metered item/);
 });
+
+test("usage fee: while the followed item has no price yet, there is no fee line (and no error)", () => {
+  const input = feeInput(feeRate("usage_fee_percent", "10"));
+  input.rateSchedule = [{ ...meteredRate("1"), effectiveStart: "2026-04-01" }, feeRate("usage_fee_percent", "10")];
+  const { lines } = generateChargeLines(input, "2026-03-01", "2026-03-31");
+  assert.equal(lines.length, 0);
+});

@@ -203,8 +203,13 @@ export function generateChargeLines(
       const linkedRate = rateAtStart.linkedStreamId
         ? findRateAt(input.rateSchedule.filter((r) => r.pricingStreamId === rateAtStart.linkedStreamId), rateAtStart.linkedStreamId, periodStart)
         : undefined;
-      if (!rateAtStart.linkedStreamId || linkedRate?.calculationMethod !== "metered") {
+      if (!rateAtStart.linkedStreamId) {
         throw new Error(`Usage service fee (rate schedule ${rateAtStart.id}) is not linked to a metered item`);
+      }
+      // The followed item has no price yet (or any more) on this date: nothing to follow, so no fee line.
+      if (!linkedRate) continue;
+      if (linkedRate.calculationMethod !== "metered") {
+        throw new Error(`Usage service fee (rate schedule ${rateAtStart.id}) is linked to an item that is not metered`);
       }
       const usage = input.usageEntries.find(
         (u) => u.pricingStreamId === rateAtStart.linkedStreamId && u.serviceStart === periodStart && u.serviceEnd === periodEnd,
