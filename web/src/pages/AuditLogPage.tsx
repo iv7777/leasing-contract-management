@@ -133,10 +133,16 @@ function ExpandedDetail({ event }: { event: AuditEventDto }) {
   const headline = headlineOf(t, event.details);
   return (
     <div style={{ fontSize: 13 }}>
-      {headline && <div><strong>{headline}</strong></div>}
-      {lineItems(t, event).map((l, i) => (
-        <div key={i}>{l}</div>
-      ))}
+      <div style={{ whiteSpace: "nowrap", overflowX: "auto" }}>
+        {[headline ? <strong key="headline">{headline}</strong> : null, ...lineItems(t, event)]
+          .filter(Boolean)
+          .map((l, i) => (
+            <span key={i}>
+              {i > 0 && <span style={{ margin: "0 10px", color: "#bfbfbf" }}>|</span>}
+              {l}
+            </span>
+          ))}
+      </div>
       {!!event.details && (
         <Collapse
           ghost
@@ -278,14 +284,15 @@ export default function AuditLogPage() {
           {
             title: t("audit.target"),
             render: (_: unknown, e: AuditEventDto) => (
-              <div>
-                <div>{t(`audit.entities.${e.entityType}`, { defaultValue: e.entityType })}</div>
+              <span style={{ whiteSpace: "nowrap" }}>
+                {t(`audit.entities.${e.entityType}`, { defaultValue: e.entityType })}
                 {(e.entityLabel || e.entityId !== null) && (
                   <Typography.Text type="secondary">
+                    {" · "}
                     {e.entityLabel ?? ""} {e.entityId !== null && `#${e.entityId}`}
                   </Typography.Text>
                 )}
-              </div>
+              </span>
             ),
           },
         ]}
