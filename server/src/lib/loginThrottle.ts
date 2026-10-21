@@ -8,7 +8,7 @@ export class LoginThrottle {
   constructor(
     private readonly windowMs = 15 * 60 * 1000,
     private readonly perSource = 8,
-    private readonly perAccount = 40,
+    private readonly perAccount = 30,
   ) {}
 
   private recent(key: string, now: number): number[] {

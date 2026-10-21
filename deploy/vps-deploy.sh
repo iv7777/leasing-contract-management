@@ -506,6 +506,7 @@ action_check_update() {
 
   if [ "$current" = "$remote" ]; then
     echo "Already up to date (commit ${current:0:7})."
+    ensure_web_security_headers
     ensure_command_link
     return 0
   fi

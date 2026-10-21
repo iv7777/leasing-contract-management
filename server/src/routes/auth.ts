@@ -22,7 +22,9 @@ authRouter.post("/login", (req, res) => {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid credentials payload." } });
   }
   const { email, password } = parsed.data;
-  const source = req.ip ?? "unknown";
+  // Behind Cloudflare every request arrives from one of its servers; the visitor's own address is in this header.
+  const cfIp = req.headers["cf-connecting-ip"];
+  const source = (typeof cfIp === "string" && cfIp.trim()) || req.ip || "unknown";
   const retryMs = loginThrottle.retryAfterMs(source, email);
   if (retryMs > 0) {
     res.setHeader("Retry-After", String(Math.ceil(retryMs / 1000)));
