@@ -16,6 +16,7 @@ export function paymentMethodLabel(t: (key: string) => string, method: string): 
 /** Document types the app itself offers; any other value is the user's own wording. */
 export function docTypeLabel(t: (key: string) => string, docType: string): string {
   if (docType === "signed_lease") return t("contracts.signedLease");
+  if (docType === "signed_supplement") return t("contracts.signedSupplement");
   if (docType === "other") return t("contracts.otherDocumentType");
   return docType;
 }

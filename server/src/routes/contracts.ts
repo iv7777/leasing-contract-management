@@ -796,18 +796,23 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
     return res.status(409).json({ error: { code: "missing_signed_lease", message: "A signed main lease document is required before activation." } });
   }
 
-  const updated = db.update(contracts).set({ status: "active", updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
-  recordContractVersion(id, updated.versionNumber, updated.termStart, null);
-  recordAudit({ actorUserId: req.user!.id, action: "contract_activated", entityType: "contract", entityId: id });
+  // All-or-nothing: a failure part-way must not leave an activated contract
+  // with no version snapshot.
+  const updated = db.transaction(() => {
+    const row = db.update(contracts).set({ status: "active", updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
+    recordContractVersion(id, row.versionNumber, row.termStart, null);
+    recordAudit({ actorUserId: req.user!.id, action: "contract_activated", entityType: "contract", entityId: id });
 
-  // A lease that hasn't started yet has no history to review, so it joins
-  // the nightly billing straight away. One that started earlier stays off
-  // until an Admin previews and confirms its catch-up.
-  const rules = db.select().from(billingRules).where(eq(billingRules.contractId, id)).get();
-  if (rules?.billingFrequency === "monthly" && updated.termStart.slice(0, 7) >= todayInChina().slice(0, 7)) {
-    db.update(billingRules).set({ autoBilling: true }).where(eq(billingRules.contractId, id)).run();
-    recordAudit({ actorUserId: req.user!.id, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { reason: "activated before term start" } });
-  }
+    // A lease that hasn't started yet has no history to review, so it joins
+    // the nightly billing straight away. One that started earlier stays off
+    // until an Admin previews and confirms its catch-up.
+    const rules = db.select().from(billingRules).where(eq(billingRules.contractId, id)).get();
+    if (rules?.billingFrequency === "monthly" && row.termStart.slice(0, 7) >= todayInChina().slice(0, 7)) {
+      db.update(billingRules).set({ autoBilling: true }).where(eq(billingRules.contractId, id)).run();
+      recordAudit({ actorUserId: req.user!.id, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { reason: "activated before term start" } });
+    }
+    return row;
+  });
   res.json({ contract: updated });
 });
 

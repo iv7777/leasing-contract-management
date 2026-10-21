@@ -296,6 +296,7 @@ export default function ContractDetailPage() {
   const [depositTxnType, setDepositTxnType] = useState("receipt");
   const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream" | "terminate">("rate_change");
   const [amendmentStreamTargetType, setAmendmentStreamTargetType] = useState("unit");
+  const [editAmendment, setEditAmendment] = useState<AmendmentDto | null>(null);
   const [rejectAmendmentModal, setRejectAmendmentModal] = useState<{ amendmentId: number } | null>(null);
   const [reverseDepositTxnModal, setReverseDepositTxnModal] = useState<{ depositTxnId: number } | null>(null);
   const [latePenaltyModal, setLatePenaltyModal] = useState(false);
@@ -314,6 +315,7 @@ export default function ContractDetailPage() {
   const [depositForm] = Form.useForm();
   const [generateForm] = Form.useForm();
   const [amendmentForm] = Form.useForm();
+  const [editAmendmentForm] = Form.useForm();
   const [receiptForm] = Form.useForm();
   const [allocateForm] = Form.useForm();
   const [reverseReceiptForm] = Form.useForm();
@@ -428,8 +430,9 @@ export default function ContractDetailPage() {
 
   useEffect(() => {
     if (!docModal) return;
-    // The signed lease is required to activate, so it is the default until one is on file.
-    docForm.setFieldsValue({ docType: documents.some((d) => d.docType === "signed_lease") ? "other" : "signed_lease" });
+    // The signed lease is required to activate, so it is the default until one is on file;
+    // after that the usual upload is a signed supplement for an amendment.
+    docForm.setFieldsValue({ docType: documents.some((d) => d.docType === "signed_lease") ? "signed_supplement" : "signed_lease" });
   }, [docModal]);
 
   useEffect(() => {
@@ -906,7 +909,8 @@ export default function ContractDetailPage() {
         };
       }
       await api.post(`/contracts/${id}/amendments`, {
-        type: values.type,
+        // An internal correction needs no signed supplement; otherwise the type is the kind of change.
+        type: values.internalCorrection ? "internal_correction" : amendmentKind,
         reason: values.reason,
         effectiveDate: values.effectiveDate,
         changes,
@@ -965,6 +969,25 @@ export default function ContractDetailPage() {
       await api.post(`/contracts/${id}/deposit-transactions`, { ...values, amountFen: Math.round(values.amountFen * 100) });
       setDepositTxnModal(false);
       depositTxnForm.resetFields();
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const supportingDocOptions = documents.map((d) => ({ value: d.id, label: `${docTypeLabel(t, d.docType)} (${d.uploadedAt.slice(0, 10)})` }));
+  const needsDocument = (a: AmendmentDto) => a.type !== "internal_correction" && !a.supportingDocumentId;
+
+  const onSaveAmendment = async () => {
+    if (!editAmendment) return;
+    try {
+      const values = await editAmendmentForm.validateFields();
+      await api.patch(`/amendments/${editAmendment.id}`, {
+        reason: values.reason,
+        internalCorrection: !!values.internalCorrection,
+        supportingDocumentId: values.supportingDocumentId ?? null,
+      });
+      setEditAmendment(null);
       load();
     } catch (err) {
       handleError(err);
@@ -1792,10 +1815,27 @@ export default function ContractDetailPage() {
                   renderItem={(a) => (
                     <List.Item
                       actions={[
-                        a.status === "draft" && (
-                          <Button key="submit" size="small" onClick={() => submitAmendment(a.id)}>
-                            {t("contracts.submit")}
+                        a.status === "draft" && (user?.role === "admin" || user?.role === "manager") && (
+                          <Button
+                            key="edit"
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={() => {
+                              editAmendmentForm.setFieldsValue({ reason: a.reason, internalCorrection: a.type === "internal_correction", supportingDocumentId: a.supportingDocumentId ?? undefined });
+                              setEditAmendment(a);
+                            }}
+                          >
+                            {t("common.edit")}
                           </Button>
+                        ),
+                        a.status === "draft" && (
+                          <Tooltip key="submit" title={needsDocument(a) ? t("contracts.attachDocumentFirst") : undefined}>
+                            <span>
+                              <Button size="small" disabled={needsDocument(a)} onClick={() => submitAmendment(a.id)}>
+                                {t("contracts.submit")}
+                              </Button>
+                            </span>
+                          </Tooltip>
                         ),
                         a.status === "pending" && user?.role === "admin" && (
                           <Button key="approve" size="small" type="primary" onClick={() => approveAmendment(a.id)}>
@@ -1817,6 +1857,7 @@ export default function ContractDetailPage() {
                       <Space direction="vertical" size={0}>
                         <span>
                           <Tag>{t(`contracts.amendTypeNames.${a.type}`, { defaultValue: a.type })}</Tag> {a.reason}
+                          {a.status === "draft" && needsDocument(a) && <Tag color="orange" style={{ marginLeft: 8 }}>{t("contracts.supportingDocumentMissing")}</Tag>}
                         </span>
                         <Typography.Text type="secondary">
                           {t("contracts.effectiveDate")}: {a.effectiveDate} · {t(`contracts.${a.status}`)}
@@ -1833,7 +1874,7 @@ export default function ContractDetailPage() {
             label: t("contracts.documents"),
             children: (
               <>
-                {canEdit && (
+                {(user?.role === "admin" || user?.role === "manager") && (
                   <Button icon={<UploadOutlined />} onClick={() => setDocModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.uploadDocument")}
                   </Button>
@@ -1920,6 +1961,7 @@ export default function ContractDetailPage() {
             <Select
               options={[
                 { value: "signed_lease", label: t("contracts.signedLease") },
+                { value: "signed_supplement", label: t("contracts.signedSupplement") },
                 { value: "other", label: t("contracts.otherDocumentType") },
               ]}
             />
@@ -1958,6 +2000,7 @@ export default function ContractDetailPage() {
             <Select
               options={[
                 { value: "signed_lease", label: t("contracts.signedLease") },
+                { value: "signed_supplement", label: t("contracts.signedSupplement") },
                 { value: "other", label: t("contracts.otherDocumentType") },
               ]}
             />
@@ -2688,6 +2731,35 @@ export default function ContractDetailPage() {
       </Modal>
 
       <Modal
+        title={t("contracts.editAmendment")}
+        open={!!editAmendment}
+        onCancel={() => setEditAmendment(null)}
+        onOk={onSaveAmendment}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary">{t("contracts.editAmendmentHint")}</Typography.Paragraph>
+        <Form form={editAmendmentForm} layout="vertical">
+          <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true }]}>
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item name="internalCorrection" valuePropName="checked" label={t("contracts.internalCorrection")} extra={t("contracts.internalCorrectionHint")}>
+            <Switch />
+          </Form.Item>
+          <Form.Item
+            name="supportingDocumentId"
+            label={t("contracts.supportingDocument")}
+            extra={t("contracts.supportingDocumentHint")}
+            dependencies={["internalCorrection"]}
+            rules={[({ getFieldValue }) => ({ required: !getFieldValue("internalCorrection"), message: t("contracts.supportingDocumentRequired") })]}
+          >
+            <Select allowClear showSearch optionFilterProp="label" options={supportingDocOptions} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
         title={t("contracts.proposeAmendment")}
         open={amendmentModal}
         onCancel={() => {
@@ -2708,18 +2780,6 @@ export default function ContractDetailPage() {
             if (v.amendUnitId !== undefined && areaOfUnit(v.amendUnitId)) amendmentForm.setFieldsValue({ amendContractedAreaSqm: Number(areaOfUnit(v.amendUnitId)) });
           }}
         >
-          <Form.Item
-            name="type"
-            label={
-              <>
-                {t("common.name")} <HelpIcon field="amendmentType" />
-              </>
-            }
-            rules={[{ required: true }]}
-            initialValue="rent_change"
-          >
-            <Input />
-          </Form.Item>
           <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true }]}>
             <Input.TextArea rows={2} />
           </Form.Item>
@@ -2727,19 +2787,25 @@ export default function ContractDetailPage() {
             <DateField />
           </Form.Item>
           <Form.Item
+            name="internalCorrection"
+            valuePropName="checked"
+            label={
+              <>
+                {t("contracts.internalCorrection")} <HelpIcon field="amendmentType" />
+              </>
+            }
+            extra={t("contracts.internalCorrectionHint")}
+          >
+            <Switch />
+          </Form.Item>
+          <Form.Item
             name="supportingDocumentId"
             label={t("contracts.supportingDocument")}
             extra={t("contracts.supportingDocumentHint")}
+            dependencies={["internalCorrection"]}
+            rules={[({ getFieldValue }) => ({ required: !getFieldValue("internalCorrection"), message: t("contracts.supportingDocumentRequired") })]}
           >
-            <Select
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={documents.map((d) => ({
-                value: d.id,
-                label: `${docTypeLabel(t, d.docType)} (${d.uploadedAt.slice(0, 10)})`,
-              }))}
-            />
+            <Select allowClear showSearch optionFilterProp="label" options={supportingDocOptions} />
           </Form.Item>
           <Form.Item name="amendmentKind" label={t("contracts.amendmentKind")} initialValue="rate_change">
             <Select

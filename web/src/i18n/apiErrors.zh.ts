@@ -164,7 +164,7 @@ export const apiErrorByCode: Record<string, string> = {
   unit_in_use_live: "该单元仍被使用中的合同（草稿或生效中）占用，合同结束后才能归档。",
   property_has_units: "该物业下仍有单元。",
   unit_in_use: "该单元正在被合同使用。",
-  missing_document: "缺少必需的文件。",
+  missing_document: "请选择支持性文件（例如已签署的补充协议）；内部更正除外。",
   missing_signed_lease: "缺少已签署的合同正本。",
   last_signed_lease: "这是唯一的已签合同正本，不能删除。",
   file_missing: "服务器上缺少该文件。",

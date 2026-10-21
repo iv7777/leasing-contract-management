@@ -231,8 +231,16 @@ const zh: Translations = {
     amount: "金额",
     amendments: "变更",
     proposeAmendment: "发起变更",
+    internalCorrection: "内部更正",
+    internalCorrectionHint: "仅用于无需已签署补充协议的内部记录更正时开启。其他任何变更都必须附支持性文件。",
+    supportingDocumentRequired: "请选择支持性文件（或将其标记为内部更正）。",
+    supportingDocumentMissing: "缺少支持性文件",
+    attachDocumentFirst: "请先通过「编辑」附上支持性文件，或将其标记为内部更正。",
+    editAmendment: "编辑变更",
+    editAmendmentHint: "变更内容和生效日期保持草稿时的设置。如需修改这些，请撤回此草稿并重新发起变更。",
+    signedSupplement: "已签署的补充协议",
     supportingDocument: "支持性文件",
-    supportingDocumentHint: "提交本次变更以待审批时为必填项（变更类型为「内部更正」时除外）。如尚未在列表中，请先到「文件」标签页上传。",
+    supportingDocumentHint: "请选择能证明本次变更的文件（例如已签署的补充协议）；内部更正除外，其他变更都必须选择。如果列表中没有，请先到「文件」标签页上传。",
     amendmentKind: "本次变更的内容是？",
     amendmentKindRateChange: "调整现有计价项的费率",
     amendmentKindAddUnit: "为本合同新增一个单元",
@@ -335,7 +343,7 @@ const zh: Translations = {
     copyrightText: "版权信息",
   },
   audit: {
-    actions: { amendment_approved: "变更已批准", amendment_drafted: "变更已起草", amendment_rejected: "变更已驳回", amendment_submitted: "变更已提交", amendment_withdrawn: "变更已撤回", auto_billing_enabled: "已开启自动出账", auto_billing_paused: "已暂停自动出账", backup_comment_updated: "备份备注已修改", backup_downloaded: "备份已下载", backup_pinned: "备份已设为永久保留", backup_run_triggered: "手动备份", backup_unpinned: "备份已取消永久保留", billing_catch_up: "已补账", billing_rules_updated: "出账规则已更新", billing_run_triggered: "手动运行出账", charge_voided: "账单已作废", charges_auto_generated: "自动生成账单", charges_generated: "已生成账单", concession_added: "优惠/减免已添加", concession_removed: "优惠/减免已删除", concession_updated: "优惠/减免已更新", contract_activated: "合同已生效", contract_archived: "合同已归档", contract_created: "合同已创建", contract_deleted: "合同已删除", contract_expired: "合同已到期", contract_ledger_exported_csv: "已导出账目CSV", contract_pdf_exported: "已导出PDF摘要", contract_status_changed: "合同状态已变更", contract_terminated: "合同已终止", contract_unarchived: "合同已取消归档", contract_unit_added: "合同单元已添加", contract_unit_removed: "合同单元已移除", contract_unit_updated: "合同单元已更新", contract_updated: "合同已更新", contracts_exported_csv: "已导出合同CSV", database_initialized: "数据库已初始化", deposit_received: "已收押金", deposit_refund: "押金已退还", deposit_deduction: "押金已扣除", deposit_terms_removed: "押金条款已删除", deposit_terms_set: "押金条款已设置", deposit_terms_updated: "押金条款已更新", deposit_transaction_reversed: "押金记录已冲销", deposit_transferred_to_rent: "押金已抵扣租金", deposit_waiver_decided: "押金豁免已裁定", document_deleted: "文件已删除", document_downloaded: "文件已下载", document_updated: "文件已更新", document_uploaded: "文件已上传", late_penalty_rules_updated: "滞纳金规则已更新", login_failed: "登录失败", login_succeeded: "登录成功", logout: "退出登录", party_archived: "往来方已归档", party_created: "往来方已创建", party_deleted: "往来方已删除", party_sensitive_updated: "保密信息已更新", party_sensitive_viewed: "查看了保密信息", party_unarchived: "往来方已取消归档", party_updated: "往来方已更新", payments_bulk_recorded: "已批量录入收款", pricing_stream_added: "费用已添加", pricing_stream_removed: "费用已删除", pricing_stream_updated: "费用已更新", property_created: "物业已创建", property_deleted: "物业已删除", property_updated: "物业已更新", rate_schedule_tier_added: "费率已添加", rate_schedule_tier_removed: "费率已删除", rate_schedule_tier_updated: "费率已更新", receipt_allocated: "收款已核销", receipt_allocation_reversed: "核销已冲销", receipt_recorded: "已录入收款", receipt_reversed: "收款已冲销", system_copyright_updated: "版权信息已更新", unit_created: "单元已创建", unit_deleted: "单元已删除", unit_updated: "单元已更新", usage_entries_bulk_recorded: "已批量录入读数", usage_entry_recorded: "已录入读数", usage_entry_removed: "读数已删除", usage_entry_updated: "读数已更新", user_created: "用户已创建", user_deactivated: "用户已停用", user_deleted: "用户已删除", user_password_reset: "密码已重置", user_updated: "用户已更新" },
+    actions: { amendment_approved: "变更已批准", amendment_drafted: "变更已起草", amendment_rejected: "变更已驳回", amendment_updated: "变更已编辑", amendment_submitted: "变更已提交", amendment_withdrawn: "变更已撤回", auto_billing_enabled: "已开启自动出账", auto_billing_paused: "已暂停自动出账", backup_comment_updated: "备份备注已修改", backup_downloaded: "备份已下载", backup_pinned: "备份已设为永久保留", backup_run_triggered: "手动备份", backup_unpinned: "备份已取消永久保留", billing_catch_up: "已补账", billing_rules_updated: "出账规则已更新", billing_run_triggered: "手动运行出账", charge_voided: "账单已作废", charges_auto_generated: "自动生成账单", charges_generated: "已生成账单", concession_added: "优惠/减免已添加", concession_removed: "优惠/减免已删除", concession_updated: "优惠/减免已更新", contract_activated: "合同已生效", contract_archived: "合同已归档", contract_created: "合同已创建", contract_deleted: "合同已删除", contract_expired: "合同已到期", contract_ledger_exported_csv: "已导出账目CSV", contract_pdf_exported: "已导出PDF摘要", contract_status_changed: "合同状态已变更", contract_terminated: "合同已终止", contract_unarchived: "合同已取消归档", contract_unit_added: "合同单元已添加", contract_unit_removed: "合同单元已移除", contract_unit_updated: "合同单元已更新", contract_updated: "合同已更新", contracts_exported_csv: "已导出合同CSV", database_initialized: "数据库已初始化", deposit_received: "已收押金", deposit_refund: "押金已退还", deposit_deduction: "押金已扣除", deposit_terms_removed: "押金条款已删除", deposit_terms_set: "押金条款已设置", deposit_terms_updated: "押金条款已更新", deposit_transaction_reversed: "押金记录已冲销", deposit_transferred_to_rent: "押金已抵扣租金", deposit_waiver_decided: "押金豁免已裁定", document_deleted: "文件已删除", document_downloaded: "文件已下载", document_updated: "文件已更新", document_uploaded: "文件已上传", late_penalty_rules_updated: "滞纳金规则已更新", login_failed: "登录失败", login_succeeded: "登录成功", logout: "退出登录", party_archived: "往来方已归档", party_created: "往来方已创建", party_deleted: "往来方已删除", party_sensitive_updated: "保密信息已更新", party_sensitive_viewed: "查看了保密信息", party_unarchived: "往来方已取消归档", party_updated: "往来方已更新", payments_bulk_recorded: "已批量录入收款", pricing_stream_added: "费用已添加", pricing_stream_removed: "费用已删除", pricing_stream_updated: "费用已更新", property_created: "物业已创建", property_deleted: "物业已删除", property_updated: "物业已更新", rate_schedule_tier_added: "费率已添加", rate_schedule_tier_removed: "费率已删除", rate_schedule_tier_updated: "费率已更新", receipt_allocated: "收款已核销", receipt_allocation_reversed: "核销已冲销", receipt_recorded: "已录入收款", receipt_reversed: "收款已冲销", system_copyright_updated: "版权信息已更新", unit_created: "单元已创建", unit_deleted: "单元已删除", unit_updated: "单元已更新", usage_entries_bulk_recorded: "已批量录入读数", usage_entry_recorded: "已录入读数", usage_entry_removed: "读数已删除", usage_entry_updated: "读数已更新", user_created: "用户已创建", user_deactivated: "用户已停用", user_deleted: "用户已删除", user_password_reset: "密码已重置", user_updated: "用户已更新" },
     entities: { amendment: "变更", app_settings: "系统设置", backup_run: "备份", billing_run: "出账运行", charge: "账单", contract: "合同", database: "数据库", deposit_terms: "押金条款", deposit_transaction: "押金记录", document: "文件", party: "往来方", property: "物业", receipt: "收款", receipt_allocation: "核销", unit: "单元", user: "用户" },
     title: "审计日志",
     entityType: "对象类型",
@@ -750,9 +758,9 @@ const zh: Translations = {
       calculationMethod:
         "固定金额每期收取相同费用。按平方米以费率乘以面积计算。百分比递增会在每个费率分段边界自动复利计算——完整配置递增方案目前需使用批量导入工具。",
       amendmentType:
-        "用于标注本次变更的类别（如「rent_change」、「renewal」）。只有特殊值「internal_correction」（内部更正）可免于下方支持性文件的要求。",
+        "仅在做「内部更正」时开启：即无需已签署补充协议的内部记录更正。其他变更会按下方所选的变更类型保存，且必须附支持性文件。",
       supportingDocument:
-        "提交本次变更以待审批时为必填项（变更类型为「internal_correction」内部更正时除外）。请附上能证明本次变更合理性的文件——如已签署的补充协议或往来函件；如尚未在列表中，请先到「文件」标签页上传。",
+        "除内部更正外，提交本次变更以待审批时必须附带。请选择能证明变更合理性的文件，例如已签署的补充协议或往来函件。如果列表中没有，请先到「文件」标签页上传（管理员或经理在合同生效后也可随时上传）。",
       depositRequirementType:
         "「固定金额」记录一个确切的元数值。「公式」仅为文字描述（如「2倍月租金」）——系统不会据此自动计算出具体金额，如使用此选项，请另行记录实际应收的具体数字。",
       concessionDiscount:

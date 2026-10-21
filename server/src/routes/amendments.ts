@@ -12,6 +12,7 @@ import {
   concessions,
   depositTerms,
   chargeAdjustments,
+  documents,
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
@@ -128,6 +129,21 @@ const createAmendmentSchema = z.object({
 
 const DRAFT_AMENDMENT_MESSAGE = "A draft contract is edited directly. Amendments are for changing a contract after it has been activated.";
 
+/** Every amendment except an internal correction needs a signed supplement or
+ * similar on file, and that document must belong to this contract. */
+function supportingDocumentError(contractId: number, type: string, documentId: number | null): { code: string; message: string } | null {
+  if (documentId === null) {
+    return type === "internal_correction"
+      ? null
+      : { code: "missing_document", message: "Pick the supporting document (a signed supplement, for example) — it is required unless this is an internal correction." };
+  }
+  const doc = db.select().from(documents).where(eq(documents.id, documentId)).get();
+  if (!doc || doc.ownerType !== "contract" || doc.ownerId !== contractId) {
+    return { code: "invalid_reference", message: "That document does not belong to this contract." };
+  }
+  return null;
+}
+
 amendmentsRouter.get("/contracts/:contractId/amendments", (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!canAccessContract(req.user!, contractId)) {
@@ -152,6 +168,9 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid amendment payload.", details: parsed.error.flatten() } });
   }
 
+  const docError = supportingDocumentError(contractId, parsed.data.type, parsed.data.supportingDocumentId ?? null);
+  if (docError) return res.status(400).json({ error: docError });
+
   const inserted = db
     .insert(amendments)
     .values({
@@ -170,6 +189,62 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
   recordAudit({ actorUserId: req.user!.id, action: "amendment_drafted", entityType: "amendment", entityId: inserted.id, reason: parsed.data.reason });
   res.status(201).json({ amendment: inserted });
 });
+
+// A draft can still be corrected before it is submitted — typically to attach
+// the supporting document, or to mark it as an internal correction. Its
+// changes (and so its effective date) stay as drafted; to change those,
+// withdraw it and propose a new one.
+const updateAmendmentSchema = z.object({
+  reason: z.string().min(1).optional(),
+  internalCorrection: z.boolean().optional(),
+  supportingDocumentId: z.number().nullable().optional(),
+});
+
+amendmentsRouter.patch("/amendments/:id", requireRole("admin", "manager"), (req, res) => {
+  const id = Number(req.params.id);
+  const amendment = db.select().from(amendments).where(eq(amendments.id, id)).get();
+  if (!amendment) return res.status(404).json({ error: { code: "not_found", message: "Amendment not found." } });
+  if (!canAccessContract(req.user!, amendment.contractId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+  }
+  if (amendment.status !== "draft") {
+    return res.status(409).json({ error: { code: "invalid_state", message: "Only a draft amendment can be edited." } });
+  }
+  const parsed = updateAmendmentSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid amendment payload." } });
+
+  const { internalCorrection, ...fields } = parsed.data;
+  // Marking or unmarking an internal correction swaps the type between
+  // "internal_correction" and the kind of change the amendment actually makes.
+  let type = amendment.type;
+  if (internalCorrection === true) type = "internal_correction";
+  if (internalCorrection === false && amendment.type === "internal_correction") type = inferAmendmentType(amendment.changesJson);
+  const supportingDocumentId = fields.supportingDocumentId === undefined ? amendment.supportingDocumentId : fields.supportingDocumentId;
+  const docError = supportingDocumentError(amendment.contractId, type, supportingDocumentId);
+  if (docError) return res.status(400).json({ error: docError });
+
+  const updated = db
+    .update(amendments)
+    .set({ type, supportingDocumentId, ...(fields.reason ? { reason: fields.reason } : {}) })
+    .where(eq(amendments.id, id))
+    .returning()
+    .get();
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_updated", entityType: "amendment", entityId: id, details: { type, supportingDocumentId } });
+  res.json({ amendment: updated });
+});
+
+/** The kind of change an amendment makes, read back from its changes. */
+function inferAmendmentType(changesJson: string): string {
+  try {
+    const c = JSON.parse(changesJson) as Record<string, { status?: string } | unknown[] | undefined>;
+    if ((c.contract as { status?: string } | undefined)?.status === "terminated") return "terminate";
+    if (Array.isArray(c.addUnits) && c.addUnits.length) return "add_unit";
+    if (Array.isArray(c.addPricingStreams) && c.addPricingStreams.length) return "add_pricing_stream";
+  } catch {
+    // fall through
+  }
+  return "rent_change";
+}
 
 amendmentsRouter.post("/amendments/:id/submit", requireRole("admin", "manager"), (req, res) => {
   const id = Number(req.params.id);

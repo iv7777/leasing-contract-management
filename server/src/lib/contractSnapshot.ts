@@ -41,14 +41,17 @@ export function buildContractSnapshot(contractId: number) {
   };
 }
 
+/** One snapshot per contract version. Writing the same version again replaces
+ * it: a contract put back to draft (Initialize database, keeping contracts) is
+ * activated a second time at the same version number, and its old snapshot
+ * describes terms that may since have been edited. */
 export function recordContractVersion(contractId: number, versionNumber: number, effectiveDate: string, sourceAmendmentId: number | null) {
+  const snapshotJson = JSON.stringify(buildContractSnapshot(contractId));
   db.insert(contractVersions)
-    .values({
-      contractId,
-      versionNumber,
-      snapshotJson: JSON.stringify(buildContractSnapshot(contractId)),
-      sourceAmendmentId,
-      effectiveDate,
+    .values({ contractId, versionNumber, snapshotJson, sourceAmendmentId, effectiveDate })
+    .onConflictDoUpdate({
+      target: [contractVersions.contractId, contractVersions.versionNumber],
+      set: { snapshotJson, sourceAmendmentId, effectiveDate },
     })
     .run();
 }
