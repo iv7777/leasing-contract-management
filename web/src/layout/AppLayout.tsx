@@ -17,6 +17,8 @@ import {
   QuestionCircleOutlined,
   ReadOutlined,
   EllipsisOutlined,
+  SafetyCertificateOutlined,
+  ToolOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -63,6 +65,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   useDeviceClasses();
 
+  const adminItems = [
+    { key: "/users", icon: <UserOutlined />, label: t("nav.users") },
+    { key: "/audit", icon: <AuditOutlined />, label: t("nav.audit") },
+    { key: "/billing-runs", icon: <ScheduleOutlined />, label: t("nav.billingRuns") },
+    { key: "/backups", icon: <CloudServerOutlined />, label: t("nav.backups") },
+    { key: "/system-health", icon: <SafetyCertificateOutlined />, label: t("nav.systemHealth") },
+  ];
+
   const items = [
     { key: "/", icon: <DashboardOutlined />, label: t("nav.dashboard") },
     { key: "/guide", icon: <ReadOutlined />, label: t("nav.guide") },
@@ -71,14 +81,25 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { key: "/reminders", icon: <BellOutlined />, label: t("nav.reminders") },
     { key: "/occupancy", icon: <PieChartOutlined />, label: t("nav.occupancy") },
     { key: "/parties", icon: <TeamOutlined />, label: t("nav.parties") },
-    ...(user?.role === "admin" ? [{ key: "/users", icon: <UserOutlined />, label: t("nav.users") }] : []),
-    ...(user?.role === "admin" ? [{ key: "/audit", icon: <AuditOutlined />, label: t("nav.audit") }] : []),
-    ...(user?.role === "admin" ? [{ key: "/billing-runs", icon: <ScheduleOutlined />, label: t("nav.billingRuns") }] : []),
-    ...(user?.role === "admin" ? [{ key: "/backups", icon: <CloudServerOutlined />, label: t("nav.backups") }] : []),
+    ...(user?.role === "admin"
+      ? [
+          {
+            key: "admin",
+            icon: <ToolOutlined />,
+            label: t("nav.admin"),
+            children: adminItems,
+          },
+        ]
+      : []),
   ];
 
   const selectedKey =
-    items.find((i) => i.key !== "/" && location.pathname.startsWith(i.key))?.key ?? "/";
+    [...items.filter((i) => !("children" in i)), ...adminItems].find((i) => i.key !== "/" && location.pathname.startsWith(i.key))?.key ?? "/";
+  const inAdmin = adminItems.some((i) => i.key === selectedKey);
+  const [openKeys, setOpenKeys] = useState<string[]>(inAdmin ? ["admin"] : []);
+  useEffect(() => {
+    if (inAdmin) setOpenKeys((keys) => (keys.includes("admin") ? keys : [...keys, "admin"]));
+  }, [inAdmin]);
 
   const handleNavigate = (key: string) => {
     navigate(key);
@@ -98,6 +119,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
     <Menu
       mode="inline"
       selectedKeys={[selectedKey]}
+      openKeys={openKeys}
+      onOpenChange={setOpenKeys}
       items={items}
       onClick={({ key }) => handleNavigate(key)}
       style={{ borderInlineEnd: "none" }}

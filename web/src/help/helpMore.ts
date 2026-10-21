@@ -154,6 +154,9 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "If a backup ends with an orange warning, a document's file has gone missing from the server. The backup still succeeds; open that document on its contract and remove the broken record (Admin), or upload the file again.",
       ],
     },
+    systemHealth: {
+      steps: ["Press **Run check** on a card; nothing is changed.", "A file marked missing: open its contract → **Documents** and remove the broken record (Admin).", "Run the fingerprint check when it is quiet; it reads every file."],
+    },
     guide: {
       steps: ["Type a word in the search box to find it anywhere.", "Use **Quick start for…** to see what to do first for your role.", "Follow the chapters in order for a full lease lifecycle."],
     },
@@ -273,6 +276,9 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
     },
     backups: {
       steps: ["做重大改动前先**立即备份**。", "点图钉图标把备份设为**永久**（不会被删除，也不占 30 份名额）。", "点铅笔图标添加备注，例如备份原因。", "恢复需在服务器上操作（`sudo lcm`，选项 6）。", "若备份记录出现橙色警告，说明某个文件在服务器上已丢失。备份仍会成功；请到对应合同打开该文件并删除损坏的记录（管理员），或重新上传文件。"],
+    },
+    systemHealth: {
+      steps: ["在卡片上点**运行检查**；不会更改任何数据。", "显示文件缺失时：打开所属合同 → **文件**，删除这条损坏的记录（管理员）。", "请在空闲时运行指纹检查，它会读取每个文件。"],
     },
     guide: {
       steps: ["在搜索框输入词语，可在全文中查找。", "用**快速上手**查看您的角色最先该做什么。", "按章节顺序阅读，可了解租约的完整周期。"],

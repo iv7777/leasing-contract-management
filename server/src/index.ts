@@ -20,6 +20,7 @@ import { exportsRouter } from "./routes/exports.js";
 import { systemInfoRouter } from "./routes/systemInfo.js";
 import { auditRouter } from "./routes/audit.js";
 import { backupsRouter } from "./routes/backups.js";
+import { systemHealthRouter } from "./routes/systemHealth.js";
 import { billingRouter } from "./routes/billing.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { runDailyBilling } from "./jobs/billing.js";
@@ -83,6 +84,7 @@ app.use("/api", exportsRouter);
 app.use("/api/system-info", systemInfoRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/backups", backupsRouter);
+app.use("/api/system-health", systemHealthRouter);
 
 // Anything under /api that no route handled.
 app.use("/api", (_req, res) => {
