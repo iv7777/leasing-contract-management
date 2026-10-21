@@ -18,6 +18,7 @@ import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
 import { recordAudit } from "../lib/audit.js";
 import { contractRef } from "../lib/auditDetail.js";
+import { loadDepositStatus } from "../billing/depositLoad.js";
 import { todayInChina } from "@lcm/shared";
 import { useCjkFont } from "../lib/pdfFonts.js";
 import { exportLabels, resolveExportLang } from "../lib/exportLabels.js";
@@ -31,7 +32,9 @@ function canDownloadOrPrint(user: { role: string; canDownloadPdf: boolean; canPr
 }
 
 function csvEscape(value: unknown): string {
-  const s = String(value ?? "");
+  let s = String(value ?? "");
+  // A cell that starts with = + - @ would be run as a formula by Excel; keep it as text.
+  if (typeof value === "string" && /^([=@\t\r]|[+-](?![\d.]))/.test(s)) s = `'${s}`;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 function toCsv(headers: string[], rows: Record<string, unknown>[]): string {
@@ -57,6 +60,8 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
   const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
   if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
 
+  const lang = resolveExportLang(req.query.lang);
+  const L = exportLabels[lang];
   const landlord = db.select().from(parties).where(eq(parties.id, contract.landlordPartyId)).get();
   const tenant = db.select().from(parties).where(eq(parties.id, contract.tenantPartyId)).get();
   const cUnits = db.select().from(contractUnits).where(eq(contractUnits.contractId, contractId)).all();
@@ -67,14 +72,12 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
   const deposits = db.select().from(depositTerms).where(eq(depositTerms.contractId, contractId)).all();
   const amendmentRows = db.select().from(amendments).where(eq(amendments.contractId, contractId)).all();
 
+  const streamLabels = new Map(streams.map((s) => [s.id, s.label?.trim() || (L[s.feeType] ?? s.feeType)]));
   const ledger = loadLedgerInputs(contractId);
   const asOfDate = todayInChina();
   const chargeBalances = ledger.charges.map((c) => ({ charge: ledger.chargesRaw.find((x) => x.id === c.id)!, balance: computeChargeBalance(c, ledger.adjustments, ledger.allocations, asOfDate, ledger.overdueGraceDays) }));
 
   recordAudit({ actorUserId: req.user!.id, action: "contract_pdf_exported", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId) } });
-
-  const lang = resolveExportLang(req.query.lang);
-  const L = exportLabels[lang];
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${contract.referenceNumber}.pdf"`);
@@ -117,13 +120,15 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
   for (const d of deposits) {
     doc.text(`  ${d.requirementType === "fixed" ? `${((d.fixedAmountFen ?? 0) / 100).toFixed(2)} ${L.yuan}` : d.formulaBasis}, ${L.effective} ${d.effectiveStart}`);
   }
+  const depositNow = loadDepositStatus(contractId, todayInChina());
+  doc.text(`  ${L.depositRequired} ${(depositNow.requiredFen / 100).toFixed(2)} ${L.yuan} · ${L.depositHeld} ${(depositNow.heldFen / 100).toFixed(2)} ${L.yuan}`);
   doc.moveDown();
 
   doc.fontSize(14).text(L.paymentLedger);
   doc.fontSize(10);
   for (const { charge, balance } of chargeBalances) {
     doc.text(
-      `  ${charge.serviceStart} – ${charge.serviceEnd}  ${L[charge.feeType] ?? charge.feeType}  ${L.billed} ${(charge.amountFen / 100).toFixed(2)}  ${L.balance} ${(balance.balanceFen / 100).toFixed(2)}${balance.isOverdue ? `  ${L.overdue} ${balance.daysOverdue}${lang === "zh" ? "天" : "d"}` : ""}`,
+      `  ${charge.serviceStart} – ${charge.serviceEnd}  ${streamLabels.get(charge.pricingStreamId) ?? L[charge.feeType] ?? charge.feeType}${charge.status === "voided" ? ` [${L.voided}]` : ""}  ${L.billed} ${(charge.amountFen / 100).toFixed(2)}  ${L.balance} ${(balance.balanceFen / 100).toFixed(2)}${balance.isOverdue ? `  ${L.overdue} ${balance.daysOverdue}${lang === "zh" ? "天" : "d"}` : ""}`,
     );
   }
   doc.moveDown();
@@ -180,6 +185,9 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
 
   const lang = resolveExportLang(req.query.lang);
   const L = exportLabels[lang];
+  const streamLabels = new Map(
+    db.select().from(pricingStreams).where(eq(pricingStreams.contractId, contractId)).all().map((s) => [s.id, s.label?.trim() || (L[s.feeType] ?? s.feeType)]),
+  );
   const ledger = loadLedgerInputs(contractId);
   const asOfDate = todayInChina();
   const rows = ledger.chargesRaw.map((c) => {
@@ -194,6 +202,8 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
       [L.csvServiceStart]: c.serviceStart,
       [L.csvServiceEnd]: c.serviceEnd,
       [L.csvFeeType]: L[c.feeType] ?? c.feeType,
+      [L.csvItem]: streamLabels.get(c.pricingStreamId) ?? "",
+      [L.csvChargeStatus]: L[c.status] ?? c.status,
       [L.csvDueDate]: c.dueDate,
       [L.csvBilledYuan]: (c.amountFen / 100).toFixed(2),
       [L.csvAllocatedYuan]: (balance.allocatedFen / 100).toFixed(2),
@@ -208,7 +218,7 @@ exportsRouter.get("/contracts/:id/ledger.csv", (req, res) => {
   res.send(
     "﻿" +
       toCsv(
-        [L.csvServiceStart, L.csvServiceEnd, L.csvFeeType, L.csvDueDate, L.csvBilledYuan, L.csvAllocatedYuan, L.csvBalanceYuan, L.csvOverdueDays],
+        [L.csvServiceStart, L.csvServiceEnd, L.csvFeeType, L.csvItem, L.csvChargeStatus, L.csvDueDate, L.csvBilledYuan, L.csvAllocatedYuan, L.csvBalanceYuan, L.csvOverdueDays],
         rows,
       ),
   );

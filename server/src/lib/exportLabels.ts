@@ -76,6 +76,13 @@ export const exportLabels: Record<ExportLang, Record<string, string>> = {
     csvAllocatedYuan: "Allocated (yuan)",
     csvBalanceYuan: "Balance (yuan)",
     csvOverdueDays: "Overdue days",
+    csvItem: "Item",
+    csvChargeStatus: "Charge status",
+    voided: "Voided",
+    posted: "Posted",
+    depositHeld: "held",
+    depositRequired: "required",
+    billing_rules: "Billing rules change",
   },
   zh: {
     summaryTitle: "合同摘要",
@@ -146,6 +153,13 @@ export const exportLabels: Record<ExportLang, Record<string, string>> = {
     csvAllocatedYuan: "已核销（元）",
     csvBalanceYuan: "余额（元）",
     csvOverdueDays: "逾期天数",
+    csvItem: "项目",
+    csvChargeStatus: "账单状态",
+    voided: "已作废",
+    posted: "有效",
+    depositHeld: "已收",
+    depositRequired: "应收",
+    billing_rules: "计费规则变更",
   },
 };
 

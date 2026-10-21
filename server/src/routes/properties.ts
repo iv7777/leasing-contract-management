@@ -8,6 +8,7 @@ import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.
 import { recordAudit } from "../lib/audit.js";
 import { changesBetween } from "../lib/auditDetail.js";
 import { liveContractsForProperty, liveContractsForUnit, describeRefs } from "../lib/archiveGuards.js";
+import { shortText, decimalString } from "../lib/validate.js";
 
 export const propertiesRouter = Router();
 propertiesRouter.use(requireAuth);
@@ -55,18 +56,23 @@ propertiesRouter.get("/:id", (req, res) => {
 });
 
 const createPropertySchema = z.object({
-  name: z.string().min(1),
+  name: shortText(200),
   // nullable because the column is nullable: an edit form re-submits a
   // previously-null value as null, not as "the field was omitted".
-  nameEn: z.string().nullable().optional(),
-  address: z.string().min(1),
+  nameEn: z.string().trim().max(200).nullable().optional(),
+  address: shortText(500),
 });
+
+const DUPLICATE_PROPERTY = "A property with this name already exists.";
+const nameTaken = (name: string, exceptId?: number) =>
+  db.select().from(properties).all().some((p) => p.id !== exceptId && p.name.trim().toLowerCase() === name.trim().toLowerCase());
 
 propertiesRouter.post("/", requireRole("admin"), (req, res) => {
   const parsed = createPropertySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid property payload." } });
   }
+  if (nameTaken(parsed.data.name)) return res.status(409).json({ error: { code: "duplicate_name", message: DUPLICATE_PROPERTY } });
   const inserted = db
     .insert(properties)
     .values({ name: parsed.data.name, nameEn: parsed.data.nameEn ?? null, address: parsed.data.address })
@@ -88,6 +94,9 @@ propertiesRouter.patch("/:id", requireRole("admin"), (req, res) => {
   }
   const existing = db.select().from(properties).where(eq(properties.id, id)).get();
   if (!existing) return res.status(404).json({ error: { code: "not_found", message: "Property not found." } });
+  if (parsed.data.name !== undefined && nameTaken(parsed.data.name, id)) {
+    return res.status(409).json({ error: { code: "duplicate_name", message: DUPLICATE_PROPERTY } });
+  }
 
   // Archiving hides the property; it can't be hidden while a draft or active
   // contract still covers one of its units.
@@ -154,10 +163,14 @@ propertiesRouter.delete("/:id", requireRole("admin"), (req, res) => {
 });
 
 const createUnitSchema = z.object({
-  unitLabel: z.string().min(1),
+  unitLabel: shortText(100),
   unitType: z.enum(["building", "open_land"]),
-  rentableAreaSqm: z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number"),
+  rentableAreaSqm: decimalString.refine((v) => Number(v) > 0, "Must be more than zero."),
 });
+
+const DUPLICATE_UNIT = "This property already has a unit with this label.";
+const labelTaken = (propertyId: number, label: string, exceptId?: number) =>
+  db.select().from(units).where(eq(units.propertyId, propertyId)).all().some((u) => u.id !== exceptId && u.unitLabel.trim().toLowerCase() === label.trim().toLowerCase());
 
 propertiesRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) => {
   const propertyId = Number(req.params.id);
@@ -168,6 +181,10 @@ propertiesRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) 
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid unit payload." } });
   }
+  if (!db.select().from(properties).where(eq(properties.id, propertyId)).get()) {
+    return res.status(404).json({ error: { code: "not_found", message: "Property not found." } });
+  }
+  if (labelTaken(propertyId, parsed.data.unitLabel)) return res.status(409).json({ error: { code: "duplicate_unit", message: DUPLICATE_UNIT } });
   const inserted = db
     .insert(units)
     .values({ propertyId, ...parsed.data })
@@ -178,9 +195,9 @@ propertiesRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) 
 });
 
 const updateUnitSchema = z.object({
-  unitLabel: z.string().min(1).optional(),
+  unitLabel: shortText(100).optional(),
   unitType: z.enum(["building", "open_land"]).optional(),
-  rentableAreaSqm: z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number").optional(),
+  rentableAreaSqm: decimalString.refine((v) => Number(v) > 0, "Must be more than zero.").optional(),
   availability: z.enum(["vacant", "leased", "unavailable"]).optional(),
 });
 
@@ -197,6 +214,16 @@ propertiesRouter.patch("/:propertyId/units/:unitId", requireRole("admin", "manag
   const parsed = updateUnitSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid unit payload." } });
+  }
+  if (parsed.data.unitLabel !== undefined && labelTaken(propertyId, parsed.data.unitLabel, unitId)) {
+    return res.status(409).json({ error: { code: "duplicate_unit", message: DUPLICATE_UNIT } });
+  }
+  // The unit can't be made smaller than the area a contract has already taken from it.
+  if (parsed.data.rentableAreaSqm !== undefined) {
+    const taken = db.select().from(contractUnits).where(eq(contractUnits.unitId, unitId)).all().reduce((max, cu) => Math.max(max, Number(cu.contractedAreaSqm)), 0);
+    if (Number(parsed.data.rentableAreaSqm) < taken) {
+      return res.status(409).json({ error: { code: "area_below_contracted", message: `A contract already uses ${taken} sqm of this unit, so its rentable area can't be set lower.` } });
+    }
   }
   // "Unavailable" is how a unit is archived; not while a draft or active contract covers it.
   if (parsed.data.availability === "unavailable" && existing.availability !== "unavailable") {

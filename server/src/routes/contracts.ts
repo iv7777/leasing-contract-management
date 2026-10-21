@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import fs from "node:fs";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
   contracts,
@@ -27,6 +27,9 @@ import { getContractPropertyIds, canAccessContract, rejectIfDraft } from "../lib
 import { contractUnitBelongsToContract, pricingStreamBelongsToContract, rateScheduleBelongsToStream } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { rateRuleError } from "../lib/rateRules.js";
+import { isoDate, fenAmount, shortText, longText, decimalString, percentString } from "../lib/validate.js";
+import { MSG, dateOrderError, rateShapeError, rateOverlapError, concessionError, depositTermError, contractUnitError, referenceTaken } from "../lib/contractRules.js";
+import { activationProblems } from "../lib/activationCheck.js";
 import { contractOutstanding } from "../lib/archiveGuards.js";
 import { changesBetween, contractRef, rateFacts, rateForDiff, streamName, unitName } from "../lib/auditDetail.js";
 import { generateChargesForContractMonth } from "../billing/generate.js";
@@ -39,7 +42,8 @@ import { daysInMonth, todayInChina } from "@lcm/shared";
 export const contractsRouter = Router();
 contractsRouter.use(requireAuth);
 
-const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number");
+const invalid = (res: import("express").Response, message: string, code = "invalid_input") =>
+  res.status(400).json({ error: { code, message } });
 
 function requireDraft(contract: typeof contracts.$inferSelect, res: import("express").Response): boolean {
   if (contract.status !== "draft") {
@@ -114,20 +118,20 @@ contractsRouter.post("/:id/archive", requireRole("admin"), setArchived(true));
 contractsRouter.post("/:id/unarchive", requireRole("admin"), setArchived(false));
 
 const createContractSchema = z.object({
-  referenceNumber: z.string().min(1),
-  landlordPartyId: z.number(),
-  tenantPartyId: z.number(),
-  termStart: z.string(),
-  termEnd: z.string(),
-  renewalNoticeDays: z.number().optional(),
-  specialTerms: z.string().nullable().optional(),
+  referenceNumber: shortText(100),
+  landlordPartyId: z.number().int(),
+  tenantPartyId: z.number().int(),
+  termStart: isoDate,
+  termEnd: isoDate,
+  renewalNoticeDays: z.number().int().min(0).max(365).optional(),
+  specialTerms: longText(20000).nullable().optional(),
   billingRules: z.object({
     billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).default("monthly"),
-    periodAnchorDay: z.number().default(1),
+    periodAnchorDay: z.number().int().min(1).max(28).default(1),
     // House defaults when the lease is silent: rent due on the 1st, and
     // overdue only after a 5-day grace period.
     dueDay: z.number().int().min(1).max(31).default(1),
-    dueMonthOffset: z.number().default(0),
+    dueMonthOffset: z.number().int().min(-12).max(12).default(0),
     overdueGraceDays: z.number().int().min(0).max(60).default(5),
   }),
 });
@@ -138,6 +142,16 @@ contractsRouter.post("/", requireRole("admin", "manager"), (req, res) => {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid contract payload.", details: parsed.error.flatten() } });
   }
   const { billingRules: rulesInput, ...contractFields } = parsed.data;
+
+  const orderErr = dateOrderError(contractFields.termStart, contractFields.termEnd);
+  if (orderErr) return invalid(res, orderErr);
+  if (contractFields.landlordPartyId === contractFields.tenantPartyId) return invalid(res, MSG.sameParty);
+  for (const partyId of [contractFields.landlordPartyId, contractFields.tenantPartyId]) {
+    if (!db.select().from(parties).where(eq(parties.id, partyId)).get()) return invalid(res, `Party ${partyId} not found.`, "invalid_reference");
+  }
+  if (referenceTaken(contractFields.referenceNumber)) {
+    return res.status(409).json({ error: { code: "duplicate_reference", message: MSG.duplicateReference } });
+  }
 
   const inserted = db.insert(contracts).values(contractFields).returning().get();
   db.insert(billingRules).values({ contractId: inserted.id, ...rulesInput }).run();
@@ -177,15 +191,15 @@ contractsRouter.get("/:id", (req, res) => {
 });
 
 const updateContractSchema = z.object({
-  referenceNumber: z.string().min(1).optional(),
-  landlordPartyId: z.number().optional(),
-  tenantPartyId: z.number().optional(),
-  termStart: z.string().optional(),
-  termEnd: z.string().optional(),
-  renewalNoticeDays: z.number().optional(),
+  referenceNumber: shortText(100).optional(),
+  landlordPartyId: z.number().int().optional(),
+  tenantPartyId: z.number().int().optional(),
+  termStart: isoDate.optional(),
+  termEnd: isoDate.optional(),
+  renewalNoticeDays: z.number().int().min(0).max(365).optional(),
   // nullable because the column is nullable: an edit form re-submits a
   // previously-null value as null, not as "the field was omitted".
-  specialTerms: z.string().nullable().optional(),
+  specialTerms: longText(20000).nullable().optional(),
 });
 
 contractsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
@@ -201,6 +215,14 @@ contractsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
     if (partyId !== undefined && !db.select().from(parties).where(eq(parties.id, partyId)).get()) {
       return res.status(400).json({ error: { code: "invalid_reference", message: `Party ${partyId} not found.` } });
     }
+  }
+
+  const next = { ...contract, ...parsed.data };
+  const orderErr = dateOrderError(next.termStart, next.termEnd);
+  if (orderErr) return invalid(res, orderErr);
+  if (next.landlordPartyId === next.tenantPartyId) return invalid(res, MSG.sameParty);
+  if (parsed.data.referenceNumber !== undefined && referenceTaken(parsed.data.referenceNumber, id)) {
+    return res.status(409).json({ error: { code: "duplicate_reference", message: MSG.duplicateReference } });
   }
 
   const updated = db
@@ -285,11 +307,11 @@ contractsRouter.delete("/:id", requireRole("admin"), (req, res) => {
 // ---------------------------------------------------------------------------
 
 const addUnitSchema = z.object({
-  unitId: z.number(),
-  effectiveStart: z.string(),
-  effectiveEnd: z.string().optional(),
+  unitId: z.number().int(),
+  effectiveStart: isoDate,
+  effectiveEnd: isoDate.optional(),
   contractedAreaSqm: decimalString,
-  notes: z.string().optional(),
+  notes: longText().optional(),
 });
 
 contractsRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) => {
@@ -307,16 +329,19 @@ contractsRouter.post("/:id/units", requireRole("admin", "manager"), (req, res) =
     return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this unit's property." } });
   }
 
+  const unitErr = contractUnitError(contractId, unit.id, parsed.data.contractedAreaSqm, parsed.data.effectiveStart, parsed.data.effectiveEnd);
+  if (unitErr) return res.status(409).json({ error: { code: "invalid_unit", message: unitErr } });
+
   const inserted = db.insert(contractUnits).values({ contractId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "contract_unit_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), unit: unit.unitLabel, contractedAreaSqm: inserted.contractedAreaSqm, effectiveStart: inserted.effectiveStart } });
   res.status(201).json({ contractUnit: inserted });
 });
 
 const updateContractUnitSchema = z.object({
-  effectiveStart: z.string().optional(),
-  effectiveEnd: z.string().nullable().optional(),
+  effectiveStart: isoDate.optional(),
+  effectiveEnd: isoDate.nullable().optional(),
   contractedAreaSqm: decimalString.optional(),
-  notes: z.string().nullable().optional(),
+  notes: longText().nullable().optional(),
 });
 
 contractsRouter.patch("/:id/units/:contractUnitId", requireRole("admin", "manager"), (req, res) => {
@@ -333,6 +358,9 @@ contractsRouter.patch("/:id/units/:contractUnitId", requireRole("admin", "manage
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid contract unit payload." } });
 
   const beforeUnit = db.select().from(contractUnits).where(eq(contractUnits.id, contractUnitId)).get()!;
+  const nextUnit = { ...beforeUnit, ...parsed.data };
+  const unitErr = contractUnitError(contractId, beforeUnit.unitId, nextUnit.contractedAreaSqm, nextUnit.effectiveStart, nextUnit.effectiveEnd, contractUnitId);
+  if (unitErr) return res.status(409).json({ error: { code: "invalid_unit", message: unitErr } });
   const updated = db.update(contractUnits).set(parsed.data).where(eq(contractUnits.id, contractUnitId)).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "contract_unit_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), unit: unitName(contractUnitId), changes: changesBetween(beforeUnit, updated) } });
   res.json({ contractUnit: updated });
@@ -364,19 +392,19 @@ contractsRouter.delete("/:id/units/:contractUnitId", requireRole("admin", "manag
 const addPricingStreamSchema = z.object({
   feeType: z.enum(["rent", "management", "electricity_base", "water", "elevator", "other"]),
   targetType: z.enum(["unit", "group", "contract"]),
-  label: z.string().optional(),
-  contractUnitIds: z.array(z.number()),
+  label: z.string().trim().max(100).optional(),
+  contractUnitIds: z.array(z.number().int()),
   initialRate: z.object({
-    effectiveStart: z.string(),
-    effectiveEnd: z.string().optional(),
+    effectiveStart: isoDate,
+    effectiveEnd: isoDate.optional(),
     calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
     amountOrRate: decimalString,
     rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
     escalationBase: z.enum(["initial", "previous"]).optional(),
     escalationPercentage: decimalString.optional(),
-    escalationIntervalMonths: z.number().optional(),
-    unit: z.string().optional(),
-    linkedStreamId: z.number().optional(),
+    escalationIntervalMonths: z.number().int().min(1).max(120).optional(),
+    unit: z.string().trim().min(1).max(20).optional(),
+    linkedStreamId: z.number().int().optional(),
   }),
 });
 
@@ -395,8 +423,11 @@ contractsRouter.post("/:id/pricing-streams", requireRole("admin", "manager"), (r
     return res.status(400).json({ error: { code: "invalid_reference", message: `Contract unit ${invalidUnitId} does not belong to this contract.` } });
   }
 
-  const rateError = rateRuleError(initialRate, contractId, null);
+  const rateError = rateRuleError(initialRate, contractId, null) ?? rateShapeError(initialRate);
   if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
+  if (initialRate.rateBasis === "per_sqm_per_month" && contractUnitIds.length === 0) {
+    return res.status(400).json({ error: { code: "invalid_rate", message: MSG.perSqmNeedsUnits } });
+  }
 
   const stream = db.insert(pricingStreams).values({ contractId, ...streamFields }).returning().get();
   for (const contractUnitId of contractUnitIds) {
@@ -415,9 +446,9 @@ contractsRouter.post("/:id/pricing-streams", requireRole("admin", "manager"), (r
 const updatePricingStreamSchema = z.object({
   feeType: z.enum(["rent", "management", "electricity_base", "water", "elevator", "other"]).optional(),
   targetType: z.enum(["unit", "group", "contract"]).optional(),
-  label: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
-  contractUnitIds: z.array(z.number()).optional(),
+  label: z.string().trim().max(100).nullable().optional(),
+  notes: longText().nullable().optional(),
+  contractUnitIds: z.array(z.number().int()).optional(),
 });
 
 contractsRouter.patch("/:id/pricing-streams/:streamId", requireRole("admin", "manager"), (req, res) => {
@@ -439,6 +470,11 @@ contractsRouter.patch("/:id/pricing-streams/:streamId", requireRole("admin", "ma
     if (invalidUnitId !== undefined) {
       return res.status(400).json({ error: { code: "invalid_reference", message: `Contract unit ${invalidUnitId} does not belong to this contract.` } });
     }
+  }
+
+  if (contractUnitIds && contractUnitIds.length === 0) {
+    const needsArea = db.select().from(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).all().some((r) => r.rateBasis === "per_sqm_per_month");
+    if (needsArea) return invalid(res, MSG.perSqmNeedsUnits, "invalid_rate");
   }
 
   const beforeStream = db.select().from(pricingStreams).where(eq(pricingStreams.id, streamId)).get()!;
@@ -491,18 +527,22 @@ contractsRouter.delete("/:id/pricing-streams/:streamId", requireRole("admin", "m
 });
 
 const rateScheduleTierSchema = z.object({
-  effectiveStart: z.string(),
-  effectiveEnd: z.string().optional(),
+  effectiveStart: isoDate,
+  effectiveEnd: isoDate.optional(),
   calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
   amountOrRate: decimalString,
   rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
   escalationBase: z.enum(["initial", "previous"]).optional(),
   escalationPercentage: decimalString.optional(),
-  escalationIntervalMonths: z.number().optional(),
-  unit: z.string().optional(),
-  linkedStreamId: z.number().optional(),
-  notes: z.string().optional(),
+  escalationIntervalMonths: z.number().int().min(1).max(120).optional(),
+  unit: z.string().trim().min(1).max(20).optional(),
+  linkedStreamId: z.number().int().optional(),
+  notes: longText().optional(),
 });
+
+/** The other rates of the same item, for overlap checks. */
+const otherRates = (streamId: number) => db.select().from(rateSchedule).where(eq(rateSchedule.pricingStreamId, streamId)).all();
+const streamHasUnits = (streamId: number) => db.select().from(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, streamId)).all().length > 0;
 
 contractsRouter.post("/:id/pricing-streams/:streamId/rate-schedule", requireRole("admin", "manager"), (req, res) => {
   const contractId = Number(req.params.id);
@@ -517,8 +557,9 @@ contractsRouter.post("/:id/pricing-streams/:streamId/rate-schedule", requireRole
   const parsed = rateScheduleTierSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid rate schedule payload." } });
 
-  const rateError = rateRuleError(parsed.data, contractId, streamId);
+  const rateError = rateRuleError(parsed.data, contractId, streamId) ?? rateShapeError(parsed.data) ?? rateOverlapError(otherRates(streamId), parsed.data);
   if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
+  if (parsed.data.rateBasis === "per_sqm_per_month" && !streamHasUnits(streamId)) return invalid(res, MSG.perSqmNeedsUnits, "invalid_rate");
 
   const inserted = db.insert(rateSchedule).values({ pricingStreamId: streamId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "rate_schedule_tier_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(streamId), rate: rateFacts(inserted) } });
@@ -540,18 +581,20 @@ contractsRouter.patch("/:id/pricing-streams/:streamId/rate-schedule/:rateId", re
   // re-submits a previously-null value as null, not as "the field was
   // omitted", so those must accept null explicitly.
   const updateRateScheduleTierSchema = rateScheduleTierSchema.partial().extend({
-    effectiveEnd: z.string().nullable().optional(),
+    effectiveEnd: isoDate.nullable().optional(),
     escalationBase: z.enum(["initial", "previous"]).nullable().optional(),
     escalationPercentage: decimalString.nullable().optional(),
-    escalationIntervalMonths: z.number().nullable().optional(),
-    unit: z.string().nullable().optional(),
-    notes: z.string().nullable().optional(),
+    escalationIntervalMonths: z.number().int().min(1).max(120).nullable().optional(),
+    unit: z.string().trim().min(1).max(20).nullable().optional(),
+    notes: longText().nullable().optional(),
   });
   const parsed = updateRateScheduleTierSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid rate schedule payload." } });
 
   const existingRate = db.select().from(rateSchedule).where(eq(rateSchedule.id, rateId)).get()!;
-  const rateError = rateRuleError({ ...existingRate, ...parsed.data }, contractId, streamId);
+  const nextRate = { ...existingRate, ...parsed.data };
+  const rateError = rateRuleError(nextRate, contractId, streamId) ?? rateShapeError(nextRate) ?? rateOverlapError(otherRates(streamId), { ...nextRate, id: rateId });
+  if (nextRate.rateBasis === "per_sqm_per_month" && !streamHasUnits(streamId)) return invalid(res, MSG.perSqmNeedsUnits, "invalid_rate");
   if (rateError) return res.status(400).json({ error: { code: "invalid_rate", message: rateError } });
 
   const updated = db.update(rateSchedule).set(parsed.data).where(eq(rateSchedule.id, rateId)).returning().get();
@@ -577,11 +620,11 @@ contractsRouter.delete("/:id/pricing-streams/:streamId/rate-schedule/:rateId", r
 });
 
 const addConcessionSchema = z.object({
-  pricingStreamId: z.number().nullable(),
-  effectiveStart: z.string(),
-  effectiveEnd: z.string(),
-  discountPercentage: decimalString,
-  reason: z.string().optional(),
+  pricingStreamId: z.number().int().nullable(),
+  effectiveStart: isoDate,
+  effectiveEnd: isoDate,
+  discountPercentage: percentString,
+  reason: longText(500).optional(),
 });
 
 contractsRouter.post("/:id/concessions", requireRole("admin", "manager"), (req, res) => {
@@ -596,6 +639,9 @@ contractsRouter.post("/:id/concessions", requireRole("admin", "manager"), (req, 
     return res.status(400).json({ error: { code: "invalid_reference", message: "Pricing stream does not belong to this contract." } });
   }
 
+  const concessionErr = concessionError(parsed.data);
+  if (concessionErr) return invalid(res, concessionErr);
+
   const inserted = db.insert(concessions).values({ contractId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "concession_added", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(inserted.pricingStreamId) ?? "ALL", discountPercentage: inserted.discountPercentage, effectiveStart: inserted.effectiveStart, effectiveEnd: inserted.effectiveEnd, reason: inserted.reason } });
   res.status(201).json({ concession: inserted });
@@ -609,7 +655,7 @@ function concessionBelongsToContract(concessionId: number, contractId: number): 
 // .partial() alone isn't enough for reason: an edit form re-submits a
 // previously-null value as null, not as "the field was omitted", so it must
 // accept null explicitly rather than only "string or absent".
-const updateConcessionSchema = addConcessionSchema.partial().extend({ reason: z.string().nullable().optional() });
+const updateConcessionSchema = addConcessionSchema.partial().extend({ reason: longText(500).nullable().optional() });
 
 contractsRouter.patch("/:id/concessions/:concessionId", requireRole("admin", "manager"), (req, res) => {
   const contractId = Number(req.params.id);
@@ -628,6 +674,8 @@ contractsRouter.patch("/:id/concessions/:concessionId", requireRole("admin", "ma
   }
 
   const beforeConcession = db.select().from(concessions).where(eq(concessions.id, concessionId)).get()!;
+  const concessionErr = concessionError({ ...beforeConcession, ...parsed.data });
+  if (concessionErr) return invalid(res, concessionErr);
   const updated = db.update(concessions).set(parsed.data).where(eq(concessions.id, concessionId)).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "concession_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(updated.pricingStreamId) ?? "ALL", changes: changesBetween({ ...beforeConcession, pricingStreamId: streamName(beforeConcession.pricingStreamId) ?? "ALL" }, { ...updated, pricingStreamId: streamName(updated.pricingStreamId) ?? "ALL" }) } });
   res.json({ concession: updated });
@@ -650,13 +698,13 @@ contractsRouter.delete("/:id/concessions/:concessionId", requireRole("admin", "m
 });
 
 const depositTermsSchema = z.object({
-  effectiveStart: z.string(),
+  effectiveStart: isoDate,
   requirementType: z.enum(["fixed", "formula"]),
-  fixedAmountFen: z.number().optional(),
-  formulaBasis: z.string().optional(),
-  waiverConditionText: z.string().optional(),
-  dueDate: z.string().optional(),
-  notes: z.string().optional(),
+  fixedAmountFen: fenAmount.optional(),
+  formulaBasis: longText(500).optional(),
+  waiverConditionText: longText(2000).optional(),
+  dueDate: isoDate.optional(),
+  notes: longText().optional(),
 });
 
 contractsRouter.post("/:id/deposit-terms", requireRole("admin", "manager"), (req, res) => {
@@ -667,6 +715,9 @@ contractsRouter.post("/:id/deposit-terms", requireRole("admin", "manager"), (req
 
   const parsed = depositTermsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid deposit terms payload." } });
+
+  const depositErr = depositTermError(parsed.data);
+  if (depositErr) return invalid(res, depositErr);
 
   const inserted = db.insert(depositTerms).values({ contractId, ...parsed.data }).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_set", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), requirementType: inserted.requirementType, fixedAmountFen: inserted.fixedAmountFen, formulaBasis: inserted.formulaBasis, effectiveStart: inserted.effectiveStart, dueDate: inserted.dueDate } });
@@ -685,13 +736,13 @@ function depositTermsBelongToContract(depositTermId: number, contractId: number)
 // form re-submits a previously-null value as null, not as "the field was
 // omitted".
 const updateDepositTermsSchema = z.object({
-  effectiveStart: z.string().optional(),
+  effectiveStart: isoDate.optional(),
   requirementType: z.enum(["fixed", "formula"]).optional(),
-  fixedAmountFen: z.number().nullable().optional(),
-  formulaBasis: z.string().nullable().optional(),
-  waiverConditionText: z.string().nullable().optional(),
-  dueDate: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
+  fixedAmountFen: fenAmount.nullable().optional(),
+  formulaBasis: longText(500).nullable().optional(),
+  waiverConditionText: longText(2000).nullable().optional(),
+  dueDate: isoDate.nullable().optional(),
+  notes: longText().nullable().optional(),
 });
 
 contractsRouter.patch("/:id/deposit-terms/:depositTermId", requireRole("admin", "manager"), (req, res) => {
@@ -708,6 +759,8 @@ contractsRouter.patch("/:id/deposit-terms/:depositTermId", requireRole("admin", 
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid deposit terms payload." } });
 
   const beforeTerms = db.select().from(depositTerms).where(eq(depositTerms.id, depositTermId)).get()!;
+  const depositErr = depositTermError({ ...beforeTerms, ...parsed.data });
+  if (depositErr) return invalid(res, depositErr);
   const updated = db.update(depositTerms).set(parsed.data).where(eq(depositTerms.id, depositTermId)).returning().get();
   recordAudit({ actorUserId: req.user!.id, action: "deposit_terms_updated", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), changes: changesBetween(beforeTerms, updated) } });
   res.json({ depositTerms: updated });
@@ -733,8 +786,8 @@ contractsRouter.delete("/:id/deposit-terms/:depositTermId", requireRole("admin",
  * data is recorded explicitly, with reason/evidence, per brief §6. */
 const waiverDecisionSchema = z.object({
   waiverMet: z.boolean(),
-  waiverEvidenceDocumentId: z.number().optional(),
-  notes: z.string().optional(),
+  waiverEvidenceDocumentId: z.number().int().optional(),
+  notes: longText(2000).optional(),
 });
 
 contractsRouter.patch("/deposit-terms/:depositTermId/waiver-decision", requireRole("admin"), (req, res) => {
@@ -759,9 +812,9 @@ contractsRouter.patch("/deposit-terms/:depositTermId/waiver-decision", requireRo
 
 const billingRulesSchema = z.object({
   billingFrequency: z.enum(["monthly", "quarterly", "yearly"]).optional(),
-  periodAnchorDay: z.number().optional(),
+  periodAnchorDay: z.number().int().min(1).max(28).optional(),
   dueDay: z.number().int().min(1).max(31).optional(),
-  dueMonthOffset: z.number().optional(),
+  dueMonthOffset: z.number().int().min(-12).max(12).optional(),
   overdueGraceDays: z.number().int().min(0).max(60).optional(),
 });
 
@@ -782,8 +835,8 @@ contractsRouter.patch("/:id/billing-rules", requireRole("admin", "manager"), (re
 
 const latePenaltySchema = z.object({
   latePenaltyEnabled: z.boolean(),
-  latePenaltyDailyRatePermille: decimalString.optional(),
-  latePenaltyCapFen: z.number().optional(),
+  latePenaltyDailyRatePermille: decimalString.refine((v) => Number(v) <= 100, "Can't be more than 100 per mille a day.").optional(),
+  latePenaltyCapFen: fenAmount.optional(),
 });
 
 contractsRouter.patch("/:id/late-penalty-rules", requireRole("admin", "manager"), (req, res) => {
@@ -816,10 +869,18 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
   const signedLease = db
     .select()
     .from(documentsTable)
+    .where(and(eq(documentsTable.ownerType, "contract"), eq(documentsTable.ownerId, id)))
     .all()
-    .find((d) => d.ownerType === "contract" && d.ownerId === id && d.docType === "signed_lease" && !d.voided);
+    .find((d) => d.docType === "signed_lease" && !d.voided);
   if (!signedLease) {
     return res.status(409).json({ error: { code: "missing_signed_lease", message: "A signed main lease document is required before activation." } });
+  }
+
+  const problems = activationProblems(id);
+  if (problems.length > 0) {
+    return res.status(409).json({
+      error: { code: "activation_blocked", message: "This contract can't be activated yet. Fix the items listed and try again.", details: { problems } },
+    });
   }
 
   // All-or-nothing: a failure part-way must not leave an activated contract
@@ -874,7 +935,7 @@ contractsRouter.post("/:id/generate-charges", requireRole("admin", "manager"), (
     });
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: { code: "generation_failed", message: String(err) } });
+    res.status(400).json({ error: { code: "generation_failed", message: err instanceof Error ? err.message : String(err) } });
   }
 });
 
@@ -906,9 +967,13 @@ contractsRouter.get("/:id/statement", (req, res) => {
 });
 
 contractsRouter.get("/:id/escalation-preview/:rateScheduleId", (req, res) => {
+  const contractId = Number(req.params.id);
   const rateId = Number(req.params.rateScheduleId);
+  if (!canAccessContract(req.user!, contractId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+  }
   const rate = db.select().from(rateSchedule).where(eq(rateSchedule.id, rateId)).get();
-  if (!rate) return res.status(404).json({ error: { code: "not_found", message: "Rate schedule not found." } });
+  if (!rate || !pricingStreamBelongsToContract(rate.pricingStreamId, contractId)) return res.status(404).json({ error: { code: "not_found", message: "Rate schedule not found." } });
   const tiers = previewEscalationTiers(
     {
       id: rate.id,

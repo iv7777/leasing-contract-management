@@ -231,6 +231,35 @@ restart_service() {
   fi
 }
 
+# Browser-side protections for the web pages themselves (the API sets its own): no
+# framing, no content sniffing, no referrer leaks. Kept in a snippet that the site
+# includes, so an existing site (with its Let's Encrypt settings) only needs the one
+# include line added, and every update refreshes the headers.
+ensure_web_security_headers() {
+  [ -f "$NGINX_SITE" ] || return 0
+  mkdir -p /etc/nginx/snippets
+  cat > /etc/nginx/snippets/lcm-security-headers.conf <<'EOF'
+add_header X-Frame-Options "DENY" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "same-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+add_header Content-Security-Policy "frame-ancestors 'none'" always;
+add_header Strict-Transport-Security "max-age=15552000" always;
+EOF
+  if ! grep -q "lcm-security-headers.conf" "$NGINX_SITE"; then
+    # Put the include next to every "root" line, so each server block that serves
+    # the pages (certbot adds the HTTPS one) has it.
+    sed -i 's#^\(\s*\)root \(.*\);#\1root \2;\n\1include /etc/nginx/snippets/lcm-security-headers.conf;#' "$NGINX_SITE"
+  fi
+  if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx || true
+  else
+    warn "Nginx rejected the security-header settings; leaving them out. Run 'nginx -t' to see why."
+    sed -i '\#lcm-security-headers.conf#d' "$NGINX_SITE"
+    nginx -t >/dev/null 2>&1 && systemctl reload nginx || true
+  fi
+}
+
 sync_letsencrypt_contact_email() {
   # Cert issuance itself is skipped once TLS is configured, but the renewal
   # contact email is a cheap, idempotent account-level update.
@@ -490,6 +519,7 @@ action_check_update() {
   fetch_code
   build_app
   run_migrations_and_seed
+  ensure_web_security_headers
   restart_service
   ensure_command_link
   log "Update complete — now on version $(app_version)."

@@ -295,3 +295,33 @@ test("a metered price and its service fee that start mid-month bill nothing for 
   assert.equal(nov.lines.find((l) => l.pricingStreamId === 10)!.amountFen, 50_000);
   assert.equal(nov.lines.find((l) => l.pricingStreamId === 11)!.amountFen, 5_000);
 });
+
+test("billing stops on the contract's last day: a contract ending on the 10th pays 10 days of that month", () => {
+  const input = baseInput({
+    billingStart: "2027-01-15",
+    billingEnd: "2028-03-10",
+    contractUnits: [{ id: 1, effectiveStart: "2027-01-15", effectiveEnd: null, contractedAreaSqm: "100" }],
+    pricingStreams: [{ id: 10, feeType: "rent", targetType: "unit" }],
+    pricingStreamUnits: [{ pricingStreamId: 10, contractUnitId: 1 }],
+    rateSchedule: [
+      { id: 100, pricingStreamId: 10, effectiveStart: "2027-01-15", effectiveEnd: null, calculationMethod: "per_sqm", amountOrRate: "10", rateBasis: "per_sqm_per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
+    ],
+  });
+  const last = generateChargeLines(input, "2028-03-01", "2028-03-31").lines[0];
+  assert.equal(last.amountFen, Math.round((1000 * 10) / 31 * 100)); // 10 of 31 days
+  assert.equal(generateChargeLines(input, "2028-04-01", "2028-04-30").lines.length, 0);
+  assert.equal(generateChargeLines(input, "2026-12-01", "2026-12-31").lines.length, 0);
+  assert.equal(generateChargeLines(input, "2027-02-01", "2027-02-28").lines[0].amountFen, 100_000);
+});
+
+test("an earlier termination date caps billing mid-month and drops later months", () => {
+  const input = baseInput({
+    billingEnd: "2026-11-30",
+    pricingStreams: [{ id: 10, feeType: "management", targetType: "contract" }],
+    rateSchedule: [
+      { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "flat", amountOrRate: "3000", rateBasis: "per_month", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: null },
+    ],
+  });
+  assert.equal(generateChargeLines(input, "2026-11-01", "2026-11-30").lines[0].amountFen, 300_000);
+  assert.equal(generateChargeLines(input, "2026-12-01", "2026-12-31").lines.length, 0);
+});

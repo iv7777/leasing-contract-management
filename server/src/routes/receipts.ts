@@ -3,6 +3,8 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { receipts, receiptAllocations, charges, billingRules } from "../db/schema.js";
+import { isoDate, positiveFen } from "../lib/validate.js";
+import { DUPLICATE_PAYMENT_REFERENCE, paymentReferenceUsed } from "../lib/receiptRules.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
@@ -60,11 +62,11 @@ receiptsRouter.get("/contracts/:contractId/ledger", (req, res) => {
 // ---------------------------------------------------------------------------
 
 const createReceiptSchema = z.object({
-  receivedDate: z.string(),
-  amountFen: z.number().positive(),
-  paymentMethod: z.string().min(1),
-  externalReference: z.string().optional(),
-  evidenceDocumentId: z.number().optional(),
+  receivedDate: isoDate,
+  amountFen: positiveFen,
+  paymentMethod: z.string().trim().min(1).max(50),
+  externalReference: z.string().trim().max(100).optional(),
+  evidenceDocumentId: z.number().int().optional(),
 });
 
 receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "manager", "collector"), (req, res) => {
@@ -74,6 +76,13 @@ receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "man
 
   const parsed = createReceiptSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid receipt payload." } });
+
+  if (parsed.data.receivedDate > todayInChina()) {
+    return res.status(400).json({ error: { code: "future_date", message: "The received date can't be in the future." } });
+  }
+  if (paymentReferenceUsed(contractId, parsed.data.externalReference)) {
+    return res.status(409).json({ error: { code: "duplicate_reference", message: DUPLICATE_PAYMENT_REFERENCE } });
+  }
 
   const inserted = db
     .insert(receipts)
@@ -89,7 +98,7 @@ receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "man
 // Allocating a receipt to a charge
 // ---------------------------------------------------------------------------
 
-const allocateSchema = z.object({ chargeId: z.number(), amountFen: z.number().positive() });
+const allocateSchema = z.object({ chargeId: z.number().int(), amountFen: positiveFen });
 
 receiptsRouter.post("/receipts/:id/allocate", requireRole("admin", "manager", "collector"), (req, res) => {
   const receiptId = Number(req.params.id);

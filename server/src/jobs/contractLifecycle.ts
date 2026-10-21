@@ -46,7 +46,9 @@ export function runContractLifecycle(today = todayInChina()): LifecycleResult {
     if (!next || next === "active") continue;
     const contract = db.select().from(contracts).where(eq(contracts.id, a.contractId)).get();
     if (!contract || contract.status !== "active") continue;
-    db.update(contracts).set({ status: next, updatedAt: new Date().toISOString() }).where(eq(contracts.id, contract.id)).run();
+    // An early termination ends the contract on its effective date; that date becomes its end.
+    const termEnd = next === "terminated" && a.effectiveDate < contract.termEnd ? a.effectiveDate : contract.termEnd;
+    db.update(contracts).set({ status: next, termEnd, updatedAt: new Date().toISOString() }).where(eq(contracts.id, contract.id)).run();
     recordAudit({
       actorUserId: null,
       action: next === "terminated" ? "contract_terminated" : "contract_status_changed",

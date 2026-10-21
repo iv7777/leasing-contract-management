@@ -57,6 +57,10 @@ export interface UsageEntryInput {
 }
 
 export interface ChargeEngineInput {
+  /** First and last day anything may be billed (the contract's start, and its end —
+   * or an earlier approved termination date). Unset means unbounded. */
+  billingStart?: IsoDate | null;
+  billingEnd?: IsoDate | null;
   contractUnits: ContractUnitInput[];
   pricingStreams: PricingStreamInput[];
   pricingStreamUnits: PricingStreamUnitInput[];

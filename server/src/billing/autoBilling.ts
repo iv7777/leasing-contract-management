@@ -52,7 +52,7 @@ export function planBilling(ctx: ChargeContext, cutoff: IsoDate, today: IsoDate 
   const planned: PlannedCharge[] = [];
   const missing: MissingReading[] = [];
 
-  for (const period of periodsToConsider(ctx.contract.termStart, ctx.contract.termEnd, ctx.input.billingRules, cutoff)) {
+  for (const period of periodsToConsider(ctx.contract.termStart, ctx.billingEnd, ctx.input.billingRules, cutoff)) {
     const result = generateChargeLines(ctx.input, period.periodStart, period.periodEnd);
 
     for (const line of result.lines) {

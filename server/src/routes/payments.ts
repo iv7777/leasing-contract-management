@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { receipts, receiptAllocations } from "../db/schema.js";
+import { isoDate, positiveFen } from "../lib/validate.js";
+import { DUPLICATE_PAYMENT_REFERENCE, paymentReferenceUsed } from "../lib/receiptRules.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
@@ -23,12 +25,12 @@ const WRITERS = ["admin", "manager", "collector"] as const;
 
 class PaymentError extends Error {}
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
 const paymentSchema = z.object({
   receivedDate: isoDate,
-  amountFen: z.number().int().positive(),
-  paymentMethod: z.string().trim().min(1),
-  externalReference: z.string().trim().optional(),
+  amountFen: positiveFen,
+  paymentMethod: z.string().trim().min(1).max(50),
+  externalReference: z.string().trim().max(100).optional(),
 });
 
 function openChargesFor(contractId: number, asOf: string): { open: OpenCharge[]; info: Map<number, { feeType: string; serviceStart: string; serviceEnd: string; dueDate: string; balanceFen: number }> } {
@@ -58,9 +60,10 @@ function postPayment(
   p: Payment,
   allocations: { chargeId: number; amountFen: number }[],
 ) {
+  if (paymentReferenceUsed(contractId, p.externalReference)) throw new PaymentError(DUPLICATE_PAYMENT_REFERENCE);
   const receipt = tx
     .insert(receipts)
-    .values({ contractId, recordedBy: userId, receivedDate: p.receivedDate, amountFen: p.amountFen, paymentMethod: p.paymentMethod, externalReference: p.externalReference || null })
+    .values({ contractId, recordedBy: userId, receivedDate: p.receivedDate, amountFen: p.amountFen, paymentMethod: p.paymentMethod, externalReference: p.externalReference?.trim() || null })
     .returning()
     .get();
   recordAudit({ actorUserId: userId, action: "receipt_recorded", entityType: "receipt", entityId: receipt.id, details: { contract: contractRef(contractId), amountFen: receipt.amountFen, receivedDate: receipt.receivedDate, paymentMethod: receipt.paymentMethod } });
@@ -98,7 +101,7 @@ function guard(req: import("express").Request, res: import("express").Response, 
 paymentsRouter.post("/contracts/:id/payments/preview", requireRole(...WRITERS), (req, res) => {
   const contractId = Number(req.params.id);
   if (!guard(req, res, contractId)) return;
-  const parsed = z.object({ amountFen: z.number().int().positive() }).safeParse(req.body);
+  const parsed = z.object({ amountFen: positiveFen }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Enter a payment amount." } });
 
   const { open, info } = openChargesFor(contractId, todayInChina());

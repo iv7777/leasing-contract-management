@@ -5,13 +5,14 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { documents, units, users } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { documents, units, users, contracts, properties, parties } from "../db/schema.js";
+import { and, eq } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
 import { changesBetween, ownerLabel } from "../lib/auditDetail.js";
 import { canAccessContract } from "../lib/contractScope.js";
 import { citedDocumentIds, contractStatusOf } from "../lib/documentRules.js";
+import { inspectUpload, isInlineMime } from "../lib/uploadRules.js";
 
 export const documentsRouter = Router();
 documentsRouter.use(requireAuth);
@@ -51,10 +52,27 @@ function ownerAccessDenied(req: import("express").Request, res: import("express"
   return false;
 }
 
+function ownerExists(ownerType: string, ownerId: number): boolean {
+  switch (ownerType) {
+    case "contract":
+      return !!db.select({ id: contracts.id }).from(contracts).where(eq(contracts.id, ownerId)).get();
+    case "property":
+      return !!db.select({ id: properties.id }).from(properties).where(eq(properties.id, ownerId)).get();
+    case "unit":
+      return !!db.select({ id: units.id }).from(units).where(eq(units.id, ownerId)).get();
+    case "party":
+      return !!db.select({ id: parties.id }).from(parties).where(eq(parties.id, ownerId)).get();
+    default:
+      return false;
+  }
+}
+
+const CONTRACT_DOC_TYPES = ["signed_lease", "signed_supplement", "other"];
+
 const uploadMetaSchema = z.object({
   ownerType: z.enum(["property", "unit", "party", "contract"]),
-  ownerId: z.coerce.number(),
-  docType: z.string().min(1),
+  ownerId: z.coerce.number().int().positive(),
+  docType: z.string().trim().min(1).max(100),
   name: z.string().trim().max(100).optional(),
   classification: z.enum(["ordinary", "sensitive"]),
 });
@@ -67,6 +85,13 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
   const { ownerType, ownerId, docType, classification } = parsed.data;
   const name = parsed.data.name || null;
 
+  if (!ownerExists(ownerType, ownerId)) return res.status(404).json({ error: { code: "not_found", message: "The record this document belongs to was not found." } });
+  if (ownerType === "contract" && !CONTRACT_DOC_TYPES.includes(docType)) {
+    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document type." } });
+  }
+  const inspected = inspectUpload(req.file.originalname, req.file.buffer);
+  if (!inspected.ok) return res.status(400).json({ error: { code: "invalid_file", message: inspected.message } });
+
   if (ownerAccessDenied(req, res, ownerType, ownerId)) return;
   const propertyId = ownerPropertyId(ownerType, ownerId);
   if (propertyId === null && req.user!.role !== "admin" && req.user!.role !== "manager") {
@@ -74,7 +99,7 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
   }
 
   const checksum = crypto.createHash("sha256").update(req.file.buffer).digest("hex");
-  const storedName = `${crypto.randomUUID()}${path.extname(req.file.originalname)}`;
+  const storedName = `${crypto.randomUUID()}${inspected.extension}`;
   const ownerDir = path.join(STORAGE_DIR, ownerType, String(ownerId));
   fs.mkdirSync(ownerDir, { recursive: true });
   const filePath = path.join(ownerDir, storedName);
@@ -89,7 +114,7 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
       name,
       classification,
       filePath,
-      mimeType: req.file.mimetype,
+      mimeType: inspected.mime,
       sizeBytes: req.file.size,
       checksumSha256: checksum,
       uploadedBy: req.user!.id,
@@ -122,8 +147,8 @@ documentsRouter.get("/", (req, res) => {
   const rows = db
     .select()
     .from(documents)
+    .where(and(eq(documents.ownerType, ownerType as "contract"), eq(documents.ownerId, ownerId)))
     .all()
-    .filter((d) => d.ownerType === ownerType && d.ownerId === ownerId)
     // Voided documents (withdrawn by an approved amendment) stay on record but out of the way.
     .filter((d) => includeVoided || !d.voided)
     // Sensitive originals never appear in a general listing for non-admins.
@@ -151,13 +176,19 @@ documentsRouter.get("/:id/download", (req, res) => {
   }
 
   recordAudit({ actorUserId: req.user!.id, action: "document_downloaded", entityType: "document", entityId: id, details: { document: doc.name ?? doc.docType, owner: ownerLabel(doc.ownerType, doc.ownerId) } });
-  res.setHeader("Content-Type", doc.mimeType);
+  // The stored type decides how the browser treats the file: scans and PDFs may be
+  // shown, everything else is downloaded, and nothing is ever run as a page.
+  const inline = isInlineMime(doc.mimeType);
+  res.setHeader("Content-Type", inline ? doc.mimeType : "application/octet-stream");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+  if (!inline) res.setHeader("Content-Disposition", "attachment");
   res.sendFile(path.resolve(doc.filePath));
 });
 
 const updateDocumentSchema = z.object({
   name: z.string().trim().max(100).nullable().optional(),
-  docType: z.string().min(1).optional(),
+  docType: z.string().trim().min(1).max(100).optional(),
   classification: z.enum(["ordinary", "sensitive"]).optional(),
 });
 
@@ -170,6 +201,9 @@ documentsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
   const parsed = updateDocumentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document payload." } });
   const changes = { ...parsed.data, ...(parsed.data.name !== undefined ? { name: parsed.data.name || null } : {}) };
+  if (doc.ownerType === "contract" && changes.docType !== undefined && !CONTRACT_DOC_TYPES.includes(changes.docType)) {
+    return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document type." } });
+  }
 
   // The name is a plain label: anyone allowed to edit documents may change it,
   // whatever the contract's or the amendment's status.
@@ -211,6 +245,10 @@ documentsRouter.delete("/:id", requireRole("admin", "manager"), (req, res) => {
   if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
   if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
 
+  // A sensitive document is Admin-only to open, so it is Admin-only to remove too.
+  if (doc.classification === "sensitive" && req.user!.role !== "admin") {
+    return res.status(403).json({ error: { code: "forbidden", message: "This document is restricted to Admin." } });
+  }
   if (doc.ownerType === "contract") {
     // The paperwork of a contract in force is a legal record: nobody deletes it
     // directly. It is withdrawn through an approved amendment, which voids the

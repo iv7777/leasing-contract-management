@@ -36,7 +36,18 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
+app.use((req, res, next) => {
+  // Browsers must not sniff, frame or cache what the API returns.
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") res.setHeader("Strict-Transport-Security", "max-age=15552000");
+  if (req.path.startsWith("/api/")) res.setHeader("Cache-Control", "no-store");
+  next();
+});
+app.use(express.json({ limit: "2mb" }));
 app.use(
   session({
     name: "lcm.sid",
@@ -73,7 +84,24 @@ app.use("/api/system-info", systemInfoRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/backups", backupsRouter);
 
+// Anything under /api that no route handled.
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: { code: "not_found", message: "Not found." } });
+});
+
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const e = err as { type?: string; status?: number; code?: string } | null;
+  // The caller's mistakes are the caller's to fix: report them plainly instead of as a server fault.
+  if (e?.type === "entity.parse.failed") return res.status(400).json({ error: { code: "invalid_json", message: "The request could not be read." } });
+  if (e?.type === "entity.too.large") return res.status(413).json({ error: { code: "too_large", message: "The request is too large." } });
+  if (e?.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: { code: "file_too_large", message: "That file is too large. The limit is 50 MB." } });
+  if (typeof e?.code === "string" && e.code.startsWith("LIMIT_")) return res.status(400).json({ error: { code: "invalid_upload", message: "Invalid document upload payload." } });
+  if (e?.code === "SQLITE_CONSTRAINT_UNIQUE" || e?.code === "SQLITE_CONSTRAINT_PRIMARYKEY") {
+    return res.status(409).json({ error: { code: "already_exists", message: "That already exists." } });
+  }
+  if (e?.code === "SQLITE_CONSTRAINT_FOREIGNKEY") {
+    return res.status(400).json({ error: { code: "invalid_reference", message: "A record this refers to does not exist." } });
+  }
   console.error(err);
   res.status(500).json({ error: { code: "internal_error", message: "Unexpected server error." } });
 });

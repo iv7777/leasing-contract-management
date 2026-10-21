@@ -13,6 +13,7 @@ import {
   depositTerms,
   chargeAdjustments,
   documents,
+  billingRules,
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
@@ -27,52 +28,53 @@ import { recordAudit } from "../lib/audit.js";
 import { amendmentFacts, contractRef } from "../lib/auditDetail.js";
 import { rateRuleError } from "../lib/rateRules.js";
 import { citedDocumentIds, liveSignedLeaseIds } from "../lib/documentRules.js";
+import { isoDate, fenAmount, longText, decimalString, percentString } from "../lib/validate.js";
+import { MSG, dateOrderError, rateShapeError, rateOverlapError, concessionError, depositTermError, contractUnitError } from "../lib/contractRules.js";
 import { todayInChina } from "@lcm/shared";
 
 export const amendmentsRouter = Router();
 amendmentsRouter.use(requireAuth);
 
-const decimalString = z.string().regex(/^\d+(\.\d+)?$/);
 
 const changesSchema = z.object({
   contract: z
     .object({
-      termEnd: z.string().optional(),
-      renewalNoticeDays: z.number().optional(),
-      specialTerms: z.string().optional(),
+      termEnd: isoDate.optional(),
+      renewalNoticeDays: z.number().int().min(0).max(365).optional(),
+      specialTerms: longText(20000).optional(),
       status: z.enum(["active", "expired", "terminated"]).optional(),
     })
     .optional(),
   addUnits: z
     .array(
       z.object({
-        unitId: z.number(),
-        effectiveStart: z.string(),
-        effectiveEnd: z.string().optional(),
+        unitId: z.number().int(),
+        effectiveStart: isoDate,
+        effectiveEnd: isoDate.optional(),
         contractedAreaSqm: decimalString,
-        notes: z.string().optional(),
+        notes: longText().optional(),
       }),
     )
     .optional(),
-  endUnits: z.array(z.object({ contractUnitId: z.number(), effectiveEnd: z.string() })).optional(),
+  endUnits: z.array(z.object({ contractUnitId: z.number().int(), effectiveEnd: isoDate })).optional(),
   addPricingStreams: z
     .array(
       z.object({
         feeType: z.enum(["rent", "management", "electricity_base", "water", "elevator", "other"]),
         targetType: z.enum(["unit", "group", "contract"]),
-        label: z.string().optional(),
-        contractUnitIds: z.array(z.number()),
+        label: z.string().trim().max(100).optional(),
+        contractUnitIds: z.array(z.number().int()),
         initialRate: z.object({
-          effectiveStart: z.string(),
-          effectiveEnd: z.string().optional(),
+          effectiveStart: isoDate,
+          effectiveEnd: isoDate.optional(),
           calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
           amountOrRate: decimalString,
           rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
           escalationBase: z.enum(["initial", "previous"]).optional(),
           escalationPercentage: decimalString.optional(),
-          escalationIntervalMonths: z.number().optional(),
-          unit: z.string().optional(),
-          linkedStreamId: z.number().optional(),
+          escalationIntervalMonths: z.number().int().min(1).max(120).optional(),
+          unit: z.string().trim().min(1).max(20).optional(),
+          linkedStreamId: z.number().int().optional(),
         }),
       }),
     )
@@ -80,60 +82,75 @@ const changesSchema = z.object({
   addRateSchedule: z
     .array(
       z.object({
-        pricingStreamId: z.number(),
-        closePreviousRateScheduleId: z.number().optional(),
-        effectiveStart: z.string(),
-        effectiveEnd: z.string().optional(),
+        pricingStreamId: z.number().int(),
+        closePreviousRateScheduleId: z.number().int().optional(),
+        effectiveStart: isoDate,
+        effectiveEnd: isoDate.optional(),
         calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
         amountOrRate: decimalString,
         rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
         escalationBase: z.enum(["initial", "previous"]).optional(),
         escalationPercentage: decimalString.optional(),
-        escalationIntervalMonths: z.number().optional(),
-        unit: z.string().optional(),
-        linkedStreamId: z.number().optional(),
+        escalationIntervalMonths: z.number().int().min(1).max(120).optional(),
+        unit: z.string().trim().min(1).max(20).optional(),
+        linkedStreamId: z.number().int().optional(),
       }),
     )
     .optional(),
   addConcessions: z
     .array(
       z.object({
-        pricingStreamId: z.number().nullable(),
-        effectiveStart: z.string(),
-        effectiveEnd: z.string(),
-        discountPercentage: decimalString,
-        reason: z.string().optional(),
+        pricingStreamId: z.number().int().nullable(),
+        effectiveStart: isoDate,
+        effectiveEnd: isoDate,
+        discountPercentage: percentString,
+        reason: longText(500).optional(),
       }),
     )
     .optional(),
   addDepositTerms: z
     .array(
       z.object({
-        effectiveStart: z.string(),
+        effectiveStart: isoDate,
         requirementType: z.enum(["fixed", "formula"]),
-        fixedAmountFen: z.number().optional(),
-        formulaBasis: z.string().optional(),
-        waiverConditionText: z.string().optional(),
-        dueDate: z.string().optional(),
-        notes: z.string().optional(),
+        fixedAmountFen: fenAmount.optional(),
+        formulaBasis: longText(500).optional(),
+        waiverConditionText: longText(2000).optional(),
+        dueDate: isoDate.optional(),
+        notes: longText().optional(),
       }),
     )
     .optional(),
   retroactiveAdjustments: z
-    .array(z.object({ chargeId: z.number(), amountFen: z.number(), reason: z.string() }))
+    .array(z.object({ chargeId: z.number().int(), amountFen: z.number().int().min(-1_000_000_000_000).max(1_000_000_000_000), reason: z.string().min(1).max(500) }))
+    .optional(),
+  // Due-date and late-fee rules can be changed on a live contract too, by amendment.
+  billingRules: z
+    .object({
+      dueDay: z.number().int().min(1).max(31).optional(),
+      dueMonthOffset: z.number().int().min(-12).max(12).optional(),
+      overdueGraceDays: z.number().int().min(0).max(60).optional(),
+    })
+    .optional(),
+  latePenaltyRules: z
+    .object({
+      latePenaltyEnabled: z.boolean(),
+      latePenaltyDailyRatePermille: decimalString.refine((v) => Number(v) <= 100, "Can't be more than 100 per mille a day.").optional(),
+      latePenaltyCapFen: fenAmount.optional(),
+    })
     .optional(),
   // Withdraws documents from the contract's record: an approved amendment marks
   // each one voided (the file is kept). The only way to remove a document once
   // the contract has left draft.
-  voidDocuments: z.array(z.number()).optional(),
+  voidDocuments: z.array(z.number().int()).optional(),
 });
 
 const createAmendmentSchema = z.object({
-  type: z.string().min(1),
-  reason: z.string().min(1),
-  effectiveDate: z.string(),
+  type: z.enum(["rate_change", "add_unit", "add_pricing_stream", "terminate", "void_document", "internal_correction", "billing_rules", "rent_change"]),
+  reason: z.string().trim().min(1).max(1000),
+  effectiveDate: isoDate,
   changes: changesSchema,
-  supportingDocumentId: z.number().optional(),
+  supportingDocumentId: z.number().int().optional(),
 });
 
 const DRAFT_AMENDMENT_MESSAGE = "A draft contract is edited directly. Amendments are for changing a contract after it has been activated.";
@@ -197,6 +214,9 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
   if (rejectIfDraft(res, contractId, DRAFT_AMENDMENT_MESSAGE)) return;
 
   const parsed = createAmendmentSchema.safeParse(req.body);
+  if (parsed.success && contract.status !== "active" && parsed.data.type !== "internal_correction") {
+    return res.status(409).json({ error: { code: "contract_ended", message: "This contract has ended. Only an internal correction can still be recorded on it." } });
+  }
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid amendment payload.", details: parsed.error.flatten() } });
   }
@@ -283,6 +303,7 @@ function inferAmendmentType(changesJson: string): string {
     if (Array.isArray(c.voidDocuments) && c.voidDocuments.length) return "void_document";
     if (Array.isArray(c.addUnits) && c.addUnits.length) return "add_unit";
     if (Array.isArray(c.addPricingStreams) && c.addPricingStreams.length) return "add_pricing_stream";
+    if (c.billingRules || c.latePenaltyRules) return "billing_rules";
   } catch {
     // fall through
   }
@@ -359,7 +380,9 @@ function applyApproval(req: import("express").Request, res: import("express").Re
       // job in jobs/contractLifecycle.ts applies it then.
       const { status: requestedStatus, ...termChanges } = changes.contract;
       const statusNow = requestedStatus !== undefined && amendment.effectiveDate <= todayInChina() ? { status: requestedStatus } : {};
-      const set = { ...termChanges, ...statusNow };
+      // An early termination ends the contract on its effective date, so that date becomes its end.
+      const endNow = (statusNow as { status?: string }).status === "terminated" && amendment.effectiveDate < (termChanges.termEnd ?? contract.termEnd) ? { termEnd: amendment.effectiveDate } : {};
+      const set = { ...termChanges, ...statusNow, ...endNow };
       if (Object.keys(set).length > 0) {
         tx.update(contracts).set({ ...set, updatedAt: new Date().toISOString() }).where(eq(contracts.id, contract.id)).run();
       }
@@ -391,6 +414,12 @@ function applyApproval(req: import("express").Request, res: import("express").Re
     }
     for (const d of changes.addDepositTerms ?? []) {
       tx.insert(depositTerms).values({ contractId: contract.id, ...d }).run();
+    }
+    if (changes.billingRules && Object.keys(changes.billingRules).length > 0) {
+      tx.update(billingRules).set(changes.billingRules).where(eq(billingRules.contractId, contract.id)).run();
+    }
+    if (changes.latePenaltyRules) {
+      tx.update(billingRules).set(changes.latePenaltyRules).where(eq(billingRules.contractId, contract.id)).run();
     }
     for (const docId of changes.voidDocuments ?? []) {
       tx.update(documents).set({ voided: true, voidedAt: new Date().toISOString(), voidedByAmendmentId: amendment.id }).where(eq(documents.id, docId)).run();
@@ -429,10 +458,22 @@ function applyApproval(req: import("express").Request, res: import("express").Re
  * transaction starts, so a bad reference rejects the whole approval rather
  * than partially applying it. */
 function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, contractId: number): string | null {
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (contract && changes.contract?.termEnd) {
+    const orderError = dateOrderError(contract.termStart, changes.contract.termEnd);
+    if (orderError) return orderError;
+  }
   for (const eu of changes.endUnits ?? []) {
     if (!contractUnitBelongsToContract(eu.contractUnitId, contractId)) {
       return `Contract unit ${eu.contractUnitId} does not belong to this contract.`;
     }
+    const cu = db.select().from(contractUnits).where(eq(contractUnits.id, eu.contractUnitId)).get();
+    const orderError = cu ? dateOrderError(cu.effectiveStart, eu.effectiveEnd) : null;
+    if (orderError) return orderError;
+  }
+  for (const u of changes.addUnits ?? []) {
+    const unitError = contractUnitError(contractId, u.unitId, u.contractedAreaSqm, u.effectiveStart, u.effectiveEnd);
+    if (unitError) return unitError;
   }
   for (const s of changes.addPricingStreams ?? []) {
     for (const cuId of s.contractUnitIds) {
@@ -440,8 +481,9 @@ function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, con
         return `Contract unit ${cuId} does not belong to this contract.`;
       }
     }
-    const rateError = rateRuleError(s.initialRate, contractId, null);
+    const rateError = rateRuleError(s.initialRate, contractId, null) ?? rateShapeError(s.initialRate);
     if (rateError) return rateError;
+    if (s.initialRate.rateBasis === "per_sqm_per_month" && s.contractUnitIds.length === 0) return MSG.perSqmNeedsUnits;
   }
   for (const r of changes.addRateSchedule ?? []) {
     if (!pricingStreamBelongsToContract(r.pricingStreamId, contractId)) {
@@ -450,13 +492,29 @@ function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, con
     if (r.closePreviousRateScheduleId && !rateScheduleBelongsToStream(r.closePreviousRateScheduleId, r.pricingStreamId)) {
       return `Rate schedule ${r.closePreviousRateScheduleId} does not belong to pricing stream ${r.pricingStreamId}.`;
     }
-    const rateError = rateRuleError(r, contractId, r.pricingStreamId);
+    const rateError = rateRuleError(r, contractId, r.pricingStreamId) ?? rateShapeError(r);
     if (rateError) return rateError;
+    const dayBefore = addDaysIso(r.effectiveStart, -1);
+    const others = db
+      .select()
+      .from(rateSchedule)
+      .where(eq(rateSchedule.pricingStreamId, r.pricingStreamId))
+      .all()
+      .map((o) => (o.id === r.closePreviousRateScheduleId ? { ...o, effectiveEnd: dayBefore } : o));
+    const overlapError = rateOverlapError(others, r);
+    if (overlapError) return overlapError;
+    if (r.rateBasis === "per_sqm_per_month" && !db.select().from(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, r.pricingStreamId)).get()) return MSG.perSqmNeedsUnits;
   }
   for (const c of changes.addConcessions ?? []) {
     if (c.pricingStreamId !== null && !pricingStreamBelongsToContract(c.pricingStreamId, contractId)) {
       return `Pricing stream ${c.pricingStreamId} does not belong to this contract.`;
     }
+    const concessionErr = concessionError(c);
+    if (concessionErr) return concessionErr;
+  }
+  for (const d of changes.addDepositTerms ?? []) {
+    const depositErr = depositTermError(d);
+    if (depositErr) return depositErr;
   }
   for (const adj of changes.retroactiveAdjustments ?? []) {
     if (!chargeBelongsToContract(adj.chargeId, contractId)) {

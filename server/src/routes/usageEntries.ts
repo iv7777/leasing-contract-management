@@ -10,7 +10,16 @@ import { recordAudit } from "../lib/audit.js";
 import { changesBetween, contractRef, streamName } from "../lib/auditDetail.js";
 import { Decimal, daysInMonth } from "@lcm/shared";
 
-const decimalString = z.string().regex(/^\d+(\.\d+)?$/, "Must be a decimal number");
+import { isoDate, decimalString } from "../lib/validate.js";
+
+const WHOLE_MONTH = "A meter reading covers one whole calendar month, from its first day to its last.";
+/** A reading is billed per calendar month, so its period must be exactly one. */
+function wholeMonthError(serviceStart: string, serviceEnd: string): string | null {
+  const [y, m] = serviceStart.split("-").map(Number);
+  const first = `${serviceStart.slice(0, 7)}-01`;
+  const last = `${serviceStart.slice(0, 7)}-${String(daysInMonth(y, m)).padStart(2, "0")}`;
+  return serviceStart === first && serviceEnd === last ? null : WHOLE_MONTH;
+}
 
 export const usageEntriesRouter = Router();
 usageEntriesRouter.use(requireAuth);
@@ -62,12 +71,12 @@ usageEntriesRouter.get("/contracts/:contractId/usage-entries", (req, res) => {
 });
 
 const addUsageEntrySchema = z.object({
-  pricingStreamId: z.number(),
-  serviceStart: z.string(),
-  serviceEnd: z.string(),
+  pricingStreamId: z.number().int(),
+  serviceStart: isoDate,
+  serviceEnd: isoDate,
   quantity: decimalString,
-  unit: z.string().min(1),
-  source: z.string().optional(),
+  unit: z.string().trim().min(1).max(20),
+  source: z.string().max(200).optional(),
 });
 
 usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("admin", "manager"), (req, res) => {
@@ -79,6 +88,8 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("adm
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid usage entry payload.", details: parsed.error.flatten() } });
 
   const { pricingStreamId, serviceStart, serviceEnd, source, ...rest } = parsed.data;
+  const periodError = wholeMonthError(serviceStart, serviceEnd);
+  if (periodError) return res.status(400).json({ error: { code: "invalid_period", message: periodError } });
   if (!pricingStreamBelongsToContract(pricingStreamId, contractId)) {
     return res.status(400).json({ error: { code: "invalid_reference", message: "Pricing stream does not belong to this contract." } });
   }
@@ -105,11 +116,11 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("adm
 });
 
 const updateUsageEntrySchema = z.object({
-  serviceStart: z.string().optional(),
-  serviceEnd: z.string().optional(),
+  serviceStart: isoDate.optional(),
+  serviceEnd: isoDate.optional(),
   quantity: decimalString.optional(),
-  unit: z.string().min(1).optional(),
-  source: z.string().nullable().optional(),
+  unit: z.string().trim().min(1).max(20).optional(),
+  source: z.string().max(200).nullable().optional(),
 });
 
 usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), (req, res) => {
@@ -127,6 +138,8 @@ usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), 
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid usage entry payload." } });
 
   const nextServiceStart = parsed.data.serviceStart ?? existing.serviceStart;
+  const periodError = wholeMonthError(nextServiceStart, parsed.data.serviceEnd ?? existing.serviceEnd);
+  if (periodError) return res.status(400).json({ error: { code: "invalid_period", message: periodError } });
   if (!streamIsMeteredAt(existing.pricingStreamId, nextServiceStart)) {
     return res.status(400).json({ error: { code: "not_metered", message: "This pricing stream is not on a metered rate at the given service start date." } });
   }

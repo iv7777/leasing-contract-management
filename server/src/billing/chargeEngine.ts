@@ -134,6 +134,14 @@ export function generateChargeLines(
   const [py, pm] = periodStart.split("-").map(Number);
   const monthLength = daysInMonth(py, pm);
 
+  // Nothing is billed outside the contract's life: a period that ends before it starts or
+  // starts after it ends bills nothing, and the day-prorated items are clamped to its first
+  // and last day (so a contract ending on the 10th pays 10 days of that month, not 31).
+  if (input.billingEnd && periodStart > input.billingEnd) return { lines: [], skippedMissingUsage: [], missingUsage: [] };
+  if (input.billingStart && periodEnd < input.billingStart) return { lines: [], skippedMissingUsage: [], missingUsage: [] };
+  const billedStart = input.billingStart && input.billingStart > periodStart ? input.billingStart : periodStart;
+  const billedEnd = input.billingEnd && input.billingEnd < periodEnd ? input.billingEnd : periodEnd;
+
   const dueDate = computeDueDate(periodStart, input.billingRules);
   const meteredDueDate = computeMeteredDueDate(periodStart, input.billingRules);
 
@@ -282,7 +290,7 @@ export function generateChargeLines(
       ...streamConcessions.map((c) => addDays(c.effectiveEnd, 1)),
     ];
 
-    const subperiods = splitPeriod(periodStart, periodEnd, boundaries);
+    const subperiods = splitPeriod(billedStart, billedEnd, boundaries);
     const snapshotSubs: ChargeLineSnapshotSubperiod[] = [];
     let total = new Decimal(0);
 

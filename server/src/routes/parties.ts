@@ -7,6 +7,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
 import { changesBetween } from "../lib/auditDetail.js";
 import { liveContractsForParty, describeRefs } from "../lib/archiveGuards.js";
+import { shortText, longText } from "../lib/validate.js";
 
 export const partiesRouter = Router();
 partiesRouter.use(requireAuth);
@@ -35,18 +36,23 @@ partiesRouter.get("/:id", (req, res) => {
 
 const createPartySchema = z.object({
   type: z.enum(["company", "individual"]),
-  name: z.string().min(1),
+  name: shortText(200),
   // nullable because the column is nullable: an edit form re-submits a
   // previously-null value as null, not as "the field was omitted".
-  nameEn: z.string().nullable().optional(),
-  contactDetails: z.string().nullable().optional(),
+  nameEn: z.string().trim().max(200).nullable().optional(),
+  contactDetails: longText(1000).nullable().optional(),
 });
+
+const DUPLICATE_PARTY = "A tenant or landlord with this name already exists.";
+const nameTaken = (name: string, exceptId?: number) =>
+  db.select().from(parties).all().some((p) => p.id !== exceptId && p.name.trim().toLowerCase() === name.trim().toLowerCase());
 
 partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
   const parsed = createPartySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload.", details: parsed.error.flatten() } });
   }
+  if (nameTaken(parsed.data.name)) return res.status(409).json({ error: { code: "duplicate_name", message: DUPLICATE_PARTY } });
   const inserted = db
     .insert(parties)
     .values({
@@ -63,9 +69,9 @@ partiesRouter.post("/", requireRole("admin", "manager"), (req, res) => {
 
 const updatePartySchema = z.object({
   type: z.enum(["company", "individual"]).optional(),
-  name: z.string().min(1).optional(),
-  nameEn: z.string().nullable().optional(),
-  contactDetails: z.string().nullable().optional(),
+  name: shortText(200).optional(),
+  nameEn: z.string().trim().max(200).nullable().optional(),
+  contactDetails: longText(1000).nullable().optional(),
   archived: z.boolean().optional(),
 });
 
@@ -77,6 +83,9 @@ partiesRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
   const parsed = updatePartySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid party payload.", details: parsed.error.flatten() } });
+  }
+  if (parsed.data.name !== undefined && nameTaken(parsed.data.name, id)) {
+    return res.status(409).json({ error: { code: "duplicate_name", message: DUPLICATE_PARTY } });
   }
   if (parsed.data.archived === true && !existing.archived) {
     const live = liveContractsForParty(id);
@@ -133,10 +142,10 @@ partiesRouter.delete("/:id", requireRole("admin"), (req, res) => {
 });
 
 const sensitiveDetailsSchema = z.object({
-  idType: z.string().optional(),
-  idNumber: z.string().optional(),
-  licenseNumber: z.string().optional(),
-  notes: z.string().optional(),
+  idType: z.string().max(50).optional(),
+  idNumber: z.string().max(100).optional(),
+  licenseNumber: z.string().max(100).optional(),
+  notes: longText(2000).optional(),
 });
 
 partiesRouter.put("/:id/sensitive-details", requireRole("admin"), (req, res) => {
@@ -144,6 +153,9 @@ partiesRouter.put("/:id/sensitive-details", requireRole("admin"), (req, res) => 
   const parsed = sensitiveDetailsSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid payload." } });
+  }
+  if (!db.select().from(parties).where(eq(parties.id, partyId)).get()) {
+    return res.status(404).json({ error: { code: "not_found", message: "Party not found." } });
   }
   db.insert(partySensitiveDetails)
     .values({ partyId, ...parsed.data, updatedAt: new Date().toISOString() })

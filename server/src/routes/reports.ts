@@ -1,3 +1,4 @@
+import { isRealDate } from "../lib/validate.js";
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
@@ -78,7 +79,8 @@ reportsRouter.get("/reminders", (req, res) => {
 });
 
 reportsRouter.get("/reports/occupancy", (req, res) => {
-  const asOfDate = (req.query.date as string) ?? todayInChina();
+  const asOfDate = (req.query.date as string | undefined) ?? todayInChina();
+  if (!isRealDate(asOfDate)) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid date." } });
   const propertyIdFilter = req.query.propertyId ? Number(req.query.propertyId) : undefined;
 
   const allProperties = db.select().from(properties).all();

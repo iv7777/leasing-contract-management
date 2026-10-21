@@ -102,7 +102,11 @@ function lineItems(t: TFunction, event: AuditEventDto): ReactNode[] {
   );
 }
 
-const csvCell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+const csvCell = (raw: string) => {
+  // A cell starting with = + - @ would be run as a formula by Excel; keep it as text.
+  const v = /^([=@\t\r]|[+-](?![\d.]))/.test(raw) ? `'${raw}` : raw;
+  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
 
 /** One CSV line per audit record, in the language the page is showing. */
 function auditCsv(t: TFunction, events: AuditEventDto[]): string {

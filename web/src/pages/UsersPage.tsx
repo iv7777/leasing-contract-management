@@ -191,7 +191,7 @@ export default function UsersPage() {
           <Form.Item name="email" label={t("users.email")} rules={[{ required: true, type: "email" }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="password" label={t("users.password")} rules={[{ required: true, min: 8 }]}>
+          <Form.Item name="password" label={t("users.password")} rules={[{ required: true, min: 10 }, { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: t("users.passwordRule") }]}>
             <Input.Password />
           </Form.Item>
           <Form.Item name="role" label={t("users.role")} rules={[{ required: true }]} initialValue="viewer">
@@ -320,7 +320,7 @@ export default function UsersPage() {
         destroyOnClose
       >
         <Form form={passwordForm} layout="vertical">
-          <Form.Item name="password" label={t("users.newPassword")} rules={[{ required: true, min: 8 }]}>
+          <Form.Item name="password" label={t("users.newPassword")} rules={[{ required: true, min: 10 }, { pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/, message: t("users.passwordRule") }]}>
             <Input.Password />
           </Form.Item>
         </Form>

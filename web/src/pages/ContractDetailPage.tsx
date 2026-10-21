@@ -304,7 +304,7 @@ export default function ContractDetailPage() {
   const [reverseReceiptModal, setReverseReceiptModal] = useState<{ receiptId: number } | null>(null);
   const [depositTxnModal, setDepositTxnModal] = useState(false);
   const [depositTxnType, setDepositTxnType] = useState("receipt");
-  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream" | "terminate" | "void_document">("rate_change");
+  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream" | "terminate" | "void_document" | "billing_rules">("rate_change");
   const [amendmentStreamTargetType, setAmendmentStreamTargetType] = useState("unit");
   const [editAmendment, setEditAmendment] = useState<AmendmentDto | null>(null);
   const [rejectAmendmentModal, setRejectAmendmentModal] = useState<{ amendmentId: number } | null>(null);
@@ -503,7 +503,10 @@ export default function ContractDetailPage() {
   const partyName = (pid: number) => parties.find((p) => p.id === pid)?.name ?? pid;
 
   const handleError = (err: unknown) => {
-    message.error(apiErrorMessage(err, t));
+    const text = apiErrorMessage(err, t);
+    // A list of problems (why a contract can't be activated) needs its line breaks and a longer read.
+    if (text.includes("\n")) message.error({ content: <span style={{ whiteSpace: "pre-line", textAlign: "left", display: "inline-block" }}>{text}</span>, duration: 10 });
+    else message.error(text);
   };
 
   const onAddUnit = async () => {
@@ -948,6 +951,16 @@ export default function ContractDetailPage() {
         };
       }
       if (amendmentKind === "void_document") changes = { voidDocuments: values.voidDocumentIds };
+      if (amendmentKind === "billing_rules") {
+        changes = {
+          billingRules: { dueDay: values.amendDueDay, dueMonthOffset: values.amendDueMonthOffset, overdueGraceDays: values.amendGraceDays },
+          latePenaltyRules: {
+            latePenaltyEnabled: !!values.amendLateEnabled,
+            ...(values.amendLateEnabled && values.amendLateRate !== undefined ? { latePenaltyDailyRatePermille: String(values.amendLateRate) } : {}),
+            ...(values.amendLateEnabled && values.amendLateCap !== undefined && values.amendLateCap !== null ? { latePenaltyCapFen: Math.round(values.amendLateCap * 100) } : {}),
+          },
+        };
+      }
       await api.post(`/contracts/${id}/amendments`, {
         // An internal correction needs no signed supplement; otherwise the type is the kind of change.
         type: values.internalCorrection ? "internal_correction" : amendmentKind,
@@ -1251,7 +1264,7 @@ export default function ContractDetailPage() {
                             : []
                         }
                       >
-                        {au ? <Link to={`/properties/${au.propertyId}`}>{au.unitLabel}</Link> : u.unitId} · {u.contractedAreaSqm} sqm ·{" "}
+                        {au ? <Link to={`/properties/${au.propertyId}`}>{au.unitLabel}</Link> : u.unitId} · {u.contractedAreaSqm} {t("common.sqm")} ·{" "}
                         {u.effectiveStart}
                         {u.effectiveEnd ? ` → ${u.effectiveEnd}` : ""}
                       </List.Item>
@@ -2855,6 +2868,17 @@ export default function ContractDetailPage() {
           layout="vertical"
           onValuesChange={(v) => {
             if (v.amendmentKind) setAmendmentKind(v.amendmentKind);
+            if (v.amendmentKind === "billing_rules") {
+              // Start from the rules as they are now, so only what changes needs touching.
+              amendmentForm.setFieldsValue({
+                amendDueDay: billingRulesInfo?.dueDay,
+                amendDueMonthOffset: billingRulesInfo?.dueMonthOffset,
+                amendGraceDays: billingRulesInfo?.overdueGraceDays,
+                amendLateEnabled: billingRulesInfo?.latePenaltyEnabled ?? false,
+                amendLateRate: billingRulesInfo?.latePenaltyDailyRatePermille != null ? Number(billingRulesInfo.latePenaltyDailyRatePermille) : undefined,
+                amendLateCap: billingRulesInfo?.latePenaltyCapFen != null ? billingRulesInfo.latePenaltyCapFen / 100 : undefined,
+              });
+            }
             if (v.amendStreamTargetType) setAmendmentStreamTargetType(v.amendStreamTargetType);
             if (isUsageFee(v.amendStreamCalculationMethod)) {
               amendmentForm.setFieldsValue({ amendStreamRateBasis: usageFeeBasis(v.amendStreamCalculationMethod) });
@@ -2898,6 +2922,7 @@ export default function ContractDetailPage() {
                 { value: "add_pricing_stream", label: t("contracts.amendmentKindAddPricingStream") },
                 { value: "terminate", label: t("contracts.amendmentKindTerminate") },
                 { value: "void_document", label: t("contracts.amendmentKindVoidDocument") },
+                { value: "billing_rules", label: t("contracts.amendmentKindBillingRules") },
               ]}
             />
           </Form.Item>
@@ -2997,6 +3022,37 @@ export default function ContractDetailPage() {
           )}
 
           {amendmentKind === "terminate" && <Typography.Text type="secondary">{t("contracts.amendTerminateHint")}</Typography.Text>}
+          {amendmentKind === "billing_rules" && (
+            <>
+              <Typography.Paragraph type="secondary">{t("contracts.amendBillingRulesHint")}</Typography.Paragraph>
+              <Form.Item name="amendDueDay" label={t("contracts.dueDay")} rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} min={1} max={31} />
+              </Form.Item>
+              <Form.Item name="amendDueMonthOffset" label={t("contracts.dueMonthOffset")} rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} min={-12} max={12} />
+              </Form.Item>
+              <Form.Item name="amendGraceDays" label={t("billing.graceDays")} rules={[{ required: true }]}>
+                <InputNumber style={{ width: "100%" }} min={0} max={60} />
+              </Form.Item>
+              <Form.Item name="amendLateEnabled" label={t("contracts.latePenaltyEnabled")} valuePropName="checked">
+                <Switch />
+              </Form.Item>
+              <Form.Item noStyle shouldUpdate={(a, b) => a.amendLateEnabled !== b.amendLateEnabled}>
+                {({ getFieldValue }) =>
+                  getFieldValue("amendLateEnabled") ? (
+                    <>
+                      <Form.Item name="amendLateRate" label={t("contracts.latePenaltyDailyRate")} rules={[{ required: true }]}>
+                        <InputNumber style={{ width: "100%" }} min={0} max={100} step={0.1} />
+                      </Form.Item>
+                      <Form.Item name="amendLateCap" label={t("contracts.latePenaltyCap")}>
+                        <InputNumber style={{ width: "100%" }} min={0} />
+                      </Form.Item>
+                    </>
+                  ) : null
+                }
+              </Form.Item>
+            </>
+          )}
           {amendmentKind === "void_document" && (
             <Form.Item name="voidDocumentIds" label={t("contracts.documentsToVoid")} extra={t("contracts.voidDocumentHint")} rules={[{ required: true }]}>
               <Select

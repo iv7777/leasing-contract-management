@@ -2,17 +2,18 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { users } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { verifyPassword } from "../lib/password.js";
 import { recordAudit } from "../lib/audit.js";
 import { requireAuth } from "../middleware/auth.js";
+import { loginThrottle } from "../lib/loginThrottle.js";
 import { LOCALES } from "@lcm/shared";
 
 export const authRouter = Router();
 
 const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  email: z.string().trim().email(),
+  password: z.string().min(1).max(500),
 });
 
 authRouter.post("/login", (req, res) => {
@@ -21,16 +22,25 @@ authRouter.post("/login", (req, res) => {
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid credentials payload." } });
   }
   const { email, password } = parsed.data;
-  const row = db.select().from(users).where(eq(users.email, email)).get();
+  const source = req.ip ?? "unknown";
+  const retryMs = loginThrottle.retryAfterMs(source, email);
+  if (retryMs > 0) {
+    res.setHeader("Retry-After", String(Math.ceil(retryMs / 1000)));
+    return res.status(429).json({ error: { code: "too_many_attempts", message: "Too many failed sign-in attempts. Wait a few minutes and try again." } });
+  }
+  // Email addresses are matched without regard to upper/lower case.
+  const row = db.select().from(users).where(eq(sql`lower(${users.email})`, email.toLowerCase())).get();
 
   if (!row || !row.active || !verifyPassword(password, row.passwordHash)) {
-    recordAudit({ actorUserId: row?.id ?? null, action: "login_failed", entityType: "user", entityId: row?.id });
+    loginThrottle.recordFailure(source, email);
+    recordAudit({ actorUserId: row?.id ?? null, action: "login_failed", entityType: "user", entityId: row?.id, details: { email: email.toLowerCase() } });
     return res.status(401).json({ error: { code: "invalid_credentials", message: "Invalid email or password." } });
   }
 
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: { code: "session_error", message: "Could not start session." } });
     req.session.userId = row.id;
+    loginThrottle.recordSuccess(source, email);
     recordAudit({ actorUserId: row.id, action: "login_succeeded", entityType: "user", entityId: row.id });
     res.json({ ok: true });
   });

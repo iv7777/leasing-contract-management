@@ -3,6 +3,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { contracts, depositTransactions, receipts, receiptAllocations, charges } from "../db/schema.js";
+import { isoDate, positiveFen } from "../lib/validate.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
@@ -40,10 +41,10 @@ depositTransactionsRouter.get("/contracts/:contractId/deposit-transactions", (re
 
 const receiptTxnSchema = z.object({
   transactionType: z.literal("receipt"),
-  amountFen: z.number().positive(),
-  transactionDate: z.string(),
-  receiptId: z.number().optional(),
-  reason: z.string().min(1),
+  amountFen: positiveFen,
+  transactionDate: isoDate,
+  receiptId: z.number().int().optional(),
+  reason: z.string().trim().min(1).max(500),
 });
 
 /** Admin-only per brief §6/§8: deposit deductions, refunds, and transfers to
@@ -52,17 +53,17 @@ const receiptTxnSchema = z.object({
  * allocation machinery (and its over-allocation guard) applies to it. */
 const adminTxnSchema = z.object({
   transactionType: z.enum(["refund", "deduction"]),
-  amountFen: z.number().positive(),
-  transactionDate: z.string(),
-  reason: z.string().min(1),
+  amountFen: positiveFen,
+  transactionDate: isoDate,
+  reason: z.string().trim().min(1).max(500),
 });
 
 const transferSchema = z.object({
   transactionType: z.literal("transfer_to_rent"),
-  amountFen: z.number().positive(),
-  transactionDate: z.string(),
-  chargeId: z.number(),
-  reason: z.string().min(1),
+  amountFen: positiveFen,
+  transactionDate: isoDate,
+  chargeId: z.number().int(),
+  reason: z.string().trim().min(1).max(500),
 });
 
 depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", requireRole("admin", "manager", "collector"), (req, res) => {
@@ -94,7 +95,7 @@ depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", re
     const rows = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, contractId)).all();
     const heldFen = computeDepositBalance(rows.map((r) => ({ amountFen: r.amountFen, transactionDate: r.transactionDate })), parsed.data.transactionDate);
     if (parsed.data.amountFen > heldFen) {
-      return res.status(409).json({ error: { code: "insufficient_deposit", message: `Only ${heldFen} fen is held; cannot ${type} ${parsed.data.amountFen}.` } });
+      return res.status(409).json({ error: { code: "insufficient_deposit", message: `Only ${(heldFen / 100).toFixed(2)} yuan is held; cannot ${type} ${(parsed.data.amountFen / 100).toFixed(2)} yuan.` } });
     }
 
     const inserted = db
@@ -116,7 +117,7 @@ depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", re
     const rows = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, contractId)).all();
     const heldFen = computeDepositBalance(rows.map((r) => ({ amountFen: r.amountFen, transactionDate: r.transactionDate })), parsed.data.transactionDate);
     if (parsed.data.amountFen > heldFen) {
-      return res.status(409).json({ error: { code: "insufficient_deposit", message: `Only ${heldFen} fen is held; cannot transfer ${parsed.data.amountFen}.` } });
+      return res.status(409).json({ error: { code: "insufficient_deposit", message: `Only ${(heldFen / 100).toFixed(2)} yuan is held; cannot transfer ${(parsed.data.amountFen / 100).toFixed(2)} yuan.` } });
     }
 
     const charge = db.select().from(charges).where(eq(charges.id, parsed.data.chargeId)).get();

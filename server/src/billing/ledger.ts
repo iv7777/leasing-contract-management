@@ -79,6 +79,9 @@ export interface AllocationValidationInput {
 /** Refuses an allocation that would over-allocate either side: the receipt
  * can't apply more than it has left, and the charge can't be paid down past
  * its outstanding balance. */
+/** Money in a message the user reads: yuan, not fen. */
+const yuanText = (fen: number) => `${(fen / 100).toFixed(2)} yuan`;
+
 export function validateAllocation(input: AllocationValidationInput): { ok: true } | { ok: false; reason: string } {
   if (input.amountFen <= 0) return { ok: false, reason: "Allocation amount must be positive." };
   if (input.receipt.status === "reversed") return { ok: false, reason: "This receipt has been reversed." };
@@ -86,12 +89,12 @@ export function validateAllocation(input: AllocationValidationInput): { ok: true
 
   const unallocated = computeUnallocatedFen(input.receipt, input.existingReceiptAllocations);
   if (input.amountFen > unallocated) {
-    return { ok: false, reason: `Allocation of ${input.amountFen} exceeds the receipt's unallocated balance of ${unallocated}.` };
+    return { ok: false, reason: `Allocation of ${yuanText(input.amountFen)} exceeds the receipt's unallocated balance of ${yuanText(unallocated)}.` };
   }
 
   const chargeBalance = computeChargeBalance(input.charge, input.chargeAdjustments, input.existingChargeAllocations, input.asOfDate);
   if (input.amountFen > chargeBalance.balanceFen) {
-    return { ok: false, reason: `Allocation of ${input.amountFen} exceeds the charge's outstanding balance of ${chargeBalance.balanceFen}.` };
+    return { ok: false, reason: `Allocation of ${yuanText(input.amountFen)} exceeds the charge's outstanding balance of ${yuanText(chargeBalance.balanceFen)}.` };
   }
 
   return { ok: true };

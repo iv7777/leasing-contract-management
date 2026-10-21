@@ -12,6 +12,7 @@ import {
   usageEntries,
 } from "../db/schema.js";
 import { generateChargeLines } from "./chargeEngine.js";
+import { lastBillableDay } from "../lib/termination.js";
 import type { ChargeEngineInput } from "./types.js";
 import type { IsoDate } from "@lcm/shared";
 
@@ -29,8 +30,11 @@ export interface ChargeContext {
   rules: typeof billingRules.$inferSelect;
   streams: (typeof pricingStreams.$inferSelect)[];
   input: ChargeEngineInput;
-  /** Keys of charges already posted (voided ones don't count), so repeated
-   * or overlapping runs never try to bill the same item twice. */
+  /** The last day that may be billed: the term end, or an earlier approved termination. */
+  billingEnd: string;
+  /** Keys of charges already posted (voided ones don't count — voiding a charge
+   * is how a period is billed again after a correction), so repeated or
+   * overlapping runs never try to bill the same item twice. */
   existingKeys: Set<string>;
 }
 
@@ -58,7 +62,10 @@ export function loadChargeContext(contractId: number): ChargeContext {
     .where(and(eq(charges.contractId, contractId), eq(charges.status, "posted")))
     .all();
 
+  const billingEnd = lastBillableDay(contract);
   const input: ChargeEngineInput = {
+    billingStart: contract.termStart,
+    billingEnd,
     contractUnits: cUnits.map((u) => ({
       id: u.id,
       effectiveStart: u.effectiveStart,
@@ -97,7 +104,7 @@ export function loadChargeContext(contractId: number): ChargeContext {
     })),
   };
 
-  return { contract, rules, streams, input, existingKeys: new Set(posted.map((p) => chargeKey(p.s, p.a, p.b))) };
+  return { contract, rules, streams, input, billingEnd, existingKeys: new Set(posted.map((p) => chargeKey(p.s, p.a, p.b))) };
 }
 
 /** Generates charges for one calendar month, skipping any billing item that
@@ -106,8 +113,8 @@ export function loadChargeContext(contractId: number): ChargeContext {
  * attempting a duplicate insert). Backs the manual per-month button. */
 export function generateChargesForContractMonth(contractId: number, periodStart: IsoDate, periodEnd: IsoDate): GenerateResult {
   const ctx = loadChargeContext(contractId);
-  if (periodStart > ctx.contract.termEnd) {
-    throw new Error(`Contract ${contractId} ends ${ctx.contract.termEnd}; cannot generate charges for a period starting ${periodStart}.`);
+  if (periodStart > ctx.billingEnd) {
+    throw new Error(`Contract ${contractId} ends ${ctx.billingEnd}; cannot generate charges for a period starting ${periodStart}.`);
   }
 
   const { lines, skippedMissingUsage } = generateChargeLines(ctx.input, periodStart, periodEnd);

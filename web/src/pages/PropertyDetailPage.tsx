@@ -305,7 +305,7 @@ export default function PropertyDetailPage() {
                       <Space direction="vertical" size={0}>
                         <Typography.Text strong>{u.unitLabel}</Typography.Text>
                         <Typography.Text type="secondary">
-                          {t(`properties.${u.unitType === "building" ? "building" : "openLand"}`)} · {u.rentableAreaSqm} sqm ·{" "}
+                          {t(`properties.${u.unitType === "building" ? "building" : "openLand"}`)} · {u.rentableAreaSqm} {t("common.sqm")} ·{" "}
                           {t(`properties.${u.availability}`)}
                         </Typography.Text>
                         <Space size={4} wrap>
