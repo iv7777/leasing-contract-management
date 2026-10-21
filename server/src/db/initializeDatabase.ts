@@ -107,6 +107,13 @@ if (keepContracts) {
   console.log("  Every contract is set back to DRAFT (version 1) and automatic billing is switched OFF.");
   console.log("  Amendments are deleted. Terms they already changed stay as they are now, and any");
   console.log("  document an amendment withdrew (voided) is restored.");
+  const ended = sqlite.prepare(`SELECT reference_number AS ref, status, term_end AS termEnd FROM contracts WHERE status IN ('terminated', 'expired') ORDER BY reference_number`).all() as { ref: string; status: string; termEnd: string }[];
+  if (ended.length > 0) {
+    console.log("");
+    console.log("  Check these after initializing — they ended, and keep the end date they have now");
+    console.log("  (an early termination had already moved it):");
+    for (const c of ended) console.log(`    ${c.ref.padEnd(24)} ${c.status.padEnd(11)} ends ${c.termEnd}`);
+  }
 }
 console.log("");
 if (manageService) {
@@ -160,7 +167,8 @@ try {
         work.prepare(`DELETE FROM sqlite_sequence WHERE name = ?`).run(table);
       }
       if (keepContracts) {
-        work.prepare(`UPDATE billing_rules SET auto_billing = 0`).run();
+        // The go-live start of metered billing was set by an opening balance that is now gone.
+        work.prepare(`UPDATE billing_rules SET auto_billing = 0, metered_billing_from = NULL`).run();
         work.prepare(`UPDATE contracts SET status = 'draft', archived = 0, version_number = 1, updated_at = ?`).run(new Date().toISOString());
         // Documents withdrawn by an amendment come back: that amendment no longer exists.
         work.prepare(`UPDATE documents SET voided = 0, voided_at = NULL, voided_by_amendment_id = NULL WHERE voided = 1`).run();
