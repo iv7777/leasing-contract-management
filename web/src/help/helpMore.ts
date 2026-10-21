@@ -59,10 +59,11 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "Active: change terms only through **Amendments**.",
         "See the bills on **Charges** and what's coming on **Not billed yet**.",
         "Record money received on **Receipts**.",
+        "Pressing **Activate** checks the draft and lists anything to fix first (no units or fees, overlapping rates, a deposit with no amount…).",
       ],
     },
     "contracts.detail.units": {
-      steps: ["**Add unit**: pick the unit and enter the contracted area.", "Give a later-joining unit its own start date.", "After activation, add units through an amendment."],
+      steps: ["**Add unit**: pick the unit and enter the contracted area.", "Give a later-joining unit its own start date.", "After activation, add units through an amendment.", "The area must be more than zero and no more than the unit's rentable area; a unit can't be on two draft or active contracts for the same dates."],
     },
     "contracts.detail.pricing": {
       steps: [
@@ -92,10 +93,11 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "**Bulk payments** enters many past payments at once, in date order.",
         "**Allocate** puts leftover credit onto a bill later.",
         "Admin: **Reverse** a wrong receipt (a reason is required).",
+        "A bank reference can only be used once per contract, and the received date can't be in the future.",
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A reading locks once a bill is made from it."],
+      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A reading locks once a bill is made from it.", "A reading covers one whole calendar month — the grid does this for you."],
     },
     "contracts.detail.charges": {
       steps: [
@@ -121,10 +123,11 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "Attach the signed supplement — it is required.",
         "Submit; an Admin approves or rejects (an Admin's own proposal is approved at once).",
         "Approval creates a new version of the contract.",
+        "To change due-date or late-fee rules on an active contract, choose **Due date and late-fee rules**.",
       ],
     },
     "contracts.detail.documents": {
-      steps: ["**Upload document**: choose the type and Ordinary or Sensitive.", "The **Signed lease** is required before the contract can be activated.", "Sensitive files (ID copies) can only be opened by an Admin."],
+      steps: ["**Upload document**: choose the type and Ordinary or Sensitive.", "The **Signed lease** is required before the contract can be activated.", "Sensitive files (ID copies) can only be opened by an Admin.", "Accepted: PDF, images, Word and Excel up to 50 MB. For staff who may not see an ID, upload a masked copy as Ordinary."],
     },
     reminders: {
       steps: ["Use the filter buttons to see one kind of reminder.", "Click an item to open the contract it is about.", "Fix the cause (collect, top up the deposit, enter the reading) — the reminder disappears by itself."],
@@ -133,7 +136,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: ["Pick a date to see leased space on that day.", "Compare Building and Open land separately.", "Change a unit's type on its property page if it is in the wrong group."],
     },
     users: {
-      steps: ["**Add user**: choose a role and the properties they may see.", "Switch download / print on only for people who need it.", "Reset a forgotten password from the server's control panel (option 5)."],
+      steps: ["**Add user**: choose a role and the properties they may see.", "Switch download / print on only for people who need it.", "Reset a forgotten password from the server's control panel (option 5).", "Passwords need 10+ characters with letters and numbers. Resetting a password or deactivating a user signs them out everywhere."],
     },
     audit: {
       steps: ["Filter by person, action or date.", "Press + on a record to see all its changes and any reason given.", "Export CSV downloads every record that matches the filters.", "The log is permanent — entries can't be edited or deleted."],
@@ -191,10 +194,11 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "生效后：条款只能通过「变更」修改。",
         "在「账单」查看已出的账单，在「尚未出账」查看即将出的账单。",
         "在「收款」登记收到的款项。",
+        "点击**生效**时，系统会先检查草稿，并列出需要先处理的问题（没有单元或费用、费率重叠、押金没有金额……）。",
       ],
     },
     "contracts.detail.units": {
-      steps: ["**新增单元**：选择单元并填写合同面积。", "稍后才加入的单元请设置它自己的起始日期。", "生效后新增单元需通过变更。"],
+      steps: ["**新增单元**：选择单元并填写合同面积。", "稍后才加入的单元请设置它自己的起始日期。", "生效后新增单元需通过变更。", "面积必须大于 0 且不超过该单元的可出租面积；同一单元不能在同一时间出现在两份草稿/生效中合同上。"],
     },
     "contracts.detail.pricing": {
       steps: ["为每项循环性费用（租金、管理费、电费……）**新增计价项**。", "选择计算方式和费率基准（每月、每平方米每月……）。", "阶梯租金：按时间添加多行费率。", "按面积计费的费用，只关联适用的单元。"],
@@ -219,10 +223,11 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "**批量录入收款**一次录入多笔历史收款，按日期顺序处理。",
         "**核销**可以之后把剩余余额用到某笔账单上。",
         "管理员：**冲销**录错的收款（需填写原因）。",
+        "同一份合同上，一个银行流水号只能使用一次；收款日期不能晚于今天。",
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数一旦生成账单就会锁定。"],
+      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数一旦生成账单就会锁定。", "一条读数对应一个完整的自然月——抄表网格会自动帮你按整月填写。"],
     },
     "contracts.detail.charges": {
       steps: [
@@ -243,10 +248,10 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: ["查看合计和到期日，了解接下来该收什么。", "录入缺少的读数，相应费用才会出现。", "如果未开启自动出账，请管理员使用「补账」。"],
     },
     "contracts.detail.amendments": {
-      steps: ["**发起变更**：选择要改什么、生效日期和原因。", "附上已签署的补充协议——这是必须的。", "提交后由管理员批准或驳回（管理员自己发起的会立即批准）。", "批准后会生成合同的新版本。"],
+      steps: ["**发起变更**：选择要改什么、生效日期和原因。", "附上已签署的补充协议——这是必须的。", "提交后由管理员批准或驳回（管理员自己发起的会立即批准）。", "批准后会生成合同的新版本。", "要修改生效中合同的到期日或滞纳金规则，请选择**到期日与滞纳金规则**。"],
     },
     "contracts.detail.documents": {
-      steps: ["**上传文件**：选择类型，以及普通或敏感。", "生效前必须先上传**已签署的租赁合同**。", "敏感文件（身份证复印件）只有管理员能打开。"],
+      steps: ["**上传文件**：选择类型，以及普通或敏感。", "生效前必须先上传**已签署的租赁合同**。", "敏感文件（身份证复印件）只有管理员能打开。", "支持 PDF、图片、Word 和 Excel，单个不超过 50 MB。需要让看不到证件的同事使用时，请上传遮盖后的普通版本。"],
     },
     reminders: {
       steps: ["用筛选按钮只看某一类提醒。", "点击某条提醒可打开对应的合同。", "解决原因（收款、补足押金、录入读数）后，提醒会自动消失。"],
@@ -255,7 +260,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: ["选择日期，查看当天的出租情况。", "楼宇和空地分开比较。", "如果某个单元的类型归错了，请到其物业页面修改。"],
     },
     users: {
-      steps: ["**新增用户**：选择角色和可查看的物业。", "只对确实需要的人开启下载/打印。", "忘记密码请在服务器控制面板中重置（选项 5）。"],
+      steps: ["**新增用户**：选择角色和可查看的物业。", "只对确实需要的人开启下载/打印。", "忘记密码请在服务器控制面板中重置（选项 5）。", "密码至少 10 位，含字母和数字；重置密码或停用用户会让其在所有设备上退出登录。"],
     },
     audit: {
       steps: ["按人员、操作或日期筛选。", "点击记录上的 + 查看全部变更和填写的原因。", "“导出CSV”会下载符合筛选条件的全部记录。", "日志是永久的——记录无法编辑或删除。"],

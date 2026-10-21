@@ -667,12 +667,12 @@ const en = {
       list: {
         title: "Properties",
         body: "Every building or plot of land you manage, with its address. Click a row to open its detail page, where you manage its individual rentable units and any property-level documents (e.g. title deeds, permits).",
-        tips: "Toggle \"Show archived\" to see properties that have been archived instead of deleted — archiving keeps their history intact for existing contracts.\nOnly an Admin can add a new property.",
+        tips: "Toggle \"Show archived\" to see properties that have been archived instead of deleted — archiving keeps their history intact for existing contracts.\nOnly an Admin can add a new property.\nTwo properties can't have the same name.",
       },
       detail: {
         title: "Property detail",
         body: "This page manages one property's inventory (its individual rentable units) and any documents attached at the property level. A unit is the actual thing a tenant leases — a floor, a workshop, a plot of open land — and gets linked to one or more contracts over its lifetime.",
-        tips: "Retiring a unit (marking it unavailable) doesn't delete it or affect any contract already using it — it just hides it from \"available unit\" pickers for new contracts.\n\"Related contracts\" on each unit shows every contract that has ever used it, not just the current tenant, so you can see its full leasing history at a glance.",
+        tips: "Retiring a unit (marking it unavailable) doesn't delete it or affect any contract already using it — it just hides it from \"available unit\" pickers for new contracts.\n\"Related contracts\" on each unit shows every contract that has ever used it, not just the current tenant, so you can see its full leasing history at a glance.\nA unit's rentable area can't be set below the area a contract already takes from it, and two units in one property can't share a label.",
         units: {
           title: "Units",
           body: "Each unit is one leasable space within this property — a floor, a workshop bay, or a parcel of open land. Its rentable area (in sqm) feeds directly into per-sqm rent calculations and the Occupancy report, so keep it accurate if the space is remeasured or subdivided.",
@@ -689,38 +689,38 @@ const en = {
       list: {
         title: "Tenants & Landlords",
         body: "Every company or individual who appears on a contract, either as landlord or tenant. The same party can be the landlord on one contract and a completely unrelated role on another — this list isn't scoped per-property.",
-        tips: "A party can only be deleted if no contract references it; if it's in use, archive it instead — archived parties stay visible on their existing contracts.\nClick a contract tag in the \"Related contracts\" column to jump straight to that contract.",
+        tips: "A party can only be deleted if no contract references it; if it's in use, archive it instead — archived parties stay visible on their existing contracts.\nClick a contract tag in the \"Related contracts\" column to jump straight to that contract.\nTwo tenants or landlords can't share the same name.",
       },
     },
     contracts: {
       list: {
         title: "Contracts",
         body: "Every lease contract, across every property. Draft contracts are still being set up and don't appear anywhere else in the system (no charges, no reminders) until an Admin activates them. Once active, most further changes go through the amendment workflow rather than direct edits.",
-        tips: "Export CSV downloads the full contract list in the currently selected display language.\nA red tag shows what a contract has overdue (past its grace period) and how old the oldest bill is; contracts that are up to date show nothing.\nThe \"Version\" column increments every time an amendment is approved on that contract — it's a quick way to see how many changes a contract has been through.",
+        tips: "Export CSV downloads the full contract list in the currently selected display language.\nA red tag shows what a contract has overdue (past its grace period) and how old the oldest bill is; contracts that are up to date show nothing.\nThe \"Version\" column increments every time an amendment is approved on that contract — it's a quick way to see how many changes a contract has been through.\nA contract number must be unique. Download the list in Chinese or English with the language switch.",
       },
       detail: {
         title: "Contract",
         body: "This page is the full record for one lease: its units, pricing, deposit, billing history, and every change ever made to it via an amendment. Use the tabs below to move between areas — the help panel updates to match whichever tab you're on.",
-        tips: "A draft contract can still be edited directly. Once it's Active, use \"Propose amendment\" for any change — direct edits are blocked so there's always an audit trail of who changed what and why.\nActivating a contract requires a signed lease document to be uploaded first (see the Documents tab).",
+        tips: "A draft contract can still be edited directly. Once it's Active, use \"Propose amendment\" for any change — direct edits are blocked so there's always an audit trail of who changed what and why.\nActivating a contract requires a signed lease document to be uploaded first (see the Documents tab).\nWhen you press Activate, the system checks the draft first and lists anything wrong (no units, no fees, overlapping rates, a deposit with no amount…). Fix what it lists and activate again.",
         units: {
           title: "Units",
           body: "The specific rentable space(s) this contract covers, plus the contracted area recorded for each — which may differ slightly from the unit's own rentable area if the lease specifies a different figure. \"Effective start\" is when this unit's coverage under the contract begins, which matters when a unit is added partway through the contract's term (e.g. an expansion).",
-          tips: "Adding a unit to an active contract is done via an amendment, not directly — see the Amendments tab.\nA unit added by amendment still needs its own pricing stream to actually generate charges — adding the unit alone doesn't create any rent for it.",
+          tips: "Adding a unit to an active contract is done via an amendment, not directly — see the Amendments tab.\nA unit added by amendment still needs its own pricing stream to actually generate charges — adding the unit alone doesn't create any rent for it.\nA unit can't be added twice, or while another draft or active contract holds it for overlapping dates. Its contracted area must be more than 0 and no more than the unit's rentable area.",
         },
         pricing: {
           title: "Pricing",
           body: "Each pricing stream is one recurring charge — rent, management fee, base electricity, elevator, etc. — with its own calculation method and rate history. \"Per sqm\" streams multiply the rate by the combined contracted area of every unit linked to that stream, so link a stream only to the unit(s) its rate actually applies to; linking it to every unit when only one should be priced this way will overcharge.",
-          tips: "A single stream can carry multiple rate-schedule entries over time (e.g. Year 1-3 at one rate, Year 4-6 at a higher one) — this is how staged rent increases are modeled.\n\"Percentage escalation\" compounds automatically at each tier boundary; setting one up fully currently requires the bulk-import tool rather than this form.",
+          tips: "A single stream can carry multiple rate-schedule entries over time (e.g. Year 1-3 at one rate, Year 4-6 at a higher one) — this is how staged rent increases are modeled.\n\"Percentage escalation\" compounds automatically at each tier boundary; setting one up fully currently requires the bulk-import tool rather than this form.\nRates of the same item can't overlap in time. A per-sqm rate needs at least one unit linked to the item; a percentage escalation needs its base, percentage and interval; a metered price needs its unit.\nNothing is billed after the contract's end date: the last month is billed by the day.",
         },
         concessions: {
           title: "Concessions",
           body: "A concession is a temporary discount against one pricing stream (or all streams, if left unset) for a specific date range — most commonly a free-rent period at the start of a lease. A 100% discount fully waives the charge for that window.",
-          tips: "Concessions only apply to charges generated after they're added — if charges already exist for the discounted period, you may need to regenerate or manually adjust them.",
+          tips: "Concessions only apply to charges generated after they're added — if charges already exist for the discounted period, you may need to regenerate or manually adjust them.\nA discount must be more than 0 and no more than 100 percent, and its end date can't be before its start.",
         },
         deposit: {
           title: "Deposit",
           body: "Deposit terms record how much deposit is required and from when; the transaction ledger below records what's actually been received, refunded, deducted, or transferred to rent. The running \"Deposit balance\" is what the tenant currently has on file with you — compare it against the required amount to spot a shortfall.",
-          tips: "A deposit shortfall reminder fires automatically whenever the ledger balance is below the required amount for an active contract.\n\"Formula\" deposit terms (e.g. \"2x monthly rent\") are descriptive only — the system doesn't auto-calculate the yuan amount from the formula, so track the actual required figure separately if you use this option.",
+          tips: "A deposit shortfall reminder fires automatically whenever the ledger balance is below the required amount for an active contract.\n\"Formula\" deposit terms (e.g. \"2x monthly rent\") are descriptive only — the system doesn't auto-calculate the yuan amount from the formula, so track the actual required figure separately if you use this option.\nA fixed deposit needs an amount and a formula deposit needs its basis — the system refuses a term without them.",
         },
         statement: {
           title: "Monthly statement",
@@ -730,27 +730,27 @@ const en = {
         receipts: {
           title: "Receipts",
           body: "Payments received from the tenant. \"Record payment\" is the normal way: enter the amount, date and method and the money is applied to the oldest unpaid charges first (you can adjust the split). \"Bulk payments\" enters many past payments at once. Reversing a receipt undoes its allocations and requires a reason, for audit purposes.",
-          tips: "Any part of a payment that isn't applied to a charge stays as unallocated credit — it never counts as extra income.\n\"Record receipt\" (the older option) saves the money without applying it; use \"Allocate\" afterward.\nFor a tenant whose lease started before this system: run \"Catch up billing\" on the Charges tab, then enter their past payments with Bulk payments to bring the account current.",
+          tips: "Any part of a payment that isn't applied to a charge stays as unallocated credit — it never counts as extra income.\n\"Record receipt\" (the older option) saves the money without applying it; use \"Allocate\" afterward.\nFor a tenant whose lease started before this system: run \"Catch up billing\" on the Charges tab, then enter their past payments with Bulk payments to bring the account current.\nThe received date can't be in the future, and a bank reference already used on this contract is refused so the same payment isn't entered twice.",
         },
         usage: {
           title: "Usage entries",
           body: "Meter readings for metered fees such as electricity and water. A metered charge can't be created until the month's quantity is entered here — the system then bills it automatically on its next nightly run. Use \"Meter readings grid\" to enter many months for every metered fee at once, or \"Record usage\" for a single reading.",
-          tips: "Once a charge has been created from a reading, the reading is locked. If it was wrong, an Admin can void the charge, correct the reading, and the month is billed again.\nMetered fees are due on the contract's due day in the month after the usage month.\nMissing readings are listed on the Dashboard so none are forgotten.",
+          tips: "Once a charge has been created from a reading, the reading is locked. If it was wrong, an Admin can void the charge, correct the reading, and the month is billed again.\nMetered fees are due on the contract's due day in the month after the usage month.\nMissing readings are listed on the Dashboard so none are forgotten.\nA reading covers one whole calendar month (the 1st to the last day).",
         },
         charges: {
           title: "Charges",
           body: "Generated bills, one per pricing stream per month. For contracts on automatic billing the system creates them every night — everything already due plus what falls due this month — so you don't have to. A contract starts automatic billing when an Admin uses \"Catch up billing\" (which first shows every charge it would create since the lease began). \"Generate charges\" still creates a specific month by hand and is safe to repeat — charges already generated are skipped.",
-          tips: "A charge's balance reflects payments applied to it. It counts as overdue only after the contract's grace period past its due date (5 days unless the lease says otherwise).\nAn Admin can Void a charge created in error (with a reason). It stays on record, marked voided, and can't be voided once payments are applied. While automatic billing is on, the period is billed again on the next nightly run — pause automatic billing or correct the contract first if that isn't what you want.\nQuarterly or yearly contracts aren't billed automatically yet; generate their charges manually.",
+          tips: "A charge's balance reflects payments applied to it. It counts as overdue only after the contract's grace period past its due date (5 days unless the lease says otherwise).\nAn Admin can Void a charge created in error (with a reason). It stays on record, marked voided, and can't be voided once payments are applied. While automatic billing is on, the period is billed again on the next nightly run — pause automatic billing or correct the contract first if that isn't what you want.\nQuarterly or yearly contracts aren't billed automatically yet; generate their charges manually.\nNothing is billed after the contract's end date or an approved termination date; the last month is billed by the day.",
         },
         amendments: {
           title: "Amendments",
           body: "The only way to change an Active contract: propose a change, submit it for approval, and once approved it's applied to the live contract atomically. Every amendment needs a supporting document attached before it can be submitted — unless it's an internal correction — so there's always a paper trail behind every change to an active lease.",
-          tips: "Adding a new unit and adding a pricing stream for that same new unit can't be done in a single amendment — approve the unit first, then propose a second amendment for its pricing.\nAn Admin's own submissions are auto-approved; a Manager's submission stays pending until an Admin reviews it.",
+          tips: "Adding a new unit and adding a pricing stream for that same new unit can't be done in a single amendment — approve the unit first, then propose a second amendment for its pricing.\nAn Admin's own submissions are auto-approved; a Manager's submission stays pending until an Admin reviews it.\nAn amendment can also change the due-date and late-fee rules (choose “Due date and late-fee rules”). A termination sets the contract's end date to its effective date. Once a contract has ended, only an internal correction can still be recorded.",
         },
         documents: {
           title: "Documents",
           body: "Files attached to this specific contract — the signed lease itself, amendment backups, correspondence. A signed lease document is required before the contract can be activated.",
-          tips: "Mark a document \"Sensitive\" to restrict it to Admins only.",
+          tips: "Mark a document \"Sensitive\" to restrict it to Admins only.\nAllowed files: PDF, images (JPG, PNG, GIF, WEBP, BMP, TIFF), Word and Excel, up to 50 MB — other types and damaged files are refused.\nOnly an Admin can delete a Sensitive document. If staff need a lease that contains an ID card or other personal data, upload a masked copy as an Ordinary document.",
         },
       },
     },
@@ -767,12 +767,12 @@ const en = {
     users: {
       title: "Users",
       body: "Manage who can log in and what they can do. Roles control feature access (Admin/Manager/Collector/Viewer); \"Assigned properties\" further restricts a non-Admin user to only see contracts and data tied to those specific properties.",
-      tips: "You can't deactivate your own account or change your own admin role, as a safeguard against accidental lockout.\nA user can only be deleted if they have no recorded activity (audit history) — deactivate them instead if they've ever done anything in the system.",
+      tips: "You can't deactivate your own account or change your own admin role, as a safeguard against accidental lockout.\nA user can only be deleted if they have no recorded activity (audit history) — deactivate them instead if they've ever done anything in the system.\nPasswords need at least 10 characters with letters and numbers. Email addresses aren't case-sensitive. After several wrong passwords, sign-in is paused for a few minutes. Resetting a password or deactivating a user signs them out everywhere.",
     },
     audit: {
       title: "Audit Log",
       body: "A read-only, complete history of every meaningful action taken in the system — who did what, when, and (where relevant) why. Use the filters to narrow down to a specific entity or date range.",
-      tips: "Expand a row to see its full detail payload and any reason text that was recorded with it (e.g. an amendment's approval reason).",
+      tips: "Expand a row to see its full detail payload and any reason text that was recorded with it (e.g. an amendment's approval reason).\nEach record shows what it was about; press + at the start of a row to see every change (before → after). “Expand all” opens every row on the page and “Export CSV” downloads every record that matches the filters.",
     },
     billingRuns: {
       title: "Billing runs",
@@ -802,7 +802,7 @@ const en = {
       dueMonthOffset:
         "How many months after the billing period the payment is due. 0 means due the same month as the period being billed; -1 means due the month before (e.g. rent for March is due in February); a positive number means due after.",
       documentClassification:
-        "\"Sensitive\" restricts a document to Admins only — everyone else won't see it in the list at all. Use it for anything containing personal ID numbers, financial details, or other information that shouldn't be broadly visible.",
+        "\"Sensitive\" restricts a document to Admins only — everyone else won't see it in the list at all. Use it for anything containing personal ID numbers, financial details, or other information that shouldn't be broadly visible. Only an Admin can change the setting or delete a Sensitive document. To share a lease that contains an ID card, upload a masked copy as an Ordinary document.",
       depositTxnType:
         "\"Deposit received\" increases the balance; \"Refund\" and \"Deduction\" decrease it; \"Transfer to rent\" decreases the deposit balance and allocates that amount to a specific charge in one step.",
       assignedProperties:
