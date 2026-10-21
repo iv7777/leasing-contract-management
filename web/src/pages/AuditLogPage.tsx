@@ -293,7 +293,7 @@ export default function AuditLogPage() {
                 {(e.entityLabel || e.entityId !== null) && (
                   <Typography.Text type="secondary">
                     {" · "}
-                    {e.entityLabel ?? ""} {e.entityId !== null && `#${e.entityId}`}
+                    {e.entityLabel ? t(`audit.values.${e.entityLabel}`, { defaultValue: e.entityLabel }) : ""} {e.entityId !== null && `#${e.entityId}`}
                   </Typography.Text>
                 )}
               </span>
