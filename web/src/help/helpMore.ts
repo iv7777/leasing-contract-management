@@ -98,7 +98,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A billed reading can still be corrected for 24 hours (if no payment is on its bill) — saving remakes the bill.", "A reading covers one whole calendar month — the grid does this for you."],
+      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A billed reading can still be corrected for 24 hours (if no payment is on its bill) — saving remakes the bill.", "A reading covers one whole calendar month — the grid does this for you.", "Optionally add a **photo of the meter** to a reading (camera or photo library on a phone). Use **Replace** or open it with **View**; it is kept with the reading and in backups."],
     },
     "contracts.detail.charges": {
       steps: [
@@ -237,7 +237,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数出账后，24 小时内（且其账单还没有收款）仍可更正——保存会重新出账。", "一条读数对应一个完整的自然月——抄表网格会自动帮你按整月填写。"],
+      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数出账后，24 小时内（且其账单还没有收款）仍可更正——保存会重新出账。", "一条读数对应一个完整的自然月——抄表网格会自动帮你按整月填写。", "可为读数添加**电表/水表照片**（手机上可直接拍照或从相册选择）。用**替换**更换，用**查看**打开；照片随读数保存并包含在备份中。"],
     },
     "contracts.detail.charges": {
       steps: [

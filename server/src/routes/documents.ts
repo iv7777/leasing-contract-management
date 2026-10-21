@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { documents, units, users, contracts, properties, parties } from "../db/schema.js";
+import { documents, units, users, contracts, properties, parties, usageEntries } from "../db/schema.js";
 import { and, eq } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
@@ -48,6 +48,14 @@ function ownerAccessDenied(req: import("express").Request, res: import("express"
   if (ownerType === "contract" && !canAccessContract(req.user!, ownerId)) {
     res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
     return true;
+  }
+  // A meter-reading photo is as visible as the contract its reading belongs to.
+  if (ownerType === "usage_entry") {
+    const entry = db.select({ contractId: usageEntries.contractId }).from(usageEntries).where(eq(usageEntries.id, ownerId)).get();
+    if (!entry || !canAccessContract(req.user!, entry.contractId)) {
+      res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+      return true;
+    }
   }
   return false;
 }
@@ -197,6 +205,9 @@ documentsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
   const doc = db.select().from(documents).where(eq(documents.id, id)).get();
   if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
   if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
+  if (doc.ownerType === "usage_entry") {
+    return res.status(409).json({ error: { code: "managed_by_reading", message: "A meter-reading photo is changed from the reading it belongs to." } });
+  }
 
   const parsed = updateDocumentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document payload." } });
@@ -244,6 +255,9 @@ documentsRouter.delete("/:id", requireRole("admin", "manager"), (req, res) => {
   const doc = db.select().from(documents).where(eq(documents.id, id)).get();
   if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
   if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
+  if (doc.ownerType === "usage_entry") {
+    return res.status(409).json({ error: { code: "managed_by_reading", message: "A meter-reading photo is changed from the reading it belongs to." } });
+  }
 
   // A record whose file has gone from the server can never be opened again and only breaks the
   // document check in backups, so an Admin may clear it whatever the contract's status — unless an

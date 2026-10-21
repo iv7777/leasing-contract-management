@@ -2,7 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments } from "../db/schema.js";
+import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments, documents } from "../db/schema.js";
+import multer from "multer";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { PHOTO_TOO_LARGE, inspectPhotoUpload } from "../lib/uploadRules.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
@@ -24,6 +29,25 @@ function wholeMonthError(serviceStart: string, serviceEnd: string): string | nul
 }
 
 export const usageEntriesRouter = Router();
+
+const PHOTO_DIR = process.env.DOCUMENT_STORAGE_DIR ?? "./storage/documents";
+const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+const photoOf = (entryId: number) => db.select().from(documents).all().find((d) => d.ownerType === "usage_entry" && d.ownerId === entryId) ?? null;
+
+/** Removes a reading's photo: the record and its file. */
+function removePhoto(entryId: number) {
+  const doc = photoOf(entryId);
+  if (!doc) return null;
+  db.delete(documents).where(eq(documents.id, doc.id)).run();
+  try {
+    fs.unlinkSync(doc.filePath);
+  } catch {
+    // The file was already gone; the record is what mattered.
+  }
+  return doc;
+}
 usageEntriesRouter.use(requireAuth);
 
 function ensureContractAccess(req: import("express").Request, res: import("express").Response, contractId: number): boolean {
@@ -92,11 +116,15 @@ usageEntriesRouter.get("/contracts/:contractId/usage-entries", (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!ensureContractAccess(req, res, contractId)) return;
   const rows = db.select().from(usageEntries).where(eq(usageEntries.contractId, contractId)).all();
+  const photos = new Map(db.select().from(documents).all().filter((d) => d.ownerType === "usage_entry").map((d) => [d.ownerId, d]));
   res.json({
     usageEntries: rows.map((r) => {
       const billed = chargeAlreadyPosted(contractId, r.pricingStreamId, r.serviceStart, r.serviceEnd);
+      const photo = photos.get(r.id);
       return {
         ...r,
+        photoDocumentId: photo?.id ?? null,
+        photoMissing: photo ? !fs.existsSync(photo.filePath) : false,
         billed,
         // Unbilled readings can always be edited. A billed one can be corrected for 24 hours if no payment is on its bill.
         canEdit: !billed || (canEditEntry(req.user!, r.enteredBy, r.createdAt) && billedChargesFor(r).every((c) => !hasMoneyOn(c.id))),
@@ -219,8 +247,78 @@ usageEntriesRouter.delete("/usage-entries/:id", requireRole("admin", "manager"),
     return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
   }
 
+  removePhoto(id);
   db.delete(usageEntries).where(eq(usageEntries.id, id)).run();
   recordAudit({ actorUserId: req.user!.id, action: "usage_entry_removed", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, quantity: existing.quantity, unit: existing.unit } });
+  res.status(204).send();
+});
+
+// ---------------------------------------------------------------------------
+// The photo of the meter (optional): attached to a reading while it can still be edited
+// ---------------------------------------------------------------------------
+
+/** Loads the reading and applies the same rules as editing it. Sends the error and returns null when refused. */
+function readingForPhoto(req: import("express").Request, res: import("express").Response) {
+  const id = Number(req.params.id);
+  const existing = db.select().from(usageEntries).where(eq(usageEntries.id, id)).get();
+  if (!existing) {
+    res.status(404).json({ error: { code: "not_found", message: "Usage entry not found." } });
+    return null;
+  }
+  if (!ensureContractAccess(req, res, existing.contractId)) return null;
+  if (rejectIfDraft(res, existing.contractId)) return null;
+  if (chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd)) {
+    if (!canEditEntry(req.user!, existing.enteredBy, existing.createdAt)) {
+      res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
+      return null;
+    }
+    if (billedChargesFor(existing).some((c) => hasMoneyOn(c.id))) {
+      res.status(409).json({ error: { code: "charge_has_payments", message: "A payment is already applied to the bill made from this reading, so it can't be changed. An Admin can reverse the payment first." } });
+      return null;
+    }
+  }
+  return existing;
+}
+
+usageEntriesRouter.post("/usage-entries/:id/photo", requireRole("admin", "manager"), photoUpload.single("file"), (req, res) => {
+  const existing = readingForPhoto(req, res);
+  if (!existing) return;
+  if (!req.file) return res.status(400).json({ error: { code: "invalid_input", message: "Choose a photo." } });
+  if (req.file.size > MAX_PHOTO_BYTES) return res.status(413).json({ error: { code: "photo_too_large", message: PHOTO_TOO_LARGE } });
+  const inspected = inspectPhotoUpload(req.file.originalname, req.file.buffer);
+  if (!inspected.ok) return res.status(400).json({ error: { code: "invalid_file", message: inspected.message } });
+
+  const dir = path.join(PHOTO_DIR, "usage_entry", String(existing.id));
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `${crypto.randomUUID()}${inspected.extension}`);
+  fs.writeFileSync(filePath, req.file.buffer);
+
+  const replaced = removePhoto(existing.id);
+  const doc = db
+    .insert(documents)
+    .values({
+      ownerType: "usage_entry",
+      ownerId: existing.id,
+      docType: "meter_photo",
+      classification: "ordinary",
+      filePath,
+      mimeType: inspected.mime,
+      sizeBytes: req.file.size,
+      checksumSha256: crypto.createHash("sha256").update(req.file.buffer).digest("hex"),
+      uploadedBy: req.user!.id,
+    })
+    .returning()
+    .get();
+  recordAudit({ actorUserId: req.user!.id, action: "usage_photo_attached", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, ...(replaced ? { replaced: true } : {}) } });
+  res.status(201).json({ photoDocumentId: doc.id });
+});
+
+usageEntriesRouter.delete("/usage-entries/:id/photo", requireRole("admin", "manager"), (req, res) => {
+  const existing = readingForPhoto(req, res);
+  if (!existing) return;
+  const removed = removePhoto(existing.id);
+  if (!removed) return res.status(404).json({ error: { code: "not_found", message: "This reading has no photo." } });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_photo_removed", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}` } });
   res.status(204).send();
 });
 

@@ -40,6 +40,7 @@ import DateField from "../components/DateField";
 import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
+import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
 import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft } from "../components/billing/format";
@@ -106,6 +107,8 @@ interface UsageEntryDto {
   billed?: boolean;
   canEdit?: boolean;
   editableUntil?: string | null;
+  photoDocumentId?: number | null;
+  photoMissing?: boolean;
 }
 interface ConcessionDto {
   id: number;
@@ -328,6 +331,8 @@ export default function ContractDetailPage() {
   const [rateModal, setRateModal] = useState<{ streamId: number; rate?: RateScheduleDto } | null>(null);
   const [usageEntryModal, setUsageEntryModal] = useState(false);
   const [editUsageEntryModal, setEditUsageEntryModal] = useState<UsageEntryDto | null>(null);
+  const [newPhoto, setNewPhoto] = useState<File | null>(null);
+  const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [editConcessionModal, setEditConcessionModal] = useState<ConcessionDto | null>(null);
   const [editDepositModal, setEditDepositModal] = useState<DepositTermsDto | null>(null);
   const [editDocModal, setEditDocModal] = useState<DocumentDto | null>(null);
@@ -659,8 +664,17 @@ export default function ContractDetailPage() {
   const onAddUsageEntry = async () => {
     try {
       const values = await usageEntryForm.validateFields();
-      await api.post(`/contracts/${id}/usage-entries`, { ...values, quantity: String(values.quantity) });
+      const created = await api.post<{ usageEntry: { id: number } }>(`/contracts/${id}/usage-entries`, { ...values, quantity: String(values.quantity) });
+      if (newPhoto) {
+        // The reading is saved either way; a photo that fails to upload can be added again from the list.
+        try {
+          await uploadMeterPhoto(created.usageEntry.id, newPhoto);
+        } catch (err) {
+          message.warning(apiErrorMessage(err, t));
+        }
+      }
       setUsageEntryModal(false);
+      setNewPhoto(null);
       usageEntryForm.resetFields();
       message.success(t("common.save"));
       load();
@@ -674,7 +688,15 @@ export default function ContractDetailPage() {
     try {
       const values = await editUsageEntryForm.validateFields();
       await api.patch(`/usage-entries/${editUsageEntryModal.id}`, { ...values, quantity: String(values.quantity) });
+      if (editPhoto) {
+        try {
+          await uploadMeterPhoto(editUsageEntryModal.id, editPhoto);
+        } catch (err) {
+          message.warning(apiErrorMessage(err, t));
+        }
+      }
       setEditUsageEntryModal(null);
+      setEditPhoto(null);
       editUsageEntryForm.resetFields();
       message.success(t("common.save"));
       load();
@@ -1469,6 +1491,13 @@ export default function ContractDetailPage() {
                       { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
                       { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}` },
                       { title: t("contracts.usageEntrySource"), dataIndex: "source" },
+                      {
+                        title: t("contracts.photo"),
+                        key: "photo",
+                        render: (_: unknown, u: UsageEntryDto) => (
+                          <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
+                        ),
+                      },
                       ...(canManageUsage
                         ? [
                             {
@@ -2520,7 +2549,10 @@ export default function ContractDetailPage() {
       <Modal
         title={t("contracts.addUsageEntry")}
         open={usageEntryModal}
-        onCancel={() => setUsageEntryModal(false)}
+        onCancel={() => {
+          setUsageEntryModal(false);
+          setNewPhoto(null);
+        }}
         onOk={onAddUsageEntry}
         okText={t("common.create")}
         cancelText={t("common.cancel")}
@@ -2561,13 +2593,19 @@ export default function ContractDetailPage() {
           <Form.Item name="source" label={t("contracts.usageEntrySource")}>
             <Input />
           </Form.Item>
+          <Form.Item label={t("contracts.photoOptional")}>
+            <PhotoPicker value={newPhoto} onChange={setNewPhoto} />
+          </Form.Item>
         </Form>
       </Modal>
 
       <Modal
         title={t("common.edit")}
         open={!!editUsageEntryModal}
-        onCancel={() => setEditUsageEntryModal(null)}
+        onCancel={() => {
+          setEditUsageEntryModal(null);
+          setEditPhoto(null);
+        }}
         onOk={onEditUsageEntry}
         okText={t("common.save")}
         cancelText={t("common.cancel")}
@@ -2590,6 +2628,9 @@ export default function ContractDetailPage() {
           </Form.Item>
           <Form.Item name="source" label={t("contracts.usageEntrySource")}>
             <Input />
+          </Form.Item>
+          <Form.Item label={t("contracts.photoOptional")}>
+            <PhotoPicker value={editPhoto} onChange={setEditPhoto} />
           </Form.Item>
         </Form>
       </Modal>

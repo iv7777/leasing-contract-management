@@ -57,7 +57,7 @@ export const guideEn: GuideContent = {
               steps: [
                 "Add properties, units and parties if they are not on file yet.",
                 "**Contracts** → **Add contract**, then fill in units, pricing, deposit and documents. An Admin activates it when it's ready.",
-                "Each month, enter **meter readings** for electricity and water (Dashboard tells you which are missing).",
+                "Each month, enter **meter readings** for electricity and water (Dashboard tells you which are missing). You can attach a photo of the meter to a reading — on a phone it opens the camera.",
                 "Use **Propose amendment** for any change to an active contract — an Admin approves it.",
               ],
             },

@@ -51,3 +51,14 @@ export function inspectUpload(originalName: string, content: Buffer): UploadChec
 export function isInlineMime(mime: string): boolean {
   return Object.values(KINDS).some((k) => k.inline && k.mime === mime);
 }
+
+/** A meter photo: a JPG, PNG or WEBP picture, nothing else. */
+export function inspectPhotoUpload(originalName: string, content: Buffer): UploadCheck {
+  const checked = inspectUpload(originalName, content);
+  if (!checked.ok) return checked;
+  if (![".jpg", ".jpeg", ".png", ".webp"].includes(checked.extension)) return { ok: false, message: PHOTO_TYPE };
+  return checked;
+}
+
+export const PHOTO_TYPE = "A meter photo must be a JPG, PNG or WEBP picture.";
+export const PHOTO_TOO_LARGE = "That photo is too large (15 MB at most).";

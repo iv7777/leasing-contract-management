@@ -95,7 +95,7 @@ export const userProperties = sqliteTable("user_properties", {
 
 export const documents = sqliteTable("documents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  ownerType: text("owner_type", { enum: ["property", "unit", "party", "contract"] }).notNull(),
+  ownerType: text("owner_type", { enum: ["property", "unit", "party", "contract", "usage_entry"] }).notNull(),
   ownerId: integer("owner_id").notNull(),
   docType: text("doc_type").notNull(),
   // Optional display name chosen by the uploader; editable at any time.
