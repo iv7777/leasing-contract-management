@@ -18,6 +18,7 @@ const routeTopics: RouteTopic[] = [
   { pattern: /^\/backups$/, topic: "backups" },
   { pattern: /^\/billing-runs$/, topic: "billingRuns" },
   { pattern: /^\/system-health$/, topic: "systemHealth" },
+  { pattern: /^\/go-live$/, topic: "goLive" },
   { pattern: /^\/$/, topic: "dashboard" },
 ];
 
@@ -62,6 +63,7 @@ const topicChapters: Record<string, string[]> = {
   billingRuns: ["billing"],
   backups: ["monthly"],
   systemHealth: ["monthly"],
+  goLive: ["billing", "collect"],
   guide: ["interface", "welcome"],
 };
 

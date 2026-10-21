@@ -1,0 +1,75 @@
+/** One CSV cell. A value starting with = + - @ would be run as a formula by Excel; keep it as text. */
+export const csvCell = (raw: string) => {
+  const v = /^([=@\t\r]|[+-](?![\d.]))/.test(raw) ? `'${raw}` : raw;
+  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+};
+
+/** Saves the lines as a UTF-8 CSV (with a byte-order mark so Excel reads Chinese correctly). */
+export function downloadCsv(filename: string, rows: string[][]): void {
+  const text = rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Splits CSV or tab-separated text (as pasted from Excel) into rows of cells. Handles quoted cells. */
+export function parseDelimited(text: string): string[][] {
+  const clean = text.replace(/^﻿/, "");
+  const firstLine = clean.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = firstLine.includes("\t") ? "\t" : firstLine.includes(",") ? "," : firstLine.includes(";") ? ";" : ",";
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+    if (quoted) {
+      if (ch === '"' && clean[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === delimiter) {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && clean[i + 1] === "\n") i++;
+      row.push(cell);
+      cell = "";
+      if (row.some((c) => c.trim() !== "")) rows.push(row);
+      row = [];
+    } else cell += ch;
+  }
+  row.push(cell);
+  if (row.some((c) => c.trim() !== "")) rows.push(row);
+  return rows;
+}
+
+/** "¥1,500.50" or "1 500" -> fen; null when blank or not a number. */
+export function parseYuanToFen(raw: string | undefined): number | null {
+  const v = (raw ?? "").replace(/[¥￥,\s]/g, "");
+  if (v === "" || !/^-?\d+(\.\d+)?$/.test(v)) return null;
+  return Math.round(parseFloat(v) * 100);
+}
+
+/** Reads the accountant's answers: a contract reference and the balance owed. Works on the sheet
+ * we generate (finds the balance column by its heading) or on two pasted columns (reference, balance). */
+export function readBalances(rows: string[][]): { reference: string; balanceOwedFen: number | null }[] {
+  if (rows.length === 0) return [];
+  const header = rows[0];
+  let balanceCol = header.findIndex((h) => /balance|欠款|余额/i.test(h));
+  let body = rows;
+  if (balanceCol >= 0) body = rows.slice(1);
+  else if (rows.every((r) => r.length <= 2)) balanceCol = 1;
+  else balanceCol = 7;
+  // A header row of a two-column paste ("Contract no., Balance") has a non-numeric balance cell.
+  if (body === rows && parseYuanToFen(rows[0][balanceCol]) === null && rows[0][balanceCol]?.trim()) body = rows.slice(1);
+  return body
+    .map((r) => ({ reference: (r[0] ?? "").trim(), balanceOwedFen: parseYuanToFen(r[balanceCol]) }))
+    .filter((r) => r.reference !== "");
+}

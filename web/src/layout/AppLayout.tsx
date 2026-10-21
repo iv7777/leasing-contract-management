@@ -18,6 +18,7 @@ import {
   ReadOutlined,
   EllipsisOutlined,
   SafetyCertificateOutlined,
+  RocketOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -70,6 +71,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { key: "/audit", icon: <AuditOutlined />, label: t("nav.audit") },
     { key: "/billing-runs", icon: <ScheduleOutlined />, label: t("nav.billingRuns") },
     { key: "/backups", icon: <CloudServerOutlined />, label: t("nav.backups") },
+    { key: "/go-live", icon: <RocketOutlined />, label: t("nav.goLive") },
     { key: "/system-health", icon: <SafetyCertificateOutlined />, label: t("nav.systemHealth") },
   ];
 

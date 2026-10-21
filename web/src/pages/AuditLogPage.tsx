@@ -3,6 +3,7 @@ import { Button, Collapse, Input, message, Select, Space, Table, Tag, Typography
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
+import { csvCell } from "../api/csv";
 import DateField from "../components/DateField";
 
 interface AuditEventDto {
@@ -102,11 +103,6 @@ function lineItems(t: TFunction, event: AuditEventDto): ReactNode[] {
   );
 }
 
-const csvCell = (raw: string) => {
-  // A cell starting with = + - @ would be run as a formula by Excel; keep it as text.
-  const v = /^([=@\t\r]|[+-](?![\d.]))/.test(raw) ? `'${raw}` : raw;
-  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-};
 
 /** One CSV line per audit record, in the language the page is showing. */
 function auditCsv(t: TFunction, events: AuditEventDto[]): string {

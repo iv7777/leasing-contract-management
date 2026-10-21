@@ -613,7 +613,7 @@ export const guideEn: GuideContent = {
             "**Monthly statement** (contract page): opening balance, new bills, adjustments, payments applied, closing balance, unallocated credit — and the deposit shown separately.",
             "**Occupancy**: how much space is leased on any date; buildings and open land are reported separately.",
             "**Export PDF summary / Export CSV**: terms, ledger and amendment history. Available to Admins, Managers and anyone whose account allows it.",
-            "**Admin menu** (Admin only): Users, Audit Log, Billing runs, Backups and System health are grouped under **Admin** in the sidebar. **System health** runs read-only checks: document files missing from the server or left over without a record, file fingerprints, the database's own consistency checks, the last backup and free disk space.",
+            "**Admin menu** (Admin only): Users, Audit Log, Billing runs, Backups, Go-live and System health are grouped under **Admin** in the sidebar. **Go-live** downloads the accountant sheet (one row per contract), imports the balances the accountant returns, brings every ready contract up to date in one step (missing bills are created, then one Opening balance payment each), and lists each contract for review and **Finalize**. **System health** runs read-only checks: document files missing from the server or left over without a record, file fingerprints, the database's own consistency checks, the last backup and free disk space.",
             "**Audit Log** (Admin): who did what, and when, with what changed. Press **+** on a row to see every change (before → after), use **Expand all** for the whole page, and **Export CSV** to download every record that matches your filters.",
           ],
         },

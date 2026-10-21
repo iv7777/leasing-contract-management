@@ -18,6 +18,7 @@ import AuditLogPage from "./pages/AuditLogPage";
 import BillingRunsPage from "./pages/BillingRunsPage";
 import BackupsPage from "./pages/BackupsPage";
 import SystemHealthPage from "./pages/SystemHealthPage";
+import GoLivePage from "./pages/GoLivePage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
@@ -78,6 +79,14 @@ export default function App() {
                   element={
                     <RequireRole roles={["admin"]}>
                       <BackupsPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/go-live"
+                  element={
+                    <RequireRole roles={["admin"]}>
+                      <GoLivePage />
                     </RequireRole>
                   }
                 />

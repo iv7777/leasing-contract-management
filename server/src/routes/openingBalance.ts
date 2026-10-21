@@ -38,7 +38,7 @@ function guard(req: import("express").Request, res: import("express").Response, 
   return !rejectIfDraft(res, contractId);
 }
 
-const liveRecord = (contractId: number) =>
+export const liveRecord = (contractId: number) =>
   db.select().from(openingBalances).where(and(eq(openingBalances.contractId, contractId), ne(openingBalances.status, "reversed"))).get();
 
 /** Receipts recorded on the contract after this opening balance was applied (other than its own). */
@@ -55,7 +55,7 @@ function standingOf(row: typeof openingBalances.$inferSelect) {
 }
 
 /** Other receipts that would make an opening balance unsafe: any real payment already on the contract. */
-function hasOtherPayments(contractId: number, ownReceiptId: number | null): boolean {
+export function hasOtherPayments(contractId: number, ownReceiptId: number | null): boolean {
   return db
     .select({ id: receipts.id, status: receipts.status })
     .from(receipts)
@@ -65,7 +65,7 @@ function hasOtherPayments(contractId: number, ownReceiptId: number | null): bool
 }
 
 /** Bills due on or before the date with what each owes. `ignoreReceiptId` treats that receipt as not yet applied. */
-function billsInScope(contractId: number, asOf: string, ignoreReceiptId: number | null) {
+export function billsInScope(contractId: number, asOf: string, ignoreReceiptId: number | null) {
   const data = loadLedgerInputs(contractId);
   const allocations = ignoreReceiptId === null ? data.allocations : data.allocations.filter((a) => a.receiptId !== ignoreReceiptId);
   const open: OpenCharge[] = [];
@@ -174,40 +174,59 @@ function postOpening(tx: Tx, contractId: number, userId: number, asOfDate: strin
   return receipt;
 }
 
-/** Applies a new opening balance, or (adjusting=true) replaces the provisional one. */
-function applyOpening(req: import("express").Request, res: import("express").Response, adjusting: boolean) {
-  const contractId = Number(req.params.id);
-  if (!guard(req, res, contractId)) return;
-  const parsed = applySchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Enter the as-of date and the balance owed." } });
-  const { asOfDate, balanceOwedFen, unpaid, expectedBilledFen, expectedBillCount } = parsed.data;
+/** A refused opening balance, carrying the HTTP status and code the route answers with. */
+export class OpeningError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export interface OpeningInput {
+  asOfDate: string;
+  balanceOwedFen: number;
+  unpaid?: { chargeId: number; unpaidFen: number }[];
+  expectedBilledFen: number;
+  expectedBillCount: number;
+}
+
+/** Applies a new opening balance, or (adjusting=true) replaces the provisional one. Shared by the
+ * single-contract screen and the Go-live batch; throws OpeningError when it can't be done. */
+export function performOpening(userId: number, contractId: number, input: OpeningInput, adjusting: boolean) {
+  const { asOfDate, balanceOwedFen, unpaid, expectedBilledFen, expectedBillCount } = input;
+  const status = db.select({ s: contracts.status }).from(contracts).where(eq(contracts.id, contractId)).get()?.s;
+  if (!status) throw new OpeningError(404, "not_found", "Contract not found.");
+  if (status === "draft") throw new OpeningError(409, "contract_not_active", "This contract is still a draft. Activate it first.");
   const dateErr = checkDate(contractId, asOfDate);
-  if (dateErr) return res.status(400).json({ error: { code: "invalid_input", message: dateErr } });
+  if (dateErr) throw new OpeningError(400, "invalid_input", dateErr);
 
   const live = liveRecord(contractId);
   if (adjusting) {
-    if (!live) return res.status(404).json({ error: { code: "not_found", message: "This contract has no opening balance to adjust." } });
+    if (!live) throw new OpeningError(404, "not_found", "This contract has no opening balance to adjust.");
     if (standingOf(live).status !== "provisional") {
-      return res.status(409).json({ error: { code: "opening_balance_final", message: "This opening balance is final and can no longer be adjusted. Reverse its receipt to start again." } });
+      throw new OpeningError(409, "opening_balance_final", "This opening balance is final and can no longer be adjusted. Reverse its receipt to start again.");
     }
   } else if (live) {
-    return res.status(409).json({ error: { code: "opening_balance_exists", message: "This contract already has an opening balance." } });
+    throw new OpeningError(409, "opening_balance_exists", "This contract already has an opening balance.");
   }
   if (hasOtherPayments(contractId, live?.receiptId ?? null)) {
-    return res.status(409).json({ error: { code: "contract_has_payments", message: "This contract already has payments recorded, so it can't be brought up to date this way." } });
+    throw new OpeningError(409, "contract_has_payments", "This contract already has payments recorded, so it can't be brought up to date this way.");
   }
 
   const { open } = billsInScope(contractId, asOfDate, live?.receiptId ?? null);
   const plan = planOpening(open, balanceOwedFen, unpaid);
-  if (plan.problems.length > 0) return res.status(400).json({ error: { code: plan.problems[0], message: PROBLEM_MESSAGES[plan.problems[0]] } });
+  if (plan.problems.length > 0) throw new OpeningError(400, plan.problems[0], PROBLEM_MESSAGES[plan.problems[0]]);
   if (plan.billedFen !== expectedBilledFen || plan.rows.length !== expectedBillCount) {
-    return res.status(409).json({ error: { code: "stale_preview", message: "The bills changed since you previewed this. Open the preview again to see the current figures." } });
+    throw new OpeningError(409, "stale_preview", "The bills changed since you previewed this. Open the preview again to see the current figures.");
   }
 
   try {
     const result = db.transaction((tx) => {
-      if (live?.receiptId) reverseReceipt(tx, live.receiptId, req.user!.id);
-      const receipt = postOpening(tx, contractId, req.user!.id, asOfDate, plan);
+      if (live?.receiptId) reverseReceipt(tx, live.receiptId, userId);
+      const receipt = postOpening(tx, contractId, userId, asOfDate, plan);
       if (live) {
         return tx
           .update(openingBalances)
@@ -218,12 +237,12 @@ function applyOpening(req: import("express").Request, res: import("express").Res
       }
       return tx
         .insert(openingBalances)
-        .values({ contractId, asOfDate, balanceOwedFen, billedFen: plan.billedFen, receiptId: receipt?.id ?? null, provisionalUntil: provisionalUntil(), createdBy: req.user!.id })
+        .values({ contractId, asOfDate, balanceOwedFen, billedFen: plan.billedFen, receiptId: receipt?.id ?? null, provisionalUntil: provisionalUntil(), createdBy: userId })
         .returning()
         .get();
     });
     recordAudit({
-      actorUserId: req.user!.id,
+      actorUserId: userId,
       action: adjusting ? "opening_balance_adjusted" : "opening_balance_applied",
       entityType: "opening_balance",
       entityId: result.id,
@@ -237,9 +256,23 @@ function applyOpening(req: import("express").Request, res: import("express").Res
         ...(adjusting && live ? { previousAsOfDate: live.asOfDate, previousBalanceOwedFen: live.balanceOwedFen } : {}),
       },
     });
-    res.status(adjusting ? 200 : 201).json({ record: result, paymentFen: plan.paymentFen });
+    return { record: result, paymentFen: plan.paymentFen };
   } catch (err) {
-    if (err instanceof PaymentError) return res.status(409).json({ error: { code: "allocation_rejected", message: err.message } });
+    if (err instanceof PaymentError) throw new OpeningError(409, "allocation_rejected", err.message);
+    throw err;
+  }
+}
+
+function applyOpening(req: import("express").Request, res: import("express").Response, adjusting: boolean) {
+  const contractId = Number(req.params.id);
+  if (!guard(req, res, contractId)) return;
+  const parsed = applySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Enter the as-of date and the balance owed." } });
+  try {
+    const result = performOpening(req.user!.id, contractId, parsed.data, adjusting);
+    res.status(adjusting ? 200 : 201).json(result);
+  } catch (err) {
+    if (err instanceof OpeningError) return res.status(err.status).json({ error: { code: err.code, message: err.message } });
     throw err;
   }
 }
