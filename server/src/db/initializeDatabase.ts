@@ -10,9 +10,10 @@ import { sqlite } from "./client.js";
  *   npm run initialize-db                    wipe everything below
  *   npm run initialize-db -- --keep-contracts  keep Tenants & Landlords, properties,
  *                                            units and contracts (with their pricing,
- *                                            deposit terms, amendments and documents),
- *                                            wipe only what happened under them, and put
- *                                            every contract back to draft
+ *                                            deposit terms and documents), wipe only
+ *                                            what happened under them — including every
+ *                                            amendment and the version history — and put
+ *                                            every contract back to draft at version 1
  *
  * Always kept, in both modes: user accounts and sessions, app settings and the
  * backup list. The audit log is wiped in both modes; one entry recording this
@@ -32,7 +33,9 @@ const SERVICE_UNIT_PATH = `/etc/systemd/system/${SERVICE_NAME}.service`;
 const manageService = fs.existsSync(SERVICE_UNIT_PATH);
 
 /** What happens under a contract: bills, money received and applied, meter
- * readings, deposit movements and the nightly-run log. */
+ * readings, deposit movements, the nightly-run log, and the amendments (with
+ * the version snapshots they produced). Version snapshots go first because they
+ * point at amendments. */
 const ACTIVITY_TABLES = [
   "receipt_allocations",
   "charge_adjustments",
@@ -41,6 +44,8 @@ const ACTIVITY_TABLES = [
   "charges",
   "usage_entries",
   "billing_runs",
+  "contract_versions",
+  "amendments",
 ];
 
 /** The contracts, their setup and the parties/properties they hang on. */
@@ -50,8 +55,6 @@ const MASTER_DATA_TABLES = [
   "pricing_stream_units",
   "pricing_streams",
   "deposit_terms",
-  "amendments",
-  "contract_versions",
   "billing_rules",
   "contract_units",
   "contracts",
@@ -96,8 +99,10 @@ console.log("Will be KEPT:");
 console.log("  user accounts and sessions, app settings, the backup list");
 if (keepContracts) {
   console.log(`  Tenants & Landlords (${count("parties")}), properties (${count("properties")}), units (${count("units")}),`);
-  console.log(`  contracts (${count("contracts")}) with their pricing, deposit terms, amendments and documents`);
-  console.log("  Every contract is set back to DRAFT and automatic billing is switched OFF.");
+  console.log(`  contracts (${count("contracts")}) with their pricing, deposit terms and documents`);
+  console.log("  Every contract is set back to DRAFT (version 1) and automatic billing is switched OFF.");
+  console.log("  Amendments are deleted. Terms they already changed stay as they are now, and any");
+  console.log("  document an amendment withdrew (voided) is restored.");
 }
 console.log("");
 if (manageService) {
@@ -151,7 +156,9 @@ try {
       }
       if (keepContracts) {
         work.prepare(`UPDATE billing_rules SET auto_billing = 0`).run();
-        work.prepare(`UPDATE contracts SET status = 'draft', archived = 0, updated_at = ?`).run(new Date().toISOString());
+        work.prepare(`UPDATE contracts SET status = 'draft', archived = 0, version_number = 1, updated_at = ?`).run(new Date().toISOString());
+        // Documents withdrawn by an amendment come back: that amendment no longer exists.
+        work.prepare(`UPDATE documents SET voided = 0, voided_at = NULL, voided_by_amendment_id = NULL WHERE voided = 1`).run();
       }
       work
         .prepare(`INSERT INTO audit_events (actor_user_id, action, entity_type, details_json, created_at) VALUES (NULL, ?, 'database', ?, ?)`)
@@ -167,7 +174,7 @@ try {
 
   console.log("");
   console.log("Database initialized.");
-  if (keepContracts) console.log("Next: check each draft contract, activate it, then use Catch up billing on its Charges tab and enter payments.");
+  if (keepContracts) console.log("Next: check each draft contract (its terms are as last amended), activate it, then use Catch up billing on its Charges tab and enter payments.");
 } finally {
   try {
     startService();

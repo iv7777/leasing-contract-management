@@ -751,8 +751,8 @@ action_initialize_database() {
       echo "What should be cleared?"
       echo "  1) Everything — Tenants & Landlords, properties, units, contracts, bills, payments..."
       echo "  2) Keep Tenants & Landlords, properties and contracts — clear the bills, payments,"
-      echo "     meter readings, deposit movements and billing-run history, and set every"
-      echo "     contract back to draft"
+      echo "     meter readings, deposit movements, billing-run history and amendments, and set"
+      echo "     every contract back to draft"
       echo "  (Both options also wipe the audit log.)"
       read -rp "Choose [1-2], or blank to cancel: " mode
       case "$mode" in
@@ -765,9 +765,9 @@ action_initialize_database() {
 
   echo
   if [ "$keep" = "1" ]; then
-    warn "This will DELETE every bill, payment, meter reading, deposit movement and billing-run record."
-    warn "Tenants & Landlords, properties, units and contracts (with pricing, deposit terms, amendments"
-    warn "and documents) are KEPT, but every contract goes back to DRAFT and automatic billing is switched off."
+    warn "This will DELETE every bill, payment, meter reading, deposit movement, billing-run record and amendment."
+    warn "Tenants & Landlords, properties, units and contracts (with pricing, deposit terms and documents)"
+    warn "are KEPT, but every contract goes back to DRAFT (version 1) and automatic billing is switched off."
   else
     warn "This will DELETE all Tenants & Landlords, properties, units, contracts, bills, payments and so on."
   fi
