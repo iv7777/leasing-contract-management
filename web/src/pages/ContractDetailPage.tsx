@@ -1859,7 +1859,7 @@ export default function ContractDetailPage() {
                   renderItem={(a) => (
                     <List.Item
                       actions={[
-                        a.status === "draft" && (user?.role === "admin" || (user?.role === "manager" && (a.createdBy === null || a.createdBy === user.id))) && (
+                        a.status === "draft" && (user?.role === "admin" || (user?.role === "manager" && a.createdBy === user.id)) && (
                           <Button
                             key="edit"
                             size="small"

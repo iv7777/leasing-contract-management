@@ -247,8 +247,8 @@ amendmentsRouter.patch("/amendments/:id", requireRole("admin", "manager"), (req,
   if (amendment.status !== "draft") {
     return res.status(409).json({ error: { code: "invalid_state", message: "Only a draft amendment can be edited." } });
   }
-  // A draft belongs to whoever drafted it (drafts from before this was recorded stay open to any Manager).
-  if (req.user!.role !== "admin" && amendment.createdBy !== null && amendment.createdBy !== req.user!.id) {
+  // A draft belongs to whoever drafted it.
+  if (req.user!.role !== "admin" && amendment.createdBy !== req.user!.id) {
     return res.status(403).json({ error: { code: "forbidden", message: "Only the person who drafted this amendment, or an Admin, can edit it." } });
   }
   const parsed = updateAmendmentSchema.safeParse(req.body);

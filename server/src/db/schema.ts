@@ -412,7 +412,7 @@ export const amendments = sqliteTable("amendments", {
   status: text("status", { enum: ["draft", "pending", "approved", "rejected", "withdrawn"] })
     .notNull()
     .default("draft"),
-  // Who drafted it; only they (or an Admin) can edit or withdraw the draft.
+  // Who drafted it; only they (or an Admin) can edit or withdraw the draft. Always set by the app.
   createdBy: integer("created_by").references(() => users.id),
   submittedBy: integer("submitted_by").references(() => users.id),
   submittedAt: text("submitted_at"),
