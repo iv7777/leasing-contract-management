@@ -185,3 +185,26 @@ body {
   color: #1f5f4a;
   font-weight: 600;
 }
+
+/* With a mouse there is no swipe, so a tab bar that doesn't fit would be
+ * clipped with only a tiny "…" menu. On mouse-driven screens the tabs wrap onto
+ * a second line instead; touch devices keep the swipeable single row. */
+@media (hover: hover) and (pointer: fine) {
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap {
+    overflow: visible;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap::before,
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap::after,
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-ink-bar,
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-operations {
+    display: none !important;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-list {
+    flex-wrap: wrap;
+    transform: none !important;
+  }
+  /* the ink bar only follows a single row, so mark the active tab directly */
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active {
+    box-shadow: inset 0 -2px 0 #1f5f4a;
+  }
+}
