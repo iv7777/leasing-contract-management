@@ -13,6 +13,7 @@ import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, validateAllocation } from "../billing/ledger.js";
 import { proposeAllocations, type OpenCharge } from "../billing/allocation.js";
 import { todayInChina } from "@lcm/shared";
+import { OPENING_METHOD } from "../lib/openingBalance.js";
 
 /** Recording payments the way staff actually think about them: "the tenant
  * paid X on this date" — the money is applied to what they owe, oldest first,
@@ -30,7 +31,7 @@ export class PaymentError extends Error {}
 const paymentSchema = z.object({
   receivedDate: isoDate,
   amountFen: positiveFen,
-  paymentMethod: z.string().trim().min(1).max(50),
+  paymentMethod: z.string().trim().min(1).max(50).refine((m) => m !== OPENING_METHOD, "Opening balances are recorded with Bring up to date."),
   externalReference: z.string().trim().max(100).optional(),
 });
 

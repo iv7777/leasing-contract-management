@@ -105,7 +105,7 @@ export function amendmentFacts(a: typeof amendments.$inferSelect) {
   return { contract: contractRef(a.contractId), amendmentType: a.type, effectiveDate: a.effectiveDate, ...(applied ? { applied } : {}) };
 }
 
-import { documents, parties, properties, users } from "../db/schema.js";
+import { documents, openingBalances, parties, properties, users } from "../db/schema.js";
 
 /** A short human label for a record (contract reference, property / party /
  * user name, unit label, document name), or null if it no longer exists. */
@@ -134,6 +134,10 @@ export function entityLabel(entityType: string, entityId: number | null): string
       return chargeFacts(entityId).contract ?? null;
     case "receipt":
       return receiptFacts(entityId).contract ?? null;
+    case "opening_balance": {
+      const o = db.select({ c: openingBalances.contractId }).from(openingBalances).where(eq(openingBalances.id, entityId)).get();
+      return o ? contractRef(o.c) : null;
+    }
     case "amendment": {
       const a = db.select().from(amendments).where(eq(amendments.id, entityId)).get();
       return a ? contractRef(a.contractId) : null;

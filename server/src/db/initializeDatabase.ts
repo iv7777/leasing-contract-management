@@ -37,6 +37,7 @@ const manageService = fs.existsSync(SERVICE_UNIT_PATH);
  * the version snapshots they produced). Version snapshots go first because they
  * point at amendments. */
 const ACTIVITY_TABLES = [
+  "opening_balances",
   "receipt_allocations",
   "charge_adjustments",
   "deposit_transactions",

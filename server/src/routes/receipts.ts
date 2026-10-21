@@ -15,6 +15,8 @@ import { computeLatePenalty } from "../billing/latePenalty.js";
 import { canEditEntry, editWindowEnd, EDIT_NOT_YOURS, EDIT_WINDOW_CLOSED, withinEditWindow } from "../lib/editWindow.js";
 import { changesBetween } from "../lib/auditDetail.js";
 import { PaymentError, reapplyReceipt } from "./payments.js";
+import { markOpeningReversedForReceipt } from "./openingBalance.js";
+import { OPENING_METHOD } from "../lib/openingBalance.js";
 import { todayInChina } from "@lcm/shared";
 
 export const receiptsRouter = Router();
@@ -58,8 +60,8 @@ receiptsRouter.get("/contracts/:contractId/ledger", (req, res) => {
     receipts: data.receiptsRaw.map((r) => ({
       ...r,
       // Whether this user can still correct the entry directly, and until when.
-      canEdit: r.status === "posted" && r.paymentMethod !== "deposit_transfer" && canEditEntry(req.user!, r.recordedBy, r.createdAt),
-      editableUntil: r.status === "posted" && r.paymentMethod !== "deposit_transfer" ? editWindowEnd(r.createdAt) : null,
+      canEdit: r.status === "posted" && r.paymentMethod !== "deposit_transfer" && r.paymentMethod !== OPENING_METHOD && canEditEntry(req.user!, r.recordedBy, r.createdAt),
+      editableUntil: r.status === "posted" && r.paymentMethod !== "deposit_transfer" && r.paymentMethod !== OPENING_METHOD ? editWindowEnd(r.createdAt) : null,
     })),
     receiptBalances,
   });
@@ -85,6 +87,9 @@ receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "man
   const parsed = createReceiptSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid receipt payload." } });
 
+  if (parsed.data.paymentMethod === OPENING_METHOD) {
+    return res.status(400).json({ error: { code: "invalid_input", message: "Opening balances are recorded with Bring up to date." } });
+  }
   if (parsed.data.receivedDate > todayInChina()) {
     return res.status(400).json({ error: { code: "future_date", message: "The received date can't be in the future." } });
   }
@@ -120,6 +125,9 @@ receiptsRouter.patch("/receipts/:id", requireRole("admin", "manager", "collector
   if (rejectIfDraft(res, receipt.contractId)) return;
   if (receipt.status !== "posted" || receipt.paymentMethod === "deposit_transfer") {
     return res.status(409).json({ error: { code: "not_editable", message: "This entry can't be edited." } });
+  }
+  if (receipt.paymentMethod === OPENING_METHOD) {
+    return res.status(409).json({ error: { code: "opening_receipt_managed", message: "An opening balance can only be changed from Bring up to date (or reversed)." } });
   }
   if (req.user!.role !== "admin" && req.user!.id !== receipt.recordedBy) {
     return res.status(403).json({ error: { code: "forbidden", message: EDIT_NOT_YOURS } });
@@ -219,6 +227,9 @@ receiptsRouter.post("/receipt-allocations/:id/reverse", requireRole("admin"), (r
 
   const reason = req.body?.reason as string | undefined;
   if (!reason) return res.status(400).json({ error: { code: "invalid_input", message: "A reason is required to reverse an allocation." } });
+  if (db.select().from(receipts).where(eq(receipts.id, allocation.receiptId)).get()?.paymentMethod === OPENING_METHOD) {
+    return res.status(409).json({ error: { code: "opening_receipt_managed", message: "An opening balance can only be changed from Bring up to date (or reversed as a whole)." } });
+  }
 
   const reversal = db
     .insert(receiptAllocations)
@@ -272,6 +283,7 @@ receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) =>
       );
     }
     tx.update(receipts).set({ status: "reversed" }).where(eq(receipts.id, id)).run();
+    if (receipt.paymentMethod === OPENING_METHOD) markOpeningReversedForReceipt(id);
     return created;
   });
 

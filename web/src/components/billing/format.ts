@@ -10,6 +10,7 @@ export function streamName(t: (key: string) => string, label: string, feeType: s
 /** Payment methods are stored as the English names above; show them in the
  * viewer's language. Anything else (older or free-typed values) is shown as is. */
 export function paymentMethodLabel(t: (key: string) => string, method: string): string {
+  if (method === "Opening balance") return t("billing.methods.openingBalance");
   return (PAYMENT_METHODS as readonly string[]).includes(method) ? t(`billing.methods.${camel(method.toLowerCase().replace(/ /g, "_"))}`) : method;
 }
 

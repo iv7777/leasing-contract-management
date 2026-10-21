@@ -374,6 +374,30 @@ export const receiptAllocations = sqliteTable("receipt_allocations", {
   chargeIdx: index("receipt_allocations_charge_idx").on(t.chargeId),
 }));
 
+/** Bringing a contract that already existed up to date at go-live: the accountant's
+ * balance as of a date, and the one "Opening balance" receipt that settles every bill
+ * due by then except the balance. Provisional for a short while (it can be adjusted),
+ * then final. Never edited in place once final; a mistake is undone by reversing the
+ * receipt, which marks this row reversed. */
+export const openingBalances = sqliteTable("opening_balances", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  contractId: integer("contract_id").notNull().references(() => contracts.id),
+  asOfDate: text("as_of_date").notNull(),
+  balanceOwedFen: integer("balance_owed_fen").notNull(),
+  // What was billed and due by the as-of date when this was applied.
+  billedFen: integer("billed_fen").notNull(),
+  // The receipt carrying the opening payment; null when nothing had been paid.
+  receiptId: integer("receipt_id").references(() => receipts.id),
+  status: text("status", { enum: ["provisional", "final", "reversed"] }).notNull().default("provisional"),
+  provisionalUntil: text("provisional_until").notNull(),
+  finalizedAt: text("finalized_at"),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  createdAt: text("created_at").notNull().default(nowIso),
+}, (t) => ({
+  // One live opening balance per contract; a reversed one doesn't count.
+  liveIdx: uniqueIndex("opening_balances_live_idx").on(t.contractId).where(sql`${t.status} <> 'reversed'`),
+}));
+
 /** Every deposit movement — receipt, refund, deduction, or a transfer of
  * held deposit to rent — as one append-only ledger, kept independent of the
  * rent ledger so the two amounts are never double-counted (brief §6). */

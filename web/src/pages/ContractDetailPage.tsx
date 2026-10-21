@@ -39,6 +39,7 @@ import { HelpIcon } from "../help/HelpIcon";
 import DateField from "../components/DateField";
 import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
+import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
 import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft } from "../components/billing/format";
@@ -1873,6 +1874,7 @@ export default function ContractDetailPage() {
                   )
                 )}
                 {(user?.role === "admin" || user?.role === "manager") && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                {user?.role === "admin" && contract.status !== "draft" && <OpeningBalancePanel contractId={contract.id} onChanged={load} />}
                 {(user?.role === "admin" || user?.role === "manager") && contract.status !== "draft" && (
                   <Button icon={<PlusOutlined />} onClick={() => setGenerateModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.generateCharges")}

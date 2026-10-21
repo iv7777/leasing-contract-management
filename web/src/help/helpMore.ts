@@ -104,6 +104,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: [
         "Admin: **Catch up billing** previews, then creates, every bill since the lease began and turns automatic billing on.",
         "**Generate charges** creates one month by hand (needed for quarterly / yearly contracts).",
+        "Admin: **Bring up to date** applies the accountant's balance as one Opening balance payment; choose which bills stay unpaid, then **Finalize** (adjustable for 7 days).",
         "Admin: **Void** a mistaken bill with a reason.",
         "A red dot on this tab means overdue money.",
       ],
@@ -239,6 +240,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: [
         "管理员：**补账**会先预览，确认后生成自租约开始以来的全部账单，并开启自动出账。",
         "**生成账单**手动生成某个月的账单（按季度/按年的合同需要）。",
+        "管理员：**补齐至当前**把会计给的余额记为一笔「期初余额」收款；选择哪些账单保持未付，再点**定稿**（7 天内可调整）。",
         "管理员：**作废**有误的账单（需填写原因）。",
         "此页签上的红点表示有逾期款。",
       ],
