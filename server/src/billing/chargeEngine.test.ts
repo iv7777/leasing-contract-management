@@ -325,3 +325,18 @@ test("an earlier termination date caps billing mid-month and drops later months"
   assert.equal(generateChargeLines(input, "2026-11-01", "2026-11-30").lines[0].amountFen, 300_000);
   assert.equal(generateChargeLines(input, "2026-12-01", "2026-12-31").lines.length, 0);
 });
+
+test("metered billing starts at go-live: earlier months bill nothing and report no missing reading, later months are normal", () => {
+  const input = baseInput({
+    meteredFrom: "2026-10-01",
+    pricingStreams: [{ id: 10, feeType: "electricity_base", targetType: "contract" }],
+    rateSchedule: [meteredRate("1")],
+    usageEntries: [{ pricingStreamId: 10, serviceStart: "2026-10-01", serviceEnd: "2026-10-31", quantity: "100" }],
+  });
+  const before = generateChargeLines(input, "2026-09-01", "2026-09-30");
+  assert.deepEqual(before.lines, []);
+  assert.deepEqual(before.missingUsage, []);
+  assert.equal(generateChargeLines(input, "2026-10-01", "2026-10-31").lines.length, 1);
+  const noReading = generateChargeLines({ ...input, usageEntries: [] }, "2026-11-01", "2026-11-30");
+  assert.equal(noReading.missingUsage.length, 1);
+});

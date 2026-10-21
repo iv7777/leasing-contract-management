@@ -66,6 +66,7 @@ export function loadChargeContext(contractId: number): ChargeContext {
   const input: ChargeEngineInput = {
     billingStart: contract.termStart,
     billingEnd,
+    meteredFrom: rules.meteredBillingFrom,
     contractUnits: cUnits.map((u) => ({
       id: u.id,
       effectiveStart: u.effectiveStart,

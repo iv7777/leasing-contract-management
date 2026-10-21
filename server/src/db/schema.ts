@@ -200,6 +200,8 @@ export const billingRules = sqliteTable("billing_rules", {
   // of a lease that hasn't started yet) — never implicitly — so deploying
   // the nightly job can't post history for contracts nobody has reviewed.
   autoBilling: integer("auto_billing", { mode: "boolean" }).notNull().default(false),
+  // Set at go-live: metered fees are billed from readings only for months starting on or after this date.
+  meteredBillingFrom: text("metered_billing_from"),
 });
 
 /** Identifies exactly what is being priced: a single unit, an explicit
@@ -388,6 +390,9 @@ export const openingBalances = sqliteTable("opening_balances", {
   billedFen: integer("billed_fen").notNull(),
   // The receipt carrying the opening payment; null when nothing had been paid.
   receiptId: integer("receipt_id").references(() => receipts.id),
+  // Balances brought forward for metered items, as JSON [{feeType, amountFen}], and the metered start date this set.
+  extrasJson: text("extras_json"),
+  meteredFromSet: text("metered_from_set"),
   status: text("status", { enum: ["provisional", "final", "reversed"] }).notNull().default("provisional"),
   provisionalUntil: text("provisional_until").notNull(),
   finalizedAt: text("finalized_at"),

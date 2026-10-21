@@ -18,8 +18,15 @@ interface BillRow {
   paidFen: number;
   unpaidFen: number;
 }
+interface ExtraRow {
+  feeType: string;
+  amountFen: number;
+  streamLabel: string;
+}
 interface Preview {
   adjusting: boolean;
+  extras: ExtraRow[];
+  extraProblems: { code: string; feeType: string; message: string }[];
   billedFen: number;
   balanceOwedFen: number;
   paymentFen: number;
@@ -42,13 +49,15 @@ export default function OpeningBalanceModal({
   open: boolean;
   contractId: number;
   adjusting: boolean;
-  initial?: { asOfDate: string; balanceOwedFen: number };
+  initial?: { asOfDate: string; balanceOwedFen: number; extras?: { feeType: string; amountFen: number }[] };
   onClose: () => void;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
   const [asOf, setAsOf] = useState<string | undefined>(todayInChina());
   const [balance, setBalance] = useState<number | null>(null);
+  const [electricity, setElectricity] = useState<number | null>(null);
+  const [water, setWater] = useState<number | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [unpaid, setUnpaid] = useState<Record<number, number>>({}); // chargeId -> unpaid fen
   const [error, setError] = useState<string | null>(null);
@@ -62,19 +71,27 @@ export default function OpeningBalanceModal({
     setError(null);
     setAsOf(initial?.asOfDate ?? todayInChina());
     setBalance(initial ? initial.balanceOwedFen / 100 : null);
+    const amountOf = (type: string) => initial?.extras?.find((e) => e.feeType === type)?.amountFen;
+    setElectricity(amountOf("electricity_base") !== undefined ? amountOf("electricity_base")! / 100 : null);
+    setWater(amountOf("water") !== undefined ? amountOf("water")! / 100 : null);
   }, [open, initial]);
 
   const balanceFen = balance === null ? null : Math.round(balance * 100);
+  const extrasPayload = [
+    { feeType: "electricity_base", amountFen: Math.round((electricity ?? 0) * 100) },
+    { feeType: "water", amountFen: Math.round((water ?? 0) * 100) },
+  ].filter((e) => e.amountFen > 0);
 
   const showBills = async () => {
     if (!asOf || balanceFen === null) return;
     setLoading(true);
     setError(null);
     try {
-      const p = await api.post<Preview>(`/contracts/${contractId}/opening-balance/preview`, { asOfDate: asOf, balanceOwedFen: balanceFen });
+      const p = await api.post<Preview>(`/contracts/${contractId}/opening-balance/preview`, { asOfDate: asOf, balanceOwedFen: balanceFen, extras: extrasPayload });
       setPreview(p);
       setUnpaid(Object.fromEntries(p.rows.map((r) => [r.chargeId, r.unpaidFen])));
       if (p.problems.length > 0) setError(p.problems[0].message);
+      else if (p.extraProblems.length > 0) setError(p.extraProblems[0].message);
     } catch (err) {
       setPreview(null);
       setError(apiErrorMessage(err, t));
@@ -87,12 +104,12 @@ export default function OpeningBalanceModal({
   useEffect(() => {
     setPreview(null);
     setError(null);
-  }, [asOf, balance]);
+  }, [asOf, balance, electricity, water]);
 
   const assignedFen = useMemo(() => Object.values(unpaid).reduce((s, v) => s + v, 0), [unpaid]);
   const remainingFen = balanceFen === null ? 0 : balanceFen - assignedFen;
   const paymentFen = preview ? preview.billedFen - (balanceFen ?? 0) : 0;
-  const canConfirm = !!preview && preview.problems.length === 0 && remainingFen === 0;
+  const canConfirm = !!preview && preview.problems.length === 0 && preview.extraProblems.length === 0 && remainingFen === 0;
 
   const onConfirm = async () => {
     if (!preview || balanceFen === null || !asOf) return;
@@ -102,6 +119,7 @@ export default function OpeningBalanceModal({
         asOfDate: asOf,
         balanceOwedFen: balanceFen,
         unpaid: preview.rows.map((r) => ({ chargeId: r.chargeId, unpaidFen: unpaid[r.chargeId] ?? 0 })),
+        extras: extrasPayload,
         expectedBilledFen: preview.billedFen,
         expectedBillCount: preview.billCount,
       });
@@ -142,6 +160,12 @@ export default function OpeningBalanceModal({
         </Form.Item>
         <Form.Item label={t("openingBalance.balanceOwed")}>
           <InputNumber min={0} step={100} precision={2} prefix="¥" value={balance} onChange={setBalance} style={{ width: 160 }} />
+        </Form.Item>
+        <Form.Item label={t("openingBalance.electricityOwed")}>
+          <InputNumber min={0} step={100} precision={2} prefix="¥" value={electricity} onChange={setElectricity} style={{ width: 140 }} />
+        </Form.Item>
+        <Form.Item label={t("openingBalance.waterOwed")}>
+          <InputNumber min={0} step={100} precision={2} prefix="¥" value={water} onChange={setWater} style={{ width: 140 }} />
         </Form.Item>
         <Form.Item>
           <Button type="primary" ghost loading={loading} disabled={!asOf || balance === null} onClick={() => void showBills()}>
@@ -191,6 +215,15 @@ export default function OpeningBalanceModal({
               { title: "", width: 90, render: (_: unknown, r: BillRow) => stateTag(r) },
             ]}
           />
+          {preview.extras.length > 0 && (
+            <Alert
+              style={{ marginTop: 8 }}
+              type="info"
+              showIcon
+              message={t("openingBalance.broughtForwardBills")}
+              description={preview.extras.map((e) => `${t(`contracts.${e.feeType === "water" ? "water" : "electricityBase"}`)}: ${yuan(e.amountFen)}`).join(" · ") + " — " + t("openingBalance.broughtForwardNote", { date: asOf })}
+            />
+          )}
           <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
             {t("openingBalance.editHint")}
           </Typography.Paragraph>

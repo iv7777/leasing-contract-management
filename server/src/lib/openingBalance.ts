@@ -93,3 +93,31 @@ export function openingStanding(
 export function provisionalUntil(from: Date = new Date()): string {
   return new Date(from.getTime() + PROVISIONAL_DAYS * 86400000).toISOString();
 }
+
+/** Metered items an accountant's balance can be brought forward for. */
+export const EXTRA_FEE_TYPES = ["electricity_base", "water"] as const;
+export type ExtraFeeType = (typeof EXTRA_FEE_TYPES)[number];
+export interface OpeningExtra {
+  feeType: ExtraFeeType;
+  amountFen: number;
+}
+
+/** A bill created for a brought-forward utility balance carries this in its calculation snapshot. */
+export function broughtForwardSnapshot(openingBalanceId: number): string {
+  return JSON.stringify({ kind: "opening_balance", openingBalanceId });
+}
+
+/** The opening balance a bill was brought forward for, or null for an ordinary bill. */
+export function broughtForwardId(snapshotJson: string): number | null {
+  try {
+    const v = JSON.parse(snapshotJson) as { kind?: string; openingBalanceId?: number };
+    return v?.kind === "opening_balance" && typeof v.openingBalanceId === "number" ? v.openingBalanceId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** First day of the as-of date's month: metered billing from readings starts there. */
+export function meteredStartFor(asOfDate: string): string {
+  return `${asOfDate.slice(0, 7)}-01`;
+}

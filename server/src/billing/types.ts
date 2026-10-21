@@ -61,6 +61,9 @@ export interface ChargeEngineInput {
    * or an earlier approved termination date). Unset means unbounded. */
   billingStart?: IsoDate | null;
   billingEnd?: IsoDate | null;
+  /** Usage-based items (metered prices and the service fees on them) are only billed for months
+   * starting on or after this date; earlier months were settled outside the system. Unset: all. */
+  meteredFrom?: IsoDate | null;
   contractUnits: ContractUnitInput[];
   pricingStreams: PricingStreamInput[];
   pricingStreamUnits: PricingStreamUnitInput[];

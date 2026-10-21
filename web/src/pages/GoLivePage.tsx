@@ -41,6 +41,7 @@ interface PlanResult {
   partialBills?: number;
   catchUp?: { count: number; totalFen: number } | null;
   missingReadings?: number;
+  extras?: { feeType: string; amountFen: number; streamLabel: string }[];
 }
 interface ApplyResult {
   contractId: number;
@@ -84,6 +85,7 @@ export default function GoLivePage() {
   const ready = (plan ?? []).filter((r) => r.state === "ready");
   const skipped = (plan ?? []).filter((r) => r.state === "skipped");
   const readyPaymentFen = ready.reduce((s, r) => s + (r.paymentFen ?? 0), 0);
+  const readyExtrasFen = ready.reduce((s, r) => s + (r.extras ?? []).reduce((a, e) => a + e.amountFen, 0), 0);
 
   const checkText = async (text: string) => {
     const items = readBalances(parseDelimited(text));
@@ -106,7 +108,7 @@ export default function GoLivePage() {
   const applyAll = () => {
     Modal.confirm({
       title: t("goLive.import.confirmTitle", { count: ready.length }),
-      content: t("goLive.import.confirmBody", { total: yuan(readyPaymentFen), skipped: skipped.length }),
+      content: t("goLive.import.confirmBody", { total: yuan(readyPaymentFen), skipped: skipped.length }) + (readyExtrasFen > 0 ? " " + t("goLive.import.confirmExtras", { total: yuan(readyExtrasFen) }) : ""),
       okText: t("goLive.import.apply", { count: ready.length }),
       cancelText: t("common.cancel"),
       onOk: async () => {
@@ -119,6 +121,7 @@ export default function GoLivePage() {
               balanceOwedFen: x.balanceOwedFen,
               expectedBilledFen: x.billedFen,
               expectedBillCount: x.billCount,
+              extras: (x.extras ?? []).map((e) => ({ feeType: e.feeType, amountFen: e.amountFen })),
               catchUp: x.catchUp ?? null,
             })),
           });
@@ -159,6 +162,14 @@ export default function GoLivePage() {
     });
   };
 
+  // Utilities the accountant includes run through the end of the month before the as-of month.
+  const month = (() => {
+    if (!asOf) return "";
+    const d = new Date(`${asOf.slice(0, 7)}-01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() - 1);
+    return d.toISOString().slice(0, 7);
+  })();
+
   const downloadSheet = () => {
     const picked = rows.filter((r) => chosen.includes(r.id));
     if (picked.length === 0) return;
@@ -171,9 +182,11 @@ export default function GoLivePage() {
       t("goLive.sheet.termEnd"),
       t("goLive.sheet.deposit"),
       t("goLive.sheet.balance", { date: asOf }),
+      t("goLive.sheet.electricity", { month }),
+      t("goLive.sheet.water", { month }),
       t("goLive.sheet.notes"),
     ];
-    const body = picked.map((r) => [r.referenceNumber, r.tenantName, r.landlordName, r.place, r.termStart, r.termEnd, (r.depositHeldFen / 100).toFixed(2), "", ""]);
+    const body = picked.map((r) => [r.referenceNumber, r.tenantName, r.landlordName, r.place, r.termStart, r.termEnd, (r.depositHeldFen / 100).toFixed(2), "", "", "", ""]);
     downloadCsv(`go-live-accountant-sheet-${asOf}.csv`, [header, ...body]);
     message.success(t("goLive.sheetDownloaded", { count: picked.length }));
   };
@@ -269,6 +282,21 @@ export default function GoLivePage() {
                     ),
                 },
                 { title: t("openingBalance.balanceOwed"), align: "right" as const, render: (_: unknown, r: PlanResult) => (r.balanceOwedFen === undefined ? "" : yuan(r.balanceOwedFen)) },
+                {
+                  title: t("goLive.import.broughtForward"),
+                  render: (_: unknown, r: PlanResult) =>
+                    (r.extras ?? []).length === 0 ? (
+                      ""
+                    ) : (
+                      <Space direction="vertical" size={0}>
+                        {(r.extras ?? []).map((e) => (
+                          <span key={e.feeType}>
+                            {t(`contracts.${e.feeType === "water" ? "water" : "electricityBase"}`)} {yuan(e.amountFen)}
+                          </span>
+                        ))}
+                      </Space>
+                    ),
+                },
                 { title: t("goLive.import.billed"), align: "right" as const, render: (_: unknown, r: PlanResult) => (r.billedFen === undefined ? "" : yuan(r.billedFen)) },
                 { title: t("goLive.import.openingPayment"), align: "right" as const, render: (_: unknown, r: PlanResult) => (r.paymentFen === undefined ? "" : yuan(r.paymentFen)) },
                 { title: t("goLive.import.unpaidBills"), align: "right" as const, render: (_: unknown, r: PlanResult) => r.unpaidBills ?? "" },

@@ -11,6 +11,7 @@ interface RecordDto {
   balanceOwedFen: number;
   paymentFen: number;
   provisionalUntil: string;
+  extras?: { feeType: string; amountFen: number }[];
   status: "provisional" | "final";
   finalBecause?: "manual" | "payment" | "expired";
 }
@@ -91,7 +92,7 @@ export default function OpeningBalancePanel({ contractId, onChanged }: { contrac
         open={modal !== null}
         contractId={contractId}
         adjusting={modal === "adjust"}
-        initial={modal === "adjust" && r ? { asOfDate: r.asOfDate, balanceOwedFen: r.balanceOwedFen } : undefined}
+        initial={modal === "adjust" && r ? { asOfDate: r.asOfDate, balanceOwedFen: r.balanceOwedFen, extras: r.extras } : undefined}
         onClose={() => setModal(null)}
         onDone={changed}
       />

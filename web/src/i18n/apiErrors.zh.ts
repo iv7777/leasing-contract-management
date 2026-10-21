@@ -256,6 +256,8 @@ export const apiErrorByCode: Record<string, string> = {
   session_error: "无法建立登录会话，请重试。",
   invalid_credentials: "邮箱或密码错误。",
   cross_contract: "只能操作同一合同下的数据。",
+  extra_no_item: "该合同没有电费或水费项目，无法结转该余额。",
+  extra_not_metered: "该项目在此合同不是按读数计量，系统会正常出账——请把它并入租金及固定费用余额。",
   contract_has_payments: "该合同已有收款记录，不能再用这种方式补录期初余额。",
   balance_exceeds_billed: "欠款余额超过了截至该日期已出账的全部金额。请检查截至日期，并确认账单已生成（补账）。",
   negative_balance: "欠款余额不能为负数。",

@@ -99,6 +99,13 @@
       "when": 1792592906714,
       "tag": "0013_round_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1792595969220,
+      "tag": "0014_spicy_magma",
+      "breakpoints": true
     }
   ]
 }

@@ -283,9 +283,9 @@ receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) =>
       );
     }
     tx.update(receipts).set({ status: "reversed" }).where(eq(receipts.id, id)).run();
-    if (receipt.paymentMethod === OPENING_METHOD) markOpeningReversedForReceipt(id);
     return created;
   });
+  if (receipt.paymentMethod === OPENING_METHOD) markOpeningReversedForReceipt(id, req.user!.id);
 
   recordAudit({
     actorUserId: req.user!.id,

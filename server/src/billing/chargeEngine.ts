@@ -154,6 +154,8 @@ export function generateChargeLines(
     const streamConcessions = input.concessions.filter((c) => c.pricingStreamId === null || c.pricingStreamId === stream.id);
 
     const rateAtStart = findRateAt(streamRates, stream.id, periodStart);
+    // Months before go-live were settled outside the system: no reading is needed or billed for them.
+    if (rateAtStart && isUsageBased(rateAtStart.calculationMethod) && input.meteredFrom && periodStart < input.meteredFrom) continue;
     if (rateAtStart?.calculationMethod === "metered") {
       const usage = input.usageEntries.find(
         (u) => u.pricingStreamId === stream.id && u.serviceStart === periodStart && u.serviceEnd === periodEnd,

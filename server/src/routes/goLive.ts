@@ -12,7 +12,8 @@ import { isoDate } from "../lib/validate.js";
 import { loadChargeContext } from "../billing/generate.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling } from "../billing/autoBilling.js";
 import type { OpenCharge } from "../billing/allocation.js";
-import { OpeningError, billsInScope, hasOtherPayments, liveRecord, performOpening } from "./openingBalance.js";
+import { OpeningError, billsInScope, hasOtherPayments, liveRecord, performOpening, planExtras } from "./openingBalance.js";
+import { EXTRA_FEE_TYPES, meteredStartFor, type OpeningExtra } from "../lib/openingBalance.js";
 import { todayInChina } from "@lcm/shared";
 
 /** The Go-live checklist: every contract that already exists, with where it stands on being brought
@@ -79,12 +80,28 @@ goLiveRouter.get("/contracts", (_req, res) => {
 // Batch: apply the accountant's balances to many contracts at once
 // ---------------------------------------------------------------------------
 
-type SkipReason = "unknown_contract" | "invalid_balance" | "not_active" | "already_done" | "has_payments" | "not_eligible" | "future_date" | "before_term";
+type SkipReason = "extra_no_item" | "extra_not_metered" | "unknown_contract" | "invalid_balance" | "not_active" | "already_done" | "has_payments" | "not_eligible" | "future_date" | "before_term";
 
 const planItems = z.object({
   asOfDate: isoDate,
-  items: z.array(z.object({ reference: z.string().trim().min(1).max(100), balanceOwedFen: z.number().int().nullable() })).min(1).max(500),
+  items: z
+    .array(
+      z.object({
+        reference: z.string().trim().min(1).max(100),
+        balanceOwedFen: z.number().int().nullable(),
+        electricityFen: z.number().int().min(0).nullable().optional(),
+        waterFen: z.number().int().min(0).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
 });
+
+const extrasOf = (it: { electricityFen?: number | null; waterFen?: number | null }): OpeningExtra[] =>
+  [
+    { feeType: "electricity_base" as const, amountFen: it.electricityFen ?? 0 },
+    { feeType: "water" as const, amountFen: it.waterFen ?? 0 },
+  ].filter((e) => e.amountFen > 0);
 
 /** Bills still to be created (catch-up) and the opening payment that would follow, nothing written.
  * The catch-up bills due by the as-of date count as billed, so the plan can be made before they exist. */
@@ -97,7 +114,8 @@ function predictOne(contractId: number, balanceOwedFen: number, asOfDate: string
     if (!billingEligibility(ctx).ok) return "not_eligible" as const;
     const plan = planBilling(ctx, currentCutoff());
     catchUp = { count: plan.charges.length, totalFen: plan.totalFen };
-    missingReadings = plan.missingReadings.length;
+    // Months before the as-of month are settled outside the system, so their readings aren't missing.
+    missingReadings = plan.missingReadings.filter((m) => m.periodStart >= meteredStartFor(asOfDate)).length;
     planned = plan.charges
       .filter((c) => c.dueDate <= asOfDate)
       .map((c, i) => ({ chargeId: -(i + 1), dueDate: c.dueDate, serviceStart: c.serviceStart, balanceFen: c.amountFen }));
@@ -108,7 +126,7 @@ function predictOne(contractId: number, balanceOwedFen: number, asOfDate: string
 
 /** What would happen for one contract: bills still to be created (catch-up), then the opening payment with
  * the newest bills left unpaid. Read-only. */
-function planOne(reference: string, balanceOwedFen: number | null, asOfDate: string) {
+function planOne(reference: string, balanceOwedFen: number | null, asOfDate: string, extras: OpeningExtra[]) {
   const contract = db.select().from(contracts).where(eq(contracts.referenceNumber, reference)).get();
   const skip = (reason: SkipReason, extra: Record<string, unknown> = {}) => ({ reference, contractId: contract?.id ?? null, tenantName: null as string | null, state: "skipped" as const, reason, ...extra });
   if (!contract) return skip("unknown_contract");
@@ -124,6 +142,8 @@ function planOne(reference: string, balanceOwedFen: number | null, asOfDate: str
   const pred = predictOne(contract.id, balanceOwedFen, asOfDate);
   if (pred === "not_eligible") return skipC("not_eligible");
   const { opening, catchUp, missingReadings } = pred;
+  const extraPlan = planExtras(contract.id, extras);
+  if (extraPlan.problems.length > 0) return skipC(extraPlan.problems[0].code as SkipReason, { extras: extraPlan.rows });
   if (opening.problems.length > 0) {
     return skipC(opening.problems[0] as unknown as SkipReason, { billedFen: opening.billedFen, balanceOwedFen });
   }
@@ -142,6 +162,7 @@ function planOne(reference: string, balanceOwedFen: number | null, asOfDate: str
     partialBills: opening.rows.filter((r) => r.unpaidFen > 0 && r.unpaidFen < r.balanceFen).length,
     catchUp,
     missingReadings,
+    extras: extraPlan.rows,
   };
 }
 
@@ -152,7 +173,7 @@ goLiveRouter.post("/plan", (req, res) => {
   const results = parsed.data.items.map((it) => {
     if (seen.has(it.reference)) return { reference: it.reference, contractId: null, tenantName: null, state: "skipped" as const, reason: "duplicate_row" };
     seen.add(it.reference);
-    return planOne(it.reference, it.balanceOwedFen, parsed.data.asOfDate);
+    return planOne(it.reference, it.balanceOwedFen, parsed.data.asOfDate, extrasOf(it));
   });
   res.json({ results });
 });
@@ -166,6 +187,7 @@ const applyItems = z.object({
         balanceOwedFen: z.number().int().min(0),
         expectedBilledFen: z.number().int(),
         expectedBillCount: z.number().int(),
+        extras: z.array(z.object({ feeType: z.enum(EXTRA_FEE_TYPES), amountFen: z.number().int().min(0) })).optional(),
         catchUp: z.object({ count: z.number().int(), totalFen: z.number().int() }).nullable(),
       }),
     )
@@ -200,7 +222,7 @@ goLiveRouter.post("/apply", (req, res) => {
         billsCreated = applyPlan(ctx, plan, true);
         recordAudit({ actorUserId: userId, action: "billing_catch_up", entityType: "contract", entityId: it.contractId, details: { contract: contractRef(it.contractId), created: billsCreated, totalFen: plan.totalFen, cutoff: plan.cutoff, missingReadings: plan.missingReadings.length } });
       }
-      const r = performOpening(userId, it.contractId, { asOfDate: parsed.data.asOfDate, balanceOwedFen: it.balanceOwedFen, expectedBilledFen: it.expectedBilledFen, expectedBillCount: it.expectedBillCount }, false);
+      const r = performOpening(userId, it.contractId, { asOfDate: parsed.data.asOfDate, balanceOwedFen: it.balanceOwedFen, extras: it.extras, expectedBilledFen: it.expectedBilledFen, expectedBillCount: it.expectedBillCount }, false);
       results.push({ contractId: it.contractId, ok: true, billsCreated, paymentFen: r.paymentFen });
     } catch (err) {
       if (err instanceof OpeningError) results.push({ contractId: it.contractId, ok: false, error: { code: err.code, message: err.message } });

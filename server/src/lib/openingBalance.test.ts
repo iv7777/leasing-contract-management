@@ -67,3 +67,15 @@ test("provisional lasts until finalized, a later payment, or 7 days", () => {
   assert.deepEqual(openingStanding({ ...row, status: "final" }, false), { status: "final", finalBecause: "manual" });
   assert.deepEqual(openingStanding({ ...row, status: "reversed" }, true), { status: "reversed" });
 });
+
+import { broughtForwardId, broughtForwardSnapshot, meteredStartFor } from "./openingBalance.js";
+
+test("a brought-forward bill is recognised by its snapshot, an ordinary one is not", () => {
+  assert.equal(broughtForwardId(broughtForwardSnapshot(7)), 7);
+  assert.equal(broughtForwardId('{"lines":[]}'), null);
+  assert.equal(broughtForwardId("not json"), null);
+});
+
+test("metered billing starts on the first day of the as-of month", () => {
+  assert.equal(meteredStartFor("2026-10-21"), "2026-10-01");
+});

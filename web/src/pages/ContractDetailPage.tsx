@@ -132,6 +132,7 @@ interface ChargeDto {
   amountFen: number;
   status: "posted" | "voided";
   voidReason: string | null;
+  calculationSnapshotJson?: string;
 }
 interface AmendmentDto {
   id: number;
@@ -1885,7 +1886,15 @@ export default function ContractDetailPage() {
                   size="small"
                   dataSource={charges}
                   columns={[
-                    { title: t("contracts.feeType"), dataIndex: "feeType", render: (v: string) => t(`contracts.${camel(v)}`) },
+                    {
+                      title: t("contracts.feeType"),
+                      render: (_: unknown, c: ChargeDto) => (
+                        <Space size={4} wrap>
+                          {t(`contracts.${camel(c.feeType)}`)}
+                          {c.calculationSnapshotJson?.includes('"opening_balance"') && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}
+                        </Space>
+                      ),
+                    },
                     { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
                     { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
                     { title: t("contracts.dueDate"), dataIndex: "dueDate" },
