@@ -252,6 +252,8 @@ const en = {
     classificationAdminOnly: "Only an Admin can change whether a document is sensitive.",
     showVoidedDocuments: "Show voided",
     documentVoided: "Voided",
+    documentFileMissing: "File missing",
+    confirmRemoveBrokenDocument: "The file for this record is gone from the server, so it can never be opened. Remove the broken record? (An Admin can then upload the document again.)",
     deleteByAmendment: "A contract in force keeps its documents. To withdraw one, propose an amendment of type \"Withdraw a document\".",
     amendmentKindVoidDocument: "Withdraw (void) a document",
     amendmentKindBillingRules: "Due date and late-fee rules",
@@ -402,6 +404,8 @@ const en = {
     runNow: "Run backup now",
     runStarted: "Backup started — this can take a moment for a large database.",
     runSucceeded: "Backup completed successfully.",
+    runWithMissing: "Backup completed, but the files of document(s) {{ids}} are missing from storage and are not in it. Open the document and remove the broken record, or upload the file again.",
+    missingFiles: "Completed with a warning — files missing from storage for document(s) {{ids}}.",
     id: "ID",
     kind: "Kind",
     kinds: {

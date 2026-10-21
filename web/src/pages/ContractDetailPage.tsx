@@ -193,6 +193,7 @@ interface DocumentDto {
   uploadedAt: string;
   uploadedByName: string | null;
   voided: boolean;
+  fileMissing?: boolean;
 }
 interface StatementDto {
   periodStart: string;
@@ -2049,10 +2050,10 @@ export default function ContractDetailPage() {
                         // Deleting is for a draft only (Admin or Manager); afterwards a document is withdrawn by amendment.
                         ...((user?.role === "admin" || user?.role === "manager") && !d.voided
                           ? [
-                              isDraft ? (
+                              isDraft || (d.fileMissing && user?.role === "admin") ? (
                                 <Popconfirm
                                   key="del"
-                                  title={t("properties.confirmDeleteDocument")}
+                                  title={d.fileMissing ? t("contracts.confirmRemoveBrokenDocument") : t("properties.confirmDeleteDocument")}
                                   onConfirm={() => deleteDocument(d.id)}
                                   okText={t("common.delete")}
                                   cancelText={t("common.cancel")}
@@ -2077,6 +2078,7 @@ export default function ContractDetailPage() {
                           {d.name?.trim() && <Tag>{docTypeLabel(t, d.docType)}</Tag>}
                           {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
                           {d.voided && <Tag color="red">{t("contracts.documentVoided")}</Tag>}
+                          {d.fileMissing && <Tag color="red">{t("contracts.documentFileMissing")}</Tag>}
                         </Space>
                         <Typography.Text type="secondary">
                           {d.uploadedAt.slice(0, 10)}

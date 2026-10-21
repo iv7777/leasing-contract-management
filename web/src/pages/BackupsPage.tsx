@@ -56,12 +56,26 @@ export default function BackupsPage() {
 
   useEffect(load, []);
 
+  // A finished backup that only lists document files missing from storage is a warning, not a failure.
+  const errorText = (r: BackupRunDto) => {
+    const prefix = "Document files missing from storage:";
+    if (r.status === "succeeded" && r.error?.startsWith(prefix)) {
+      return <Typography.Text type="warning">{t("backups.missingFiles", { ids: r.error.slice(prefix.length).trim() })}</Typography.Text>;
+    }
+    return <Typography.Text type="danger">{r.error}</Typography.Text>;
+  };
+
   const onRunNow = async () => {
     setRunning(true);
     message.info(t("backups.runStarted"));
     try {
-      await api.post("/backups/run");
-      message.success(t("backups.runSucceeded"));
+      const res = await api.post<{ missingDocumentIds?: number[] }>("/backups/run");
+      const missingIds = res?.missingDocumentIds;
+      if (missingIds && missingIds.length > 0) {
+        message.warning(t("backups.runWithMissing", { ids: missingIds.map((i) => `#${i}`).join(", ") }), 8);
+      } else {
+        message.success(t("backups.runSucceeded"));
+      }
       load();
     } catch (err) {
       message.error(apiErrorMessage(err, t));
@@ -200,7 +214,7 @@ export default function BackupsPage() {
                   {r.error && (
                     <>
                       <br />
-                      <Typography.Text type="danger">{r.error}</Typography.Text>
+                      {errorText(r)}
                     </>
                   )}
                   {r.comment && (
@@ -259,7 +273,7 @@ export default function BackupsPage() {
             {
               title: t("backups.error"),
               dataIndex: "error",
-              render: (v: string | null) => (v ? <div style={{ minWidth: 90, wordBreak: "break-all" }}><Typography.Text type="danger">{v}</Typography.Text></div> : null),
+              render: (_: string | null, r: BackupRunDto) => (r.error ? <div style={{ minWidth: 90, wordBreak: "break-all" }}>{errorText(r)}</div> : null),
             },
             {
               title: t("common.actions"),

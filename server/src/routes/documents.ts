@@ -153,7 +153,7 @@ documentsRouter.get("/", (req, res) => {
     .filter((d) => includeVoided || !d.voided)
     // Sensitive originals never appear in a general listing for non-admins.
     .filter((d) => req.user!.role === "admin" || d.classification !== "sensitive")
-    .map((d) => ({ ...d, filePath: undefined, uploadedByName: names.get(d.uploadedBy) ?? null }));
+    .map((d) => ({ ...d, fileMissing: !fs.existsSync(d.filePath), filePath: undefined, uploadedByName: names.get(d.uploadedBy) ?? null }));
 
   res.json({ documents: rows });
 });
@@ -244,6 +244,25 @@ documentsRouter.delete("/:id", requireRole("admin", "manager"), (req, res) => {
   const doc = db.select().from(documents).where(eq(documents.id, id)).get();
   if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
   if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
+
+  // A record whose file has gone from the server can never be opened again and only breaks the
+  // document check in backups, so an Admin may clear it whatever the contract's status — unless an
+  // amendment relies on it as its supporting document.
+  const fileGone = !fs.existsSync(doc.filePath);
+  if (fileGone && req.user!.role === "admin") {
+    if (doc.ownerType === "contract" && citedDocumentIds(doc.ownerId).has(id)) {
+      return res.status(409).json({ error: { code: "document_in_use_by_amendment", message: "An amendment relies on this document, so it can't be deleted." } });
+    }
+    db.delete(documents).where(eq(documents.id, id)).run();
+    recordAudit({
+      actorUserId: req.user!.id,
+      action: "document_deleted",
+      entityType: "document",
+      entityId: id,
+      details: { owner: ownerLabel(doc.ownerType, doc.ownerId), ownerType: doc.ownerType, docType: doc.docType, name: doc.name, fileWasMissing: true },
+    });
+    return res.status(204).send();
+  }
 
   // A sensitive document is Admin-only to open, so it is Admin-only to remove too.
   if (doc.classification === "sensitive" && req.user!.role !== "admin") {

@@ -68,7 +68,9 @@ export function pruneAllKinds(): void {
  * (brief §13); note that syncing it with `rclone sync` would mirror this
  * pruning off-site too — use `rclone copy` there instead if the off-site
  * archive should outlive local retention. */
-export async function runBackup(kind: BackupKind = "daily"): Promise<{ backupDir: string; documentCount: number }> {
+export const MISSING_FILES_PREFIX = "Document files missing from storage:";
+
+export async function runBackup(kind: BackupKind = "daily"): Promise<{ backupDir: string; documentCount: number; missingDocumentIds?: number[] }> {
   const startedAt = new Date().toISOString();
   const stamp = startedAt.replace(/[:.]/g, "-");
   const runDir = path.join(BACKUP_DIR, stamp);
@@ -88,10 +90,10 @@ export async function runBackup(kind: BackupKind = "daily"): Promise<{ backupDir
     }));
     fs.writeFileSync(path.join(runDir, "documents.manifest.json"), JSON.stringify(manifest, null, 2));
 
-    let missing = 0;
-    for (const d of allDocuments) {
-      if (!fs.existsSync(d.filePath)) missing++;
-    }
+    // A document whose file has gone from the server is flagged, but it must not stop the database
+    // from being backed up: the snapshot is still the thing that protects everything else.
+    const missingIds = allDocuments.filter((d) => !fs.existsSync(d.filePath)).map((d) => d.id);
+    const missing = missingIds.length;
 
     // Finalize this run's own row BEFORE taking the snapshot below. sqlite's
     // online backup API copies whatever is committed at the moment it's
@@ -100,8 +102,8 @@ export async function runBackup(kind: BackupKind = "daily"): Promise<{ backupDir
     // already been written to disk. Finalizing first means a run's snapshot
     // correctly shows itself as complete instead of forever "running" (the
     // symptom if you ever restore straight onto a run's own snapshot).
-    const status = missing === 0 ? "succeeded" : "failed";
-    const error = missing > 0 ? `${missing} referenced document(s) missing from storage.` : null;
+    const status = "succeeded";
+    const error = missing > 0 ? `${MISSING_FILES_PREFIX} ${missingIds.map((id) => `#${id}`).join(", ")}` : null;
     db.update(backupRuns)
       .set({
         completedAt: new Date().toISOString(),
@@ -116,10 +118,6 @@ export async function runBackup(kind: BackupKind = "daily"): Promise<{ backupDir
     const snapshotPath = path.join(runDir, "app.db");
     await sqlite.backup(snapshotPath);
 
-    if (missing > 0) {
-      throw new Error(`Backup completed with ${missing} missing document(s); see backup_runs.`);
-    }
-
     // Rotate only after a confirmed success — a failed run leaves existing
     // backups of this kind untouched rather than risk pruning down to fewer
     // than the retention limit while today's copy is in a bad state.
@@ -129,7 +127,7 @@ export async function runBackup(kind: BackupKind = "daily"): Promise<{ backupDir
       console.log(`Pruned ${pruned} ${kind} backup(s) beyond the ${retentionLimit}-copy retention limit.`);
     }
 
-    return { backupDir: runDir, documentCount: allDocuments.length };
+    return { backupDir: runDir, documentCount: allDocuments.length, ...(missing > 0 ? { missingDocumentIds: missingIds } : {}) };
   } catch (err) {
     db.update(backupRuns)
       .set({ completedAt: new Date().toISOString(), status: "failed", error: String(err) })

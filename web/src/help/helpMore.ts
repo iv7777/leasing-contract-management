@@ -151,6 +151,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "Press the pin icon to make a backup **Permanent** (never deleted, not counted in the 30).",
         "Use the pencil icon to add a note, for example why you took it.",
         "Restoring is done from the server (`sudo lcm`, option 6).",
+        "If a backup ends with an orange warning, a document's file has gone missing from the server. The backup still succeeds; open that document on its contract and remove the broken record (Admin), or upload the file again.",
       ],
     },
     guide: {
@@ -271,7 +272,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: ["确认最近一晚成功；点开标为部分失败或失败的记录。", "**立即运行出账**可不等到 03:00 就生成已到期的账单。", "合同要先「补账」才会加入每晚的运行。"],
     },
     backups: {
-      steps: ["做重大改动前先**立即备份**。", "点图钉图标把备份设为**永久**（不会被删除，也不占 30 份名额）。", "点铅笔图标添加备注，例如备份原因。", "恢复需在服务器上操作（`sudo lcm`，选项 6）。"],
+      steps: ["做重大改动前先**立即备份**。", "点图钉图标把备份设为**永久**（不会被删除，也不占 30 份名额）。", "点铅笔图标添加备注，例如备份原因。", "恢复需在服务器上操作（`sudo lcm`，选项 6）。", "若备份记录出现橙色警告，说明某个文件在服务器上已丢失。备份仍会成功；请到对应合同打开该文件并删除损坏的记录（管理员），或重新上传文件。"],
     },
     guide: {
       steps: ["在搜索框输入词语，可在全文中查找。", "用**快速上手**查看您的角色最先该做什么。", "按章节顺序阅读，可了解租约的完整周期。"],

@@ -254,6 +254,8 @@ const zh: Translations = {
     classificationAdminOnly: "只有管理员可以更改文件是否敏感。",
     showVoidedDocuments: "显示已作废",
     documentVoided: "已作废",
+    documentFileMissing: "文件缺失",
+    confirmRemoveBrokenDocument: "该记录的文件已从服务器丢失，无法再打开。删除这条损坏的记录？（之后可由管理员重新上传该文件。）",
     deleteByAmendment: "已生效合同的文件不能直接删除。如需撤销，请发起「撤销文件」类型的变更。",
     amendmentKindVoidDocument: "撤销（作废）文件",
     amendmentKindBillingRules: "到期日与滞纳金规则",
@@ -404,6 +406,8 @@ const zh: Translations = {
     runNow: "立即备份",
     runStarted: "备份已开始——数据较多时可能需要一些时间。",
     runSucceeded: "备份已成功完成。",
+    runWithMissing: "备份已完成，但文件 {{ids}} 在服务器上缺失，未包含在备份中。请打开该文件并删除这条损坏的记录，或重新上传文件。",
+    missingFiles: "已完成，但有警告 — 文件 {{ids}} 在服务器上缺失。",
     id: "编号",
     kind: "类型",
     kinds: {
