@@ -269,3 +269,29 @@ test("usage fee: while the followed item has no price yet, there is no fee line 
   const { lines } = generateChargeLines(input, "2026-03-01", "2026-03-31");
   assert.equal(lines.length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// Usage-based prices that start part-way through a month
+// ---------------------------------------------------------------------------
+
+test("a metered price and its service fee that start mid-month bill nothing for that month (and never error or bill a prorated flat amount)", () => {
+  const input = baseInput({
+    pricingStreams: [
+      { id: 10, feeType: "electricity_base", targetType: "contract" },
+      { id: 11, feeType: "other", targetType: "contract" },
+    ],
+    rateSchedule: [
+      { ...meteredRate("1"), effectiveStart: "2026-10-19", rateBasis: "per_month" },
+      { ...feeRate("usage_fee_per_unit", "0.1"), effectiveStart: "2026-10-19" },
+    ],
+    usageEntries: [{ pricingStreamId: 10, serviceStart: "2026-10-01", serviceEnd: "2026-10-31", quantity: "500" }],
+  });
+  const r = generateChargeLines(input, "2026-10-01", "2026-10-31");
+  assert.equal(r.lines.length, 0);
+  assert.equal(r.missingUsage.length, 0);
+  // and the first full month after the start is billed normally
+  input.usageEntries = [{ pricingStreamId: 10, serviceStart: "2026-11-01", serviceEnd: "2026-11-30", quantity: "500" }];
+  const nov = generateChargeLines(input, "2026-11-01", "2026-11-30");
+  assert.equal(nov.lines.find((l) => l.pricingStreamId === 10)!.amountFen, 50_000);
+  assert.equal(nov.lines.find((l) => l.pricingStreamId === 11)!.amountFen, 5_000);
+});

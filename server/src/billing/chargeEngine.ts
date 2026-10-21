@@ -40,6 +40,10 @@ function addDays(date: IsoDate, delta: number): IsoDate {
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
 
+function isUsageBased(method: string): boolean {
+  return method === "metered" || method === "usage_fee_per_unit" || method === "usage_fee_percent";
+}
+
 function findRateAt(rates: RateScheduleInput[], streamId: number, date: IsoDate): RateScheduleInput | undefined {
   return rates.find(
     (r) => r.pricingStreamId === streamId && r.effectiveStart <= date && (!r.effectiveEnd || r.effectiveEnd >= date),
@@ -265,6 +269,12 @@ export function generateChargeLines(
       continue;
     }
 
+    // Usage-based items (a metered price, a service fee on usage) are billed a whole month
+    // at a time from the reading, at the price in force on the month's first day. A price
+    // that only starts later in the month therefore bills nothing for that month; it must
+    // never fall into the day-prorated path below.
+    if (!rateAtStart && streamRates.length > 0 && streamRates.every((r) => isUsageBased(r.calculationMethod))) continue;
+
     const boundaries = [
       ...streamRates.map((r) => r.effectiveStart),
       ...streamRates.filter((r) => r.effectiveEnd).map((r) => addDays(r.effectiveEnd!, 1)),
@@ -279,6 +289,7 @@ export function generateChargeLines(
     for (const [subStart, subEnd] of subperiods) {
       const rate = findRateAt(streamRates, stream.id, subStart);
       if (!rate) continue; // no effective term for this window — nothing charged
+      if (isUsageBased(rate.calculationMethod)) continue; // billed from readings, not by the day
 
       const effectiveRate = computeEscalatedRate(rate, subStart);
       const areaSqm = rate.rateBasis === "per_sqm_per_month" ? totalAreaAt(input, stream.id, subStart) : null;
