@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { receipts, receiptAllocations } from "../db/schema.js";
 import { isoDate, positiveFen } from "../lib/validate.js";
@@ -23,7 +24,7 @@ paymentsRouter.use(requireAuth);
 
 const WRITERS = ["admin", "manager", "collector"] as const;
 
-class PaymentError extends Error {}
+export class PaymentError extends Error {}
 
 
 const paymentSchema = z.object({
@@ -33,7 +34,7 @@ const paymentSchema = z.object({
   externalReference: z.string().trim().max(100).optional(),
 });
 
-function openChargesFor(contractId: number, asOf: string): { open: OpenCharge[]; info: Map<number, { feeType: string; serviceStart: string; serviceEnd: string; dueDate: string; balanceFen: number }> } {
+export function openChargesFor(contractId: number, asOf: string): { open: OpenCharge[]; info: Map<number, { feeType: string; serviceStart: string; serviceEnd: string; dueDate: string; balanceFen: number }> } {
   const data = loadLedgerInputs(contractId);
   const info = new Map<number, { feeType: string; serviceStart: string; serviceEnd: string; dueDate: string; balanceFen: number }>();
   const open: OpenCharge[] = [];
@@ -49,6 +50,51 @@ function openChargesFor(contractId: number, asOf: string): { open: OpenCharge[];
 }
 
 type Payment = z.infer<typeof paymentSchema>;
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Applies a receipt's money to charges, validating each row against the live ledger
+ * (including rows just written in this call). Throws PaymentError on a rejected row. */
+export function applyAllocations(
+  tx: Tx,
+  contractId: number,
+  userId: number,
+  receipt: { id: number; amountFen: number; status: string },
+  allocations: { chargeId: number; amountFen: number }[],
+) {
+  const asOf = todayInChina();
+  for (const a of allocations) {
+    const data = loadLedgerInputs(contractId);
+    const charge = data.charges.find((c) => c.id === a.chargeId);
+    if (!charge) throw new PaymentError(`Charge ${a.chargeId} does not belong to this contract.`);
+    const validation = validateAllocation({
+      receipt: { id: receipt.id, amountFen: receipt.amountFen, status: receipt.status as "posted" | "reversed" },
+      existingReceiptAllocations: data.allocations,
+      charge,
+      chargeAdjustments: data.adjustments,
+      existingChargeAllocations: data.allocations,
+      amountFen: a.amountFen,
+      asOfDate: asOf,
+    });
+    if (!validation.ok) throw new PaymentError(validation.reason);
+    const inserted = tx.insert(receiptAllocations).values({ receiptId: receipt.id, chargeId: a.chargeId, amountFen: a.amountFen, createdBy: userId }).returning().get();
+    recordAudit({ actorUserId: userId, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId: receipt.id, ...chargeFacts(a.chargeId), amountFen: a.amountFen } });
+  }
+}
+
+/** Takes back whatever a receipt currently has applied (as additive reversal rows) and applies
+ * its amount again, oldest bill first. Used when a receipt is corrected. */
+export function reapplyReceipt(tx: Tx, contractId: number, userId: number, receipt: { id: number; amountFen: number; status: string }) {
+  const rows = db.select().from(receiptAllocations).where(eq(receiptAllocations.receiptId, receipt.id)).all();
+  const net = new Map<number, number>();
+  for (const a of rows) net.set(a.chargeId, (net.get(a.chargeId) ?? 0) + a.amountFen);
+  for (const [chargeId, amount] of net) {
+    if (amount !== 0) tx.insert(receiptAllocations).values({ receiptId: receipt.id, chargeId, amountFen: -amount, createdBy: userId }).run();
+  }
+  const proposal = proposeAllocations(openChargesFor(contractId, todayInChina()).open, receipt.amountFen).allocations;
+  applyAllocations(tx, contractId, userId, receipt, proposal);
+}
+
 
 /** Inserts the receipt and its allocations, validating every allocation
  * against the live ledger (including ones just written in this call). Must
@@ -68,24 +114,7 @@ function postPayment(
     .get();
   recordAudit({ actorUserId: userId, action: "receipt_recorded", entityType: "receipt", entityId: receipt.id, details: { contract: contractRef(contractId), amountFen: receipt.amountFen, receivedDate: receipt.receivedDate, paymentMethod: receipt.paymentMethod } });
 
-  const asOf = todayInChina();
-  for (const a of allocations) {
-    const data = loadLedgerInputs(contractId);
-    const charge = data.charges.find((c) => c.id === a.chargeId);
-    if (!charge) throw new PaymentError(`Charge ${a.chargeId} does not belong to this contract.`);
-    const validation = validateAllocation({
-      receipt: { id: receipt.id, amountFen: receipt.amountFen, status: receipt.status },
-      existingReceiptAllocations: data.allocations,
-      charge,
-      chargeAdjustments: data.adjustments,
-      existingChargeAllocations: data.allocations,
-      amountFen: a.amountFen,
-      asOfDate: asOf,
-    });
-    if (!validation.ok) throw new PaymentError(validation.reason);
-    const inserted = tx.insert(receiptAllocations).values({ receiptId: receipt.id, chargeId: a.chargeId, amountFen: a.amountFen, createdBy: userId }).returning().get();
-    recordAudit({ actorUserId: userId, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId: receipt.id, ...chargeFacts(a.chargeId), amountFen: a.amountFen } });
-  }
+  applyAllocations(tx, contractId, userId, receipt, allocations);
   return receipt;
 }
 
@@ -106,8 +135,11 @@ paymentsRouter.post("/contracts/:id/payments/preview", requireRole(...WRITERS), 
 
   const { open, info } = openChargesFor(contractId, todayInChina());
   const proposal = proposeAllocations(open, parsed.data.amountFen);
+  const proposed = new Map(proposal.allocations.map((a) => [a.chargeId, a.amountFen]));
   res.json({
     allocations: proposal.allocations.map((a) => ({ ...a, ...info.get(a.chargeId)! })),
+    // Every unpaid bill, oldest first, with what the proposal would put on it (0 when the amount doesn't reach it).
+    openCharges: open.map((o) => ({ chargeId: o.chargeId, ...info.get(o.chargeId)!, amountFen: proposed.get(o.chargeId) ?? 0 })),
     unallocatedFen: proposal.unallocatedFen,
     openChargeCount: open.length,
   });

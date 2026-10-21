@@ -12,6 +12,9 @@ import { contractRef, chargeFacts, receiptFacts } from "../lib/auditDetail.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, computeUnallocatedFen, validateAllocation } from "../billing/ledger.js";
 import { computeLatePenalty } from "../billing/latePenalty.js";
+import { canEditEntry, editWindowEnd, EDIT_NOT_YOURS, EDIT_WINDOW_CLOSED, withinEditWindow } from "../lib/editWindow.js";
+import { changesBetween } from "../lib/auditDetail.js";
+import { PaymentError, reapplyReceipt } from "./payments.js";
 import { todayInChina } from "@lcm/shared";
 
 export const receiptsRouter = Router();
@@ -52,7 +55,12 @@ receiptsRouter.get("/contracts/:contractId/ledger", (req, res) => {
   res.json({
     charges: data.chargesRaw,
     chargeBalances,
-    receipts: data.receiptsRaw,
+    receipts: data.receiptsRaw.map((r) => ({
+      ...r,
+      // Whether this user can still correct the entry directly, and until when.
+      canEdit: r.status === "posted" && r.paymentMethod !== "deposit_transfer" && canEditEntry(req.user!, r.recordedBy, r.createdAt),
+      editableUntil: r.status === "posted" && r.paymentMethod !== "deposit_transfer" ? editWindowEnd(r.createdAt) : null,
+    })),
     receiptBalances,
   });
 });
@@ -92,6 +100,69 @@ receiptsRouter.post("/contracts/:contractId/receipts", requireRole("admin", "man
 
   recordAudit({ actorUserId: req.user!.id, action: "receipt_recorded", entityType: "receipt", entityId: inserted.id, details: { contract: contractRef(contractId), amountFen: inserted.amountFen, receivedDate: inserted.receivedDate, paymentMethod: inserted.paymentMethod } });
   res.status(201).json({ receipt: inserted });
+});
+
+const editReceiptSchema = z.object({
+  receivedDate: isoDate.optional(),
+  amountFen: positiveFen.optional(),
+  paymentMethod: z.string().trim().min(1).max(50).optional(),
+  externalReference: z.string().trim().max(100).nullable().optional(),
+});
+
+/** Corrects a payment's date, amount, method or bank reference — for the person who recorded it
+ * (or an Admin) during the first 24 hours. If the date or amount changes, what the receipt had
+ * paid off is taken back and the new amount is applied again, oldest bill first. */
+receiptsRouter.patch("/receipts/:id", requireRole("admin", "manager", "collector"), (req, res) => {
+  const id = Number(req.params.id);
+  const receipt = db.select().from(receipts).where(eq(receipts.id, id)).get();
+  if (!receipt) return res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
+  if (!ensureContractAccess(req, res, receipt.contractId)) return;
+  if (rejectIfDraft(res, receipt.contractId)) return;
+  if (receipt.status !== "posted" || receipt.paymentMethod === "deposit_transfer") {
+    return res.status(409).json({ error: { code: "not_editable", message: "This entry can't be edited." } });
+  }
+  if (req.user!.role !== "admin" && req.user!.id !== receipt.recordedBy) {
+    return res.status(403).json({ error: { code: "forbidden", message: EDIT_NOT_YOURS } });
+  }
+  if (!withinEditWindow(receipt.createdAt)) {
+    return res.status(409).json({ error: { code: "edit_window_closed", message: EDIT_WINDOW_CLOSED } });
+  }
+
+  const parsed = editReceiptSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid receipt payload." } });
+  const next = { ...receipt, ...parsed.data, externalReference: parsed.data.externalReference === undefined ? receipt.externalReference : parsed.data.externalReference || null };
+  if (next.receivedDate > todayInChina()) {
+    return res.status(400).json({ error: { code: "future_date", message: "The received date can't be in the future." } });
+  }
+  if (paymentReferenceUsed(receipt.contractId, next.externalReference, id)) {
+    return res.status(409).json({ error: { code: "duplicate_reference", message: DUPLICATE_PAYMENT_REFERENCE } });
+  }
+
+  const moneyChanged = next.amountFen !== receipt.amountFen || next.receivedDate !== receipt.receivedDate;
+  const hasAllocations = db.select().from(receiptAllocations).where(eq(receiptAllocations.receiptId, id)).all().some((a) => a.amountFen !== 0);
+  try {
+    const updated = db.transaction((tx) => {
+      const row = tx
+        .update(receipts)
+        .set({ receivedDate: next.receivedDate, amountFen: next.amountFen, paymentMethod: next.paymentMethod, externalReference: next.externalReference })
+        .where(eq(receipts.id, id))
+        .returning()
+        .get();
+      if (moneyChanged && hasAllocations) reapplyReceipt(tx, receipt.contractId, req.user!.id, row);
+      return row;
+    });
+    recordAudit({
+      actorUserId: req.user!.id,
+      action: "receipt_edited",
+      entityType: "receipt",
+      entityId: id,
+      details: { contract: contractRef(receipt.contractId), changes: changesBetween(receipt, updated), ...(moneyChanged && hasAllocations ? { reapplied: true } : {}) },
+    });
+    res.json({ receipt: updated });
+  } catch (err) {
+    if (err instanceof PaymentError) return res.status(409).json({ error: { code: "allocation_rejected", message: err.message } });
+    throw err;
+  }
 });
 
 // ---------------------------------------------------------------------------

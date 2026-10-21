@@ -6,12 +6,13 @@ export const DUPLICATE_PAYMENT_REFERENCE = "A payment with this bank reference h
 
 /** Whether a payment with the same bank/transfer reference is already on this
  * contract (reversed receipts don't count), which is almost always a double entry. */
-export function paymentReferenceUsed(contractId: number, externalReference: string | null | undefined): boolean {
+export function paymentReferenceUsed(contractId: number, externalReference: string | null | undefined, exceptReceiptId?: number): boolean {
   const ref = externalReference?.trim();
   if (!ref) return false;
-  return !!db
+  return db
     .select({ id: receipts.id })
     .from(receipts)
     .where(and(eq(receipts.contractId, contractId), eq(receipts.externalReference, ref), eq(receipts.status, "posted")))
-    .get();
+    .all()
+    .some((r) => r.id !== exceptReceiptId);
 }

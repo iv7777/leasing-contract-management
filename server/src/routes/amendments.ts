@@ -405,7 +405,10 @@ function applyApproval(req: import("express").Request, res: import("express").Re
       const { closePreviousRateScheduleId, ...rateFields } = r;
       if (closePreviousRateScheduleId) {
         const dayBefore = addDaysIso(r.effectiveStart, -1);
+        const replaced = tx.select().from(rateSchedule).where(eq(rateSchedule.id, closePreviousRateScheduleId)).get();
         tx.update(rateSchedule).set({ effectiveEnd: dayBefore }).where(eq(rateSchedule.id, closePreviousRateScheduleId)).run();
+        // The new rate takes over for the rest of the period of the rate it replaces; later steps stay as they are.
+        if (replaced?.effectiveEnd && !rateFields.effectiveEnd) rateFields.effectiveEnd = replaced.effectiveEnd;
       }
       tx.insert(rateSchedule).values(rateFields).run();
     }
@@ -492,7 +495,16 @@ function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, con
     if (r.closePreviousRateScheduleId && !rateScheduleBelongsToStream(r.closePreviousRateScheduleId, r.pricingStreamId)) {
       return `Rate schedule ${r.closePreviousRateScheduleId} does not belong to pricing stream ${r.pricingStreamId}.`;
     }
-    const rateError = rateRuleError(r, contractId, r.pricingStreamId) ?? rateShapeError(r);
+    let inheritedEnd: string | null | undefined = r.effectiveEnd;
+    if (r.closePreviousRateScheduleId) {
+      const replaced = db.select().from(rateSchedule).where(eq(rateSchedule.id, r.closePreviousRateScheduleId)).get();
+      if (replaced) {
+        if (r.effectiveStart <= replaced.effectiveStart) return `The new rate must start after the rate it replaces begins (${replaced.effectiveStart}).`;
+        if (replaced.effectiveEnd && r.effectiveStart > replaced.effectiveEnd) return `The new rate must start within the rate it replaces (which runs until ${replaced.effectiveEnd}).`;
+        inheritedEnd = inheritedEnd ?? replaced.effectiveEnd;
+      }
+    }
+    const rateError = rateRuleError(r, contractId, r.pricingStreamId) ?? rateShapeError({ ...r, effectiveEnd: inheritedEnd });
     if (rateError) return rateError;
     const dayBefore = addDaysIso(r.effectiveStart, -1);
     const others = db
@@ -501,7 +513,7 @@ function validateAmendmentReferences(changes: z.infer<typeof changesSchema>, con
       .where(eq(rateSchedule.pricingStreamId, r.pricingStreamId))
       .all()
       .map((o) => (o.id === r.closePreviousRateScheduleId ? { ...o, effectiveEnd: dayBefore } : o));
-    const overlapError = rateOverlapError(others, r);
+    const overlapError = rateOverlapError(others, { ...r, effectiveEnd: inheritedEnd });
     if (overlapError) return overlapError;
     if (r.rateBasis === "per_sqm_per_month" && !db.select().from(pricingStreamUnits).where(eq(pricingStreamUnits.pricingStreamId, r.pricingStreamId)).get()) return MSG.perSqmNeedsUnits;
   }

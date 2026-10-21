@@ -41,7 +41,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel, docDisplayName } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -102,6 +102,9 @@ interface UsageEntryDto {
   quantity: string;
   unit: string;
   source: string | null;
+  billed?: boolean;
+  canEdit?: boolean;
+  editableUntil?: string | null;
 }
 interface ConcessionDto {
   id: number;
@@ -156,6 +159,8 @@ interface ReceiptDto {
   paymentMethod: string;
   externalReference: string | null;
   status: "posted" | "reversed";
+  canEdit?: boolean;
+  editableUntil?: string | null;
 }
 interface ReceiptBalanceDto {
   receiptId: number;
@@ -168,6 +173,8 @@ interface DepositTransactionDto {
   transactionDate: string;
   reason: string;
   reversalOfId: number | null;
+  canEdit?: boolean;
+  editableUntil?: string | null;
 }
 interface DepositStatusDto {
   requiredFen: number;
@@ -301,6 +308,8 @@ export default function ContractDetailPage() {
   const [amendmentModal, setAmendmentModal] = useState(false);
   const [receiptModal, setReceiptModal] = useState(false);
   const [allocateModal, setAllocateModal] = useState<{ receiptId: number } | null>(null);
+  const [editReceiptModal, setEditReceiptModal] = useState<ReceiptDto | null>(null);
+  const [editDepositTxnModal, setEditDepositTxnModal] = useState<DepositTransactionDto | null>(null);
   const [reverseReceiptModal, setReverseReceiptModal] = useState<{ receiptId: number } | null>(null);
   const [depositTxnModal, setDepositTxnModal] = useState(false);
   const [depositTxnType, setDepositTxnType] = useState("receipt");
@@ -330,6 +339,8 @@ export default function ContractDetailPage() {
   const [allocateForm] = Form.useForm();
   const [reverseReceiptForm] = Form.useForm();
   const [depositTxnForm] = Form.useForm();
+  const [editReceiptForm] = Form.useForm();
+  const [editDepositTxnForm] = Form.useForm();
   const [rejectAmendmentForm] = Form.useForm();
   const [reverseDepositTxnForm] = Form.useForm();
   const [latePenaltyForm] = Form.useForm();
@@ -455,7 +466,7 @@ export default function ContractDetailPage() {
   }, [depositModal]);
 
   useEffect(() => {
-    if (receiptModal) receiptForm.setFieldsValue({ receivedDate: todayInChina(), paymentMethod: "bank_transfer" });
+    if (receiptModal) receiptForm.setFieldsValue({ receivedDate: todayInChina(), paymentMethod: PAYMENT_METHODS[0] });
   }, [receiptModal]);
 
   useEffect(() => {
@@ -662,6 +673,37 @@ export default function ContractDetailPage() {
       await api.patch(`/usage-entries/${editUsageEntryModal.id}`, { ...values, quantity: String(values.quantity) });
       setEditUsageEntryModal(null);
       editUsageEntryForm.resetFields();
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onEditReceipt = async () => {
+    if (!editReceiptModal) return;
+    try {
+      const v = await editReceiptForm.validateFields();
+      await api.patch(`/receipts/${editReceiptModal.id}`, {
+        receivedDate: v.receivedDate,
+        amountFen: Math.round(v.amount * 100),
+        paymentMethod: v.paymentMethod,
+        externalReference: v.externalReference?.trim() || null,
+      });
+      setEditReceiptModal(null);
+      message.success(t("common.save"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  const onEditDepositTxn = async () => {
+    if (!editDepositTxnModal) return;
+    try {
+      const v = await editDepositTxnForm.validateFields();
+      await api.patch(`/deposit-transactions/${editDepositTxnModal.id}`, { transactionDate: v.transactionDate, amountFen: Math.round(v.amount * 100), reason: v.reason });
+      setEditDepositTxnModal(null);
       message.success(t("common.save"));
       load();
     } catch (err) {
@@ -900,7 +942,8 @@ export default function ContractDetailPage() {
       const values = await amendmentForm.validateFields();
       let changes: Record<string, unknown> = {};
       if (amendmentKind === "rate_change" && values.newAmountOrRate) {
-        const currentRate = rates.find((r) => r.pricingStreamId === values.pricingStreamId && !r.effectiveEnd);
+        // The rate in force on the effective date is the one this change replaces (until its own end date).
+        const currentRate = rates.find((r) => r.pricingStreamId === values.pricingStreamId && r.effectiveStart <= values.effectiveDate && (!r.effectiveEnd || r.effectiveEnd >= values.effectiveDate));
         changes = {
           addRateSchedule: [
             {
@@ -1430,22 +1473,32 @@ export default function ContractDetailPage() {
                               key: "actions",
                               render: (_: unknown, u: UsageEntryDto) => (
                                 <Space>
-                                  <Button
-                                    size="small"
-                                    icon={<EditOutlined />}
-                                    onClick={() => {
-                                      editUsageEntryForm.setFieldsValue(u);
-                                      setEditUsageEntryModal(u);
-                                    }}
-                                  />
-                                  <Popconfirm
-                                    title={t("contracts.confirmDeleteUsageEntry")}
-                                    onConfirm={() => onDeleteUsageEntry(u.id)}
-                                    okText={t("common.delete")}
-                                    cancelText={t("common.cancel")}
-                                  >
-                                    <Button size="small" danger icon={<DeleteOutlined />} />
-                                  </Popconfirm>
+                                  {u.canEdit === false ? (
+                                    <Tooltip title={t("contracts.usageLocked")}>
+                                      <Button size="small" icon={<LockOutlined />} disabled />
+                                    </Tooltip>
+                                  ) : (
+                                    <Tooltip title={u.billed ? t("contracts.editableFor", { time: timeLeft(u.editableUntil) }) : undefined}>
+                                      <Button
+                                        size="small"
+                                        icon={<EditOutlined />}
+                                        onClick={() => {
+                                          editUsageEntryForm.setFieldsValue(u);
+                                          setEditUsageEntryModal(u);
+                                        }}
+                                      />
+                                    </Tooltip>
+                                  )}
+                                  {!u.billed && (
+                                    <Popconfirm
+                                      title={t("contracts.confirmDeleteUsageEntry")}
+                                      onConfirm={() => onDeleteUsageEntry(u.id)}
+                                      okText={t("common.delete")}
+                                      cancelText={t("common.cancel")}
+                                    >
+                                      <Button size="small" danger icon={<DeleteOutlined />} />
+                                    </Popconfirm>
+                                  )}
                                 </Space>
                               ),
                             },
@@ -1649,11 +1702,25 @@ export default function ContractDetailPage() {
                         if (isReversed) return <Tag color="red">{t("contracts.reversed")}</Tag>;
                         if (txn.transactionType === "reversal") return null;
                         return (
-                          user?.role === "admin" && (
-                            <Button size="small" danger onClick={() => setReverseDepositTxnModal({ depositTxnId: txn.id })}>
-                              {t("contracts.reverse")}
-                            </Button>
-                          )
+                          <Space>
+                            {txn.canEdit && (
+                              <Tooltip title={t("contracts.editableFor", { time: timeLeft(txn.editableUntil) })}>
+                                <Button
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => {
+                                    editDepositTxnForm.setFieldsValue({ transactionDate: txn.transactionDate, amount: Math.abs(txn.amountFen) / 100, reason: txn.reason });
+                                    setEditDepositTxnModal(txn);
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                            {user?.role === "admin" && (
+                              <Button size="small" danger onClick={() => setReverseDepositTxnModal({ depositTxnId: txn.id })}>
+                                {t("contracts.reverse")}
+                              </Button>
+                            )}
+                          </Space>
                         );
                       },
                     },
@@ -1730,6 +1797,18 @@ export default function ContractDetailPage() {
                               <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
                                 {t("contracts.allocate")}
                               </Button>
+                            )}
+                            {r.canEdit && (
+                              <Tooltip title={t("contracts.editableFor", { time: timeLeft(r.editableUntil) })}>
+                                <Button
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => {
+                                    editReceiptForm.setFieldsValue({ receivedDate: r.receivedDate, amount: r.amountFen / 100, paymentMethod: r.paymentMethod, externalReference: r.externalReference ?? undefined });
+                                    setEditReceiptModal(r);
+                                  }}
+                                />
+                              </Tooltip>
                             )}
                             {user?.role === "admin" && (
                               <Button size="small" danger onClick={() => setReverseReceiptModal({ receiptId: r.id })}>
@@ -2482,12 +2561,13 @@ export default function ContractDetailPage() {
         destroyOnClose
       >
         <Form form={editUsageEntryForm} layout="vertical">
-          <MonthShortcuts form={editUsageEntryForm} />
+          {editUsageEntryModal?.billed && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("contracts.usageBilledEditHint")} />}
+          {!editUsageEntryModal?.billed && <MonthShortcuts form={editUsageEntryForm} />}
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
-            <DateField />
+            <DateField disabled={!!editUsageEntryModal?.billed} />
           </Form.Item>
           <Form.Item name="serviceEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
-            <DateField />
+            <DateField disabled={!!editUsageEntryModal?.billed} />
           </Form.Item>
           <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
@@ -2674,10 +2754,59 @@ export default function ContractDetailPage() {
           <Form.Item name="amountFen" label={t("contracts.amountYuan")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
-          <Form.Item name="paymentMethod" label={t("contracts.paymentMethod")} rules={[{ required: true }]} initialValue="bank_transfer">
-            <Input />
+          <Form.Item name="paymentMethod" label={t("contracts.paymentMethod")} rules={[{ required: true }]} initialValue={PAYMENT_METHODS[0]}>
+            <Select options={PAYMENT_METHODS.map((m) => ({ value: m, label: paymentMethodLabel(t, m) }))} />
           </Form.Item>
           <Form.Item name="externalReference" label={t("contracts.externalReference")}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.editReceiptTitle")}
+        open={!!editReceiptModal}
+        onCancel={() => setEditReceiptModal(null)}
+        onOk={onEditReceipt}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.editReceiptHint", { time: timeLeft(editReceiptModal?.editableUntil) })} />
+        <Form form={editReceiptForm} layout="vertical">
+          <Form.Item name="receivedDate" label={t("contracts.receivedDate")} rules={[{ required: true }]}>
+            <DateField disabledDate={(d) => d.format("YYYY-MM-DD") > todayInChina()} />
+          </Form.Item>
+          <Form.Item name="amount" label={t("contracts.amountYuan")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0.01} precision={2} prefix="¥" />
+          </Form.Item>
+          <Form.Item name="paymentMethod" label={t("contracts.paymentMethod")} rules={[{ required: true }]}>
+            <Select options={[...new Set([...PAYMENT_METHODS, editReceiptModal?.paymentMethod ?? ""].filter(Boolean))].map((m) => ({ value: m, label: paymentMethodLabel(t, m) }))} />
+          </Form.Item>
+          <Form.Item name="externalReference" label={t("contracts.externalReference")}>
+            <Input />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={t("contracts.editDepositTitle")}
+        open={!!editDepositTxnModal}
+        onCancel={() => setEditDepositTxnModal(null)}
+        onOk={onEditDepositTxn}
+        okText={t("common.save")}
+        cancelText={t("common.cancel")}
+        destroyOnClose
+      >
+        <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.editDepositHint", { time: timeLeft(editDepositTxnModal?.editableUntil) })} />
+        <Form form={editDepositTxnForm} layout="vertical">
+          <Form.Item name="transactionDate" label={t("contracts.transactionDate")} rules={[{ required: true }]}>
+            <DateField />
+          </Form.Item>
+          <Form.Item name="amount" label={t("contracts.amountYuan")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0.01} precision={2} prefix="¥" />
+          </Form.Item>
+          <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
         </Form>

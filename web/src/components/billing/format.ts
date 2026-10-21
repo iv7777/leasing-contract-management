@@ -27,3 +27,14 @@ export function docTypeLabel(t: (key: string) => string, docType: string): strin
 }
 
 export const PAYMENT_METHODS = ["Bank transfer", "Cash", "WeChat Pay", "Alipay", "Cheque", "Other"] as const;
+
+/** "3h 12m" / "45m": how long is left until an ISO time, or "" once it has passed. */
+export function timeLeft(untilIso: string | null | undefined, now: number = Date.now()): string {
+  if (!untilIso) return "";
+  const ms = new Date(untilIso).getTime() - now;
+  if (!(ms > 0)) return "";
+  const minutes = Math.floor(ms / 60000);
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${Math.max(m, 1)}m`;
+}

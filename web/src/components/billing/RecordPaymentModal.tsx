@@ -54,11 +54,12 @@ export default function RecordPaymentModal({
     }
     const timer = setTimeout(() => {
       api
-        .post<{ allocations: ProposedRow[]; openChargeCount: number }>(`/contracts/${contractId}/payments/preview`, {
+        .post<{ openCharges: ProposedRow[]; openChargeCount: number }>(`/contracts/${contractId}/payments/preview`, {
           amountFen: Math.round(amount * 100),
         })
         .then((r) => {
-          setRows(r.allocations);
+          // Every unpaid bill is listed, oldest first; the ones the amount doesn't reach start at 0.
+          setRows([...r.openCharges].sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.serviceStart.localeCompare(b.serviceStart) || a.chargeId - b.chargeId));
           setOpenCount(r.openChargeCount);
         })
         .catch(() => setRows([]));
@@ -67,6 +68,7 @@ export default function RecordPaymentModal({
   }, [open, amount, contractId]);
 
   const amountFen = Math.round((amount ?? 0) * 100);
+  const totalUnpaidFen = rows.reduce((s, r) => s + r.balanceFen, 0);
   const allocatedFen = rows.reduce((s, r) => s + r.amountFen, 0);
   const creditFen = amountFen - allocatedFen;
   const overAllocated = allocatedFen > amountFen;
@@ -133,7 +135,20 @@ export default function RecordPaymentModal({
               size="small"
               rowKey="chargeId"
               dataSource={rows}
-              pagination={{ pageSize: 8, size: "small", hideOnSinglePage: true }}
+              pagination={{ pageSize: 10, size: "small", hideOnSinglePage: true }}
+              summary={() => (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={3}>
+                    <strong>{t("billing.payment.totalUnpaid")}</strong>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <strong>{yuan(totalUnpaidFen)}</strong>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2}>
+                    <strong>{yuan(allocatedFen)}</strong>
+                  </Table.Summary.Cell>
+                </Table.Summary.Row>
+              )}
               columns={[
                 { title: t("contracts.feeType"), dataIndex: "feeType", render: (v: string) => t(`contracts.${camel(v)}`) },
                 { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },

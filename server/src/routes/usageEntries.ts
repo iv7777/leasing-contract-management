@@ -2,15 +2,17 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { usageEntries, rateSchedule, charges } from "../db/schema.js";
+import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
-import { changesBetween, contractRef, streamName } from "../lib/auditDetail.js";
+import { changesBetween, chargeFacts, contractRef, streamName } from "../lib/auditDetail.js";
 import { Decimal, daysInMonth } from "@lcm/shared";
 
 import { isoDate, decimalString } from "../lib/validate.js";
+import { canEditEntry, editWindowEnd } from "../lib/editWindow.js";
+import { rebillStreams } from "../billing/generate.js";
 
 const WHOLE_MONTH = "A meter reading covers one whole calendar month, from its first day to its last.";
 /** A reading is billed per calendar month, so its period must be exactly one. */
@@ -63,11 +65,45 @@ function chargeAlreadyPosted(contractId: number, pricingStreamId: number, servic
     .get();
 }
 
+/** The posted bills made from a reading: its own, plus any service fee that follows this item. */
+function billedChargesFor(entry: typeof usageEntries.$inferSelect) {
+  const followers = db
+    .select()
+    .from(rateSchedule)
+    .all()
+    .filter((r) => r.linkedStreamId === entry.pricingStreamId && r.effectiveStart <= entry.serviceStart && (!r.effectiveEnd || r.effectiveEnd >= entry.serviceStart))
+    .map((r) => r.pricingStreamId);
+  const streamIds = [entry.pricingStreamId, ...followers];
+  return db
+    .select()
+    .from(charges)
+    .where(and(eq(charges.contractId, entry.contractId), eq(charges.serviceStart, entry.serviceStart), eq(charges.serviceEnd, entry.serviceEnd), eq(charges.status, "posted")))
+    .all()
+    .filter((c) => streamIds.includes(c.pricingStreamId));
+}
+
+/** Whether a payment has been applied to a bill, or the bill has been adjusted by an amendment. */
+function hasMoneyOn(chargeId: number): boolean {
+  const paid = db.select().from(receiptAllocations).where(eq(receiptAllocations.chargeId, chargeId)).all().reduce((s, a) => s + a.amountFen, 0);
+  return paid !== 0 || !!db.select().from(chargeAdjustments).where(eq(chargeAdjustments.chargeId, chargeId)).get();
+}
+
 usageEntriesRouter.get("/contracts/:contractId/usage-entries", (req, res) => {
   const contractId = Number(req.params.contractId);
   if (!ensureContractAccess(req, res, contractId)) return;
   const rows = db.select().from(usageEntries).where(eq(usageEntries.contractId, contractId)).all();
-  res.json({ usageEntries: rows });
+  res.json({
+    usageEntries: rows.map((r) => {
+      const billed = chargeAlreadyPosted(contractId, r.pricingStreamId, r.serviceStart, r.serviceEnd);
+      return {
+        ...r,
+        billed,
+        // Unbilled readings can always be edited. A billed one can be corrected for 24 hours if no payment is on its bill.
+        canEdit: !billed || (canEditEntry(req.user!, r.enteredBy, r.createdAt) && billedChargesFor(r).every((c) => !hasMoneyOn(c.id))),
+        editableUntil: billed ? editWindowEnd(r.createdAt) : null,
+      };
+    }),
+  });
 });
 
 const addUsageEntrySchema = z.object({
@@ -130,8 +166,17 @@ usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), 
   if (!ensureContractAccess(req, res, existing.contractId)) return;
   if (rejectIfDraft(res, existing.contractId)) return;
 
-  if (chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd)) {
-    return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
+  // A reading that has already been billed can still be corrected for 24 hours by whoever entered it
+  // (or an Admin), as long as no payment is on the bill: the bill is voided and made again.
+  const billed = chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd);
+  const billedCharges = billed ? billedChargesFor(existing) : [];
+  if (billed) {
+    if (!canEditEntry(req.user!, existing.enteredBy, existing.createdAt)) {
+      return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
+    }
+    if (billedCharges.some((c) => hasMoneyOn(c.id))) {
+      return res.status(409).json({ error: { code: "charge_has_payments", message: "A payment is already applied to the bill made from this reading, so it can't be changed. An Admin can reverse the payment first." } });
+    }
   }
 
   const parsed = updateUsageEntrySchema.safeParse(req.body);
@@ -144,8 +189,22 @@ usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), 
     return res.status(400).json({ error: { code: "not_metered", message: "This pricing stream is not on a metered rate at the given service start date." } });
   }
 
-  const updated = db.update(usageEntries).set(parsed.data).where(eq(usageEntries.id, id)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_updated", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, changes: changesBetween(existing, updated) } });
+  if (billed && (parsed.data.serviceStart !== undefined || parsed.data.serviceEnd !== undefined) && (nextServiceStart !== existing.serviceStart || (parsed.data.serviceEnd ?? existing.serviceEnd) !== existing.serviceEnd)) {
+    return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
+  }
+
+  const updated = db.transaction(() => {
+    const row = db.update(usageEntries).set(parsed.data).where(eq(usageEntries.id, id)).returning().get();
+    if (billed) {
+      for (const c of billedCharges) {
+        db.update(charges).set({ status: "voided", voidedAt: new Date().toISOString(), voidedBy: req.user!.id, voidReason: "Meter reading corrected" }).where(eq(charges.id, c.id)).run();
+        recordAudit({ actorUserId: req.user!.id, action: "charge_voided", entityType: "charge", entityId: c.id, reason: "Meter reading corrected", details: { ...chargeFacts(c.id), chargeAmountFen: c.amountFen } });
+      }
+      rebillStreams(existing.contractId, existing.serviceStart, existing.serviceEnd, billedCharges.map((c) => c.pricingStreamId));
+    }
+    return row;
+  });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_updated", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, changes: changesBetween(existing, updated), ...(billed ? { rebilled: billedCharges.length } : {}) } });
   res.json({ usageEntry: updated });
 });
 

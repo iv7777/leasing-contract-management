@@ -11,6 +11,8 @@ import { contractRef, chargeFacts } from "../lib/auditDetail.js";
 import { computeDepositBalance, validateAllocation } from "../billing/ledger.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { loadDepositStatus } from "../billing/depositLoad.js";
+import { canEditEntry, editWindowEnd, EDIT_NOT_YOURS, EDIT_WINDOW_CLOSED, withinEditWindow } from "../lib/editWindow.js";
+import { changesBetween } from "../lib/auditDetail.js";
 import { todayInChina } from "@lcm/shared";
 
 export const depositTransactionsRouter = Router();
@@ -36,7 +38,18 @@ depositTransactionsRouter.get("/contracts/:contractId/deposit-transactions", (re
   const contract = db.select({ status: contracts.status }).from(contracts).where(eq(contracts.id, contractId)).get();
   const loaded = loadDepositStatus(contractId, todayInChina());
   const status = contract?.status === "active" ? loaded : { ...loaded, shortfallFen: 0, needsManualCheck: false, state: "none" as const };
-  res.json({ transactions: rows, balanceFen, status });
+  const reversedIds = new Set(rows.filter((r) => r.reversalOfId !== null).map((r) => r.reversalOfId));
+  // A plain deposit receipt, refund or deduction can be corrected for 24 hours by whoever recorded it (or an Admin).
+  const editable = (r: (typeof rows)[number]) => ["receipt", "refund", "deduction"].includes(r.transactionType) && r.reversalOfId === null && !reversedIds.has(r.id);
+  res.json({
+    transactions: rows.map((r) => ({
+      ...r,
+      canEdit: editable(r) && canEditEntry(req.user!, r.actorUserId, r.createdAt),
+      editableUntil: editable(r) ? editWindowEnd(r.createdAt) : null,
+    })),
+    balanceFen,
+    status,
+  });
 });
 
 const receiptTxnSchema = z.object({
@@ -172,6 +185,66 @@ depositTransactionsRouter.post("/contracts/:contractId/deposit-transactions", re
   }
 
   res.status(400).json({ error: { code: "invalid_input", message: "Unknown transactionType." } });
+});
+
+const editDepositSchema = z.object({
+  transactionDate: isoDate.optional(),
+  amountFen: positiveFen.optional(),
+  reason: z.string().trim().min(1).max(500).optional(),
+});
+
+depositTransactionsRouter.patch("/deposit-transactions/:id", requireRole("admin", "manager", "collector"), (req, res) => {
+  const id = Number(req.params.id);
+  const original = db.select().from(depositTransactions).where(eq(depositTransactions.id, id)).get();
+  if (!original) return res.status(404).json({ error: { code: "not_found", message: "Deposit transaction not found." } });
+  if (!ensureContractAccess(req, res, original.contractId)) return;
+  if (rejectIfDraft(res, original.contractId)) return;
+
+  const all = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, original.contractId)).all();
+  const reversed = all.some((t) => t.reversalOfId === id);
+  if (!["receipt", "refund", "deduction"].includes(original.transactionType) || original.reversalOfId !== null || reversed) {
+    return res.status(409).json({ error: { code: "not_editable", message: "This entry can't be edited." } });
+  }
+  if (req.user!.role !== "admin" && req.user!.id !== original.actorUserId) {
+    return res.status(403).json({ error: { code: "forbidden", message: EDIT_NOT_YOURS } });
+  }
+  if (!withinEditWindow(original.createdAt)) {
+    return res.status(409).json({ error: { code: "edit_window_closed", message: EDIT_WINDOW_CLOSED } });
+  }
+
+  const parsed = editDepositSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid deposit transaction payload." } });
+  const sign = original.amountFen < 0 ? -1 : 1;
+  const next = {
+    ...original,
+    transactionDate: parsed.data.transactionDate ?? original.transactionDate,
+    reason: parsed.data.reason ?? original.reason,
+    amountFen: parsed.data.amountFen !== undefined ? sign * parsed.data.amountFen : original.amountFen,
+  };
+
+  // The deposit held may never go below zero, on the new date or at any later time.
+  const others = all.filter((t) => t.id !== id).map((t) => ({ amountFen: t.amountFen, transactionDate: t.transactionDate }));
+  const heldAt = (asOf: string) => computeDepositBalance([...others, { amountFen: next.amountFen, transactionDate: next.transactionDate }], asOf);
+  const checkDates = [next.transactionDate, ...all.map((t) => t.transactionDate), "9999-12-31"].filter((d) => d >= next.transactionDate);
+  const worst = Math.min(...checkDates.map(heldAt));
+  if (worst < 0) {
+    return res.status(409).json({ error: { code: "insufficient_deposit", message: "This change would take the deposit held below zero." } });
+  }
+
+  const updated = db
+    .update(depositTransactions)
+    .set({ transactionDate: next.transactionDate, amountFen: next.amountFen, reason: next.reason })
+    .where(eq(depositTransactions.id, id))
+    .returning()
+    .get();
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "deposit_transaction_edited",
+    entityType: "deposit_transaction",
+    entityId: id,
+    details: { contract: contractRef(original.contractId), changes: changesBetween(original, updated) },
+  });
+  res.json({ transaction: updated });
 });
 
 depositTransactionsRouter.post("/deposit-transactions/:id/reverse", requireRole("admin"), (req, res) => {

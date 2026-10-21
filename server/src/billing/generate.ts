@@ -145,3 +145,32 @@ export function generateChargesForContractMonth(contractId: number, periodStart:
 
   return { created, skippedExisting, skippedMissingUsage: skippedMissingUsage.length };
 }
+
+/** Creates again the bills of some pricing streams for one month (those that have no posted
+ * charge, e.g. because it was just voided), leaving every other stream alone. Used when a
+ * meter reading is corrected after its bill was made. */
+export function rebillStreams(contractId: number, periodStart: IsoDate, periodEnd: IsoDate, streamIds: number[]): number {
+  const ctx = loadChargeContext(contractId);
+  const { lines } = generateChargeLines(ctx.input, periodStart, periodEnd);
+  let created = 0;
+  for (const line of lines) {
+    if (!streamIds.includes(line.pricingStreamId)) continue;
+    if (ctx.existingKeys.has(chargeKey(line.pricingStreamId, line.serviceStart, line.serviceEnd))) continue;
+    db.insert(charges)
+      .values({
+        contractId,
+        pricingStreamId: line.pricingStreamId,
+        feeType: line.feeType,
+        serviceStart: line.serviceStart,
+        serviceEnd: line.serviceEnd,
+        dueDate: line.dueDate,
+        amountFen: line.amountFen,
+        calculationSnapshotJson: JSON.stringify(line.snapshot),
+        sourceContractVersion: ctx.contract.versionNumber,
+      })
+      .onConflictDoNothing()
+      .run();
+    created++;
+  }
+  return created;
+}
