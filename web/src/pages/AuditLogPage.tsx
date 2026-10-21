@@ -109,7 +109,7 @@ function auditCsv(t: TFunction, events: AuditEventDto[]): string {
   const header = [t("audit.timestamp"), t("audit.actor"), t("audit.action"), t("audit.entityType"), t("audit.entityId"), t("audit.target"), t("audit.details")];
   const lines = [header.join(",")];
   for (const e of events) {
-    const details = [headlineOf(t, e.details), ...detailRows(t, e).map(rowText)].filter(Boolean).join("\n");
+    const details = [headlineOf(t, e.details), ...detailRows(t, e).map(rowText)].filter(Boolean).join(" | ");
     lines.push(
       [
         e.createdAt,
@@ -133,7 +133,7 @@ function ExpandedDetail({ event }: { event: AuditEventDto }) {
   const headline = headlineOf(t, event.details);
   return (
     <div style={{ fontSize: 13 }}>
-      <div style={{ whiteSpace: "nowrap", overflowX: "auto" }}>
+      <div>
         {[headline ? <strong key="headline">{headline}</strong> : null, ...lineItems(t, event)]
           .filter(Boolean)
           .map((l, i) => (
