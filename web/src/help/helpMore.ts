@@ -136,7 +136,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: ["**Add user**: choose a role and the properties they may see.", "Switch download / print on only for people who need it.", "Reset a forgotten password from the server's control panel (option 5)."],
     },
     audit: {
-      steps: ["Filter by person, action or date.", "Expand a row for the full detail and any reason given.", "The log is permanent — entries can't be edited or deleted."],
+      steps: ["Filter by person, action or date.", "Press + on a record to see all its changes and any reason given.", "Export CSV downloads every record that matches the filters.", "The log is permanent — entries can't be edited or deleted."],
     },
     billingRuns: {
       steps: ["Check the latest night succeeded; open anything marked partial or failed.", "**Run billing now** creates due bills without waiting for 03:00.", "A contract only joins the run after Catch up billing."],
@@ -258,7 +258,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: ["**新增用户**：选择角色和可查看的物业。", "只对确实需要的人开启下载/打印。", "忘记密码请在服务器控制面板中重置（选项 5）。"],
     },
     audit: {
-      steps: ["按人员、操作或日期筛选。", "展开某一行查看完整详情和填写的原因。", "日志是永久的——记录无法编辑或删除。"],
+      steps: ["按人员、操作或日期筛选。", "点击记录上的 + 查看全部变更和填写的原因。", "“导出CSV”会下载符合筛选条件的全部记录。", "日志是永久的——记录无法编辑或删除。"],
     },
     billingRuns: {
       steps: ["确认最近一晚成功；点开标为部分失败或失败的记录。", "**立即运行出账**可不等到 03:00 就生成已到期的账单。", "合同要先「补账」才会加入每晚的运行。"],

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Button, Collapse, Input, Select, Space, Table, Tag, Typography } from "antd";
+import { Button, Collapse, Input, message, Select, Space, Table, Tag, Typography } from "antd";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
@@ -75,21 +75,56 @@ function headlineOf(t: TFunction, details: unknown): string {
   return identityOf(details).map(([k, v]) => formatValue(t, k, v)).join(" · ");
 }
 
-/** The detail lines of one entry: what changed first, then the other facts, then the reason. */
-function lineItems(t: TFunction, event: AuditEventDto): ReactNode[] {
-  const lines: ReactNode[] = [];
+type DetailRow = { key: string; label: string; from?: string; to?: string; value?: string };
+
+/** The detail rows of one entry: what changed first, then the other facts, then the reason. */
+function detailRows(t: TFunction, event: AuditEventDto): DetailRow[] {
+  const rows: DetailRow[] = [];
   for (const [k, c] of Object.entries(changesOf(event.details))) {
+    rows.push({ key: `c-${k}`, label: fieldLabel(t, k), from: formatValue(t, k, c.from), to: formatValue(t, k, c.to) });
+  }
+  for (const [k, v] of factsOf(event.details)) rows.push({ key: `f-${k}`, label: fieldLabel(t, k), value: formatValue(t, k, v) });
+  if (event.reason) rows.push({ key: "reason", label: t("contracts.reason"), value: event.reason });
+  return rows;
+}
+
+const rowText = (r: DetailRow) => (r.value !== undefined ? `${r.label}: ${r.value}` : `${r.label}: ${r.from} → ${r.to}`);
+
+function lineItems(t: TFunction, event: AuditEventDto): ReactNode[] {
+  return detailRows(t, event).map((r) =>
+    r.value !== undefined ? (
+      <span key={r.key}>{r.label}: {r.value}</span>
+    ) : (
+      <span key={r.key}>
+        {r.label}: <span style={{ color: "#cf1322" }}>{r.from}</span> → <span style={{ color: "#389e0d" }}>{r.to}</span>
+      </span>
+    ),
+  );
+}
+
+const csvCell = (v: string) => (/[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/** One CSV line per audit record, in the language the page is showing. */
+function auditCsv(t: TFunction, events: AuditEventDto[]): string {
+  const header = [t("audit.timestamp"), t("audit.actor"), t("audit.action"), t("audit.entityType"), t("audit.entityId"), t("audit.target"), t("audit.details")];
+  const lines = [header.join(",")];
+  for (const e of events) {
+    const details = [headlineOf(t, e.details), ...detailRows(t, e).map(rowText)].filter(Boolean).join("\n");
     lines.push(
-      <span key={`c-${k}`}>
-        {fieldLabel(t, k)}: <span style={{ color: "#cf1322" }}>{formatValue(t, k, c.from)}</span> → <span style={{ color: "#389e0d" }}>{formatValue(t, k, c.to)}</span>
-      </span>,
+      [
+        e.createdAt,
+        e.actorName ?? t("audit.system"),
+        t(`audit.actions.${e.action}`, { defaultValue: e.action }),
+        t(`audit.entities.${e.entityType}`, { defaultValue: e.entityType }),
+        e.entityId === null ? "" : String(e.entityId),
+        e.entityLabel ?? "",
+        details,
+      ]
+        .map(csvCell)
+        .join(","),
     );
   }
-  for (const [k, v] of factsOf(event.details)) {
-    lines.push(<span key={`f-${k}`}>{fieldLabel(t, k)}: {formatValue(t, k, v)}</span>);
-  }
-  if (event.reason) lines.push(<span key="reason">{t("contracts.reason")}: {event.reason}</span>);
-  return lines;
+  return lines.join("\r\n");
 }
 
 /** The second line of an audit record: the headline and first detail; a + reveals the rest. */
@@ -134,6 +169,7 @@ function DetailLines({ event }: { event: AuditEventDto }) {
 
 export default function AuditLogPage() {
   const { t } = useTranslation();
+  const [exporting, setExporting] = useState(false);
   const [events, setEvents] = useState<AuditEventDto[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
@@ -167,6 +203,36 @@ export default function AuditLogPage() {
     void api.get<{ entityTypes: string[] }>("/audit/entity-types").then((r) => setEntityTypes(r.entityTypes));
   }, []);
 
+  /** Every record matching the filters (not just this page), as a CSV that opens correctly in Excel. */
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const all: AuditEventDto[] = [];
+      for (let pg = 1; pg <= 500; pg++) {
+        const params = new URLSearchParams({ page: String(pg), pageSize: "200" });
+        if (entityType) params.set("entityType", entityType);
+        if (entityId) params.set("entityId", entityId);
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
+        const r = await api.get<{ events: AuditEventDto[]; total: number }>(`/audit?${params.toString()}`);
+        all.push(...r.events);
+        if (all.length >= r.total || r.events.length === 0) break;
+      }
+      const blob = new Blob(["\uFEFF" + auditCsv(t, all)], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      message.success(t("audit.exported", { count: all.length }));
+    } catch {
+      message.error(t("common.error"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const applyFilters = () => {
     setPage(1);
     load();
@@ -190,6 +256,9 @@ export default function AuditLogPage() {
         <DateField placeholder={t("audit.to")} style={{ width: 160 }} value={to || undefined} onChange={(v) => setTo(v ?? "")} allowClear />
         <Button type="primary" onClick={applyFilters}>
           {t("audit.applyFilters")}
+        </Button>
+        <Button onClick={() => void exportCsv()} loading={exporting}>
+          {t("audit.exportCsv")}
         </Button>
       </Space>
 
