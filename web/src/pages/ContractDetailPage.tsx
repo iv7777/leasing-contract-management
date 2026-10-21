@@ -8,6 +8,7 @@ import {
   Col,
   Descriptions,
   Form,
+  Grid,
   Input,
   InputNumber,
   List,
@@ -265,6 +266,7 @@ export default function ContractDetailPage() {
   const { t, i18n } = useTranslation();
   const exportLang = i18n.language.startsWith("zh") ? "zh" : "en";
   const { user } = useAuth();
+  const isPhone = !Grid.useBreakpoint().md;
 
   const [contract, setContract] = useState<ContractDto | null>(null);
   const [billingRulesInfo, setBillingRulesInfo] = useState<BillingRulesDto | null>(null);
@@ -1459,52 +1461,8 @@ export default function ContractDetailPage() {
                 const s = streams.find((x) => x.id === streamId);
                 return s ? s.label ?? t(`contracts.${camel(s.feeType)}`) : streamId;
               };
-              return (
-                <>
-                  {canManageUsage && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
-                  {canManageUsage && contract.status !== "draft" && (
-                    <Button
-                      icon={<PlusOutlined />}
-                      disabled={meteredStreams.length === 0}
-                      onClick={() => setUsageEntryModal(true)}
-                      style={{ marginBottom: 12 }}
-                    >
-                      {t("contracts.addUsageEntry")}
-                    </Button>
-                  )}
-                  {canManageUsage && contract.status !== "draft" && meteredStreams.length > 0 && (
-                    <Button onClick={() => setReadingsGridOpen(true)} style={{ marginBottom: 12, marginLeft: 8 }}>
-                      {t("billing.readings.button")}
-                    </Button>
-                  )}
-                  {canManageUsage && contract.status !== "draft" && meteredStreams.length === 0 && (
-                    <Typography.Paragraph type="secondary">{t("contracts.usageEntryNoMeteredStreams")}</Typography.Paragraph>
-                  )}
-                  <Table
-                    rowKey="id"
-                    size="small"
-                    dataSource={usageEntries}
-                    pagination={false}
-                    columns={[
-                      { title: t("contracts.usageEntryStream"), key: "stream", render: (_: unknown, u: UsageEntryDto) => streamLabel(u.pricingStreamId) },
-                      { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
-                      { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
-                      { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}` },
-                      { title: t("contracts.usageEntrySource"), dataIndex: "source" },
-                      {
-                        title: t("contracts.photo"),
-                        key: "photo",
-                        render: (_: unknown, u: UsageEntryDto) => (
-                          <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
-                        ),
-                      },
-                      ...(canManageUsage
-                        ? [
-                            {
-                              title: t("common.actions"),
-                              key: "actions",
-                              render: (_: unknown, u: UsageEntryDto) => (
-                                <Space>
+              const actionsOf = (u: UsageEntryDto) => (
+                <Space>
                                   {u.canEdit === false ? (
                                     <Tooltip title={t("contracts.usageLocked")}>
                                       <Button size="small" icon={<LockOutlined />} disabled />
@@ -1532,12 +1490,88 @@ export default function ContractDetailPage() {
                                     </Popconfirm>
                                   )}
                                 </Space>
-                              ),
+              );
+              const periodOf = (u: UsageEntryDto) => {
+                const monthEnd = new Date(Date.UTC(Number(u.serviceStart.slice(0, 4)), Number(u.serviceStart.slice(5, 7)), 0)).toISOString().slice(0, 10);
+                return u.serviceStart.endsWith("-01") && u.serviceEnd === monthEnd ? u.serviceStart.slice(0, 7) : `${u.serviceStart} → ${u.serviceEnd}`;
+              };
+              return (
+                <>
+                  {canManageUsage && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                  {canManageUsage && contract.status !== "draft" && (
+                    <Button
+                      icon={<PlusOutlined />}
+                      disabled={meteredStreams.length === 0}
+                      onClick={() => setUsageEntryModal(true)}
+                      style={{ marginBottom: 12 }}
+                    >
+                      {t("contracts.addUsageEntry")}
+                    </Button>
+                  )}
+                  {canManageUsage && contract.status !== "draft" && meteredStreams.length > 0 && (
+                    <Button onClick={() => setReadingsGridOpen(true)} style={{ marginBottom: 12, marginLeft: 8 }}>
+                      {t("billing.readings.button")}
+                    </Button>
+                  )}
+                  {canManageUsage && contract.status !== "draft" && meteredStreams.length === 0 && (
+                    <Typography.Paragraph type="secondary">{t("contracts.usageEntryNoMeteredStreams")}</Typography.Paragraph>
+                  )}
+                  {isPhone ? (
+                    <List
+                      bordered
+                      dataSource={usageEntries}
+                      locale={{ emptyText: t("common.noData", { defaultValue: "No data" }) }}
+                      renderItem={(u: UsageEntryDto) => (
+                        <List.Item style={{ display: "block" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <Typography.Text strong>
+                              {streamLabel(u.pricingStreamId)} · {periodOf(u)}
+                            </Typography.Text>
+                            <Typography.Text>{`${u.quantity} ${u.unit}`}</Typography.Text>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6 }}>
+                            <Typography.Text type="secondary" ellipsis style={{ flex: 1, minWidth: 0 }}>
+                              {u.source ?? ""}
+                            </Typography.Text>
+                            <Space size={4}>
+                              <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
+                              {canManageUsage && actionsOf(u)}
+                            </Space>
+                          </div>
+                        </List.Item>
+                      )}
+                    />
+                  ) : (
+                  <Table
+                    rowKey="id"
+                    size="small"
+                    dataSource={usageEntries}
+                    pagination={false}
+                    columns={[
+                      { title: t("contracts.usageEntryStream"), key: "stream", render: (_: unknown, u: UsageEntryDto) => streamLabel(u.pricingStreamId) },
+                      { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
+                      { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
+                      { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}` },
+                      { title: t("contracts.usageEntrySource"), dataIndex: "source" },
+                      {
+                        title: t("contracts.photo"),
+                        key: "photo",
+                        render: (_: unknown, u: UsageEntryDto) => (
+                          <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
+                        ),
+                      },
+                      ...(canManageUsage
+                        ? [
+                            {
+                              title: t("common.actions"),
+                              key: "actions",
+                              render: (_: unknown, u: UsageEntryDto) => actionsOf(u),
                             },
                           ]
                         : []),
                     ]}
                   />
+                  )}
                 </>
               );
             })(),

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Modal, Popconfirm, Space, Spin, message } from "antd";
-import { CameraOutlined, CloseCircleFilled } from "@ant-design/icons";
+import { Button, Modal, Popconfirm, Space, Spin, Tooltip, Typography, message } from "antd";
+import { CameraOutlined, CloseCircleFilled, PictureOutlined, WarningOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
 import { apiErrorMessage } from "../../api/errorMessage";
@@ -77,7 +77,7 @@ export function MeterPhotoCell({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!viewing || !documentId) return;
+    if (!viewing || !documentId || missing) return;
     let objectUrl: string | null = null;
     let cancelled = false;
     void fetch(`/api/documents/${documentId}/download`, { credentials: "include" })
@@ -98,7 +98,7 @@ export function MeterPhotoCell({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setUrl(null);
     };
-  }, [viewing, documentId, t]);
+  }, [viewing, documentId, missing, t]);
 
   const attach = async (file: File | undefined) => {
     if (!file) return;
@@ -125,36 +125,38 @@ export function MeterPhotoCell({
   };
 
   return (
-    <Space size={4}>
-      {documentId && (
-        <Button size="small" type="link" icon={<CameraOutlined />} danger={missing} onClick={() => setViewing(true)}>
-          {missing ? t("contracts.photoMissing") : t("contracts.photoView")}
-        </Button>
-      )}
-      {canEdit && (
-        <>
-          <input ref={input} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => void attach(e.target.files?.[0])} />
-          <Button size="small" loading={busy} icon={documentId ? undefined : <CameraOutlined />} onClick={() => input.current?.click()}>
-            {documentId ? t("contracts.photoReplace") : t("contracts.photoAdd")}
-          </Button>
-        </>
-      )}
+    <>
+      <input ref={input} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => void attach(e.target.files?.[0])} />
+      {documentId ? (
+        <Tooltip title={missing ? t("contracts.photoMissing") : t("contracts.photoView")}>
+          <Button size="small" danger={missing} icon={missing ? <WarningOutlined /> : <PictureOutlined />} onClick={() => setViewing(true)} />
+        </Tooltip>
+      ) : canEdit ? (
+        <Tooltip title={t("contracts.photoAdd")}>
+          <Button size="small" loading={busy} icon={<CameraOutlined />} onClick={() => input.current?.click()} />
+        </Tooltip>
+      ) : null}
       <Modal
         open={viewing}
         footer={
           canEdit && documentId ? (
-            <Popconfirm title={t("contracts.photoRemoveConfirm")} onConfirm={() => void remove()} okText={t("common.delete")} cancelText={t("common.cancel")}>
-              <Button danger>{t("contracts.photoRemove")}</Button>
-            </Popconfirm>
+            <Space>
+              <Button loading={busy} icon={<CameraOutlined />} onClick={() => input.current?.click()}>
+                {t("contracts.photoReplace")}
+              </Button>
+              <Popconfirm title={t("contracts.photoRemoveConfirm")} onConfirm={() => void remove()} okText={t("common.delete")} cancelText={t("common.cancel")}>
+                <Button danger>{t("contracts.photoRemove")}</Button>
+              </Popconfirm>
+            </Space>
           ) : null
         }
         onCancel={() => setViewing(false)}
         width={720}
-        style={{ top: 24 }}
+        style={{ top: 24, maxWidth: "calc(100vw - 16px)" }}
         destroyOnClose
       >
-        {url ? <img src={url} alt="" style={{ width: "100%", borderRadius: 4 }} /> : <Spin />}
+        {url ? <img src={url} alt="" style={{ width: "100%", borderRadius: 4 }} /> : missing ? <Typography.Text type="danger">{t("contracts.photoMissing")}</Typography.Text> : <Spin />}
       </Modal>
-    </Space>
+    </>
   );
 }
