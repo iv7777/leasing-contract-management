@@ -260,6 +260,7 @@ export const apiErrorByCode: Record<string, string> = {
   extra_no_item: "该合同没有电费或水费项目，无法结转该余额。",
   extra_not_metered: "该项目在此合同不是按读数计量，系统会正常出账——请把它并入租金及固定费用余额。",
   photo_too_large: "这张照片太大（最大 15 MB）。",
+  owner_exists: "该文件仍属于一条存在的记录，请从那里删除。",
   managed_by_reading: "表计照片只能在它所属的读数上修改。",
   contract_has_payments: "该合同已有收款记录，不能再用这种方式补录期初余额。",
   balance_exceeds_billed: "欠款余额超过了截至该日期已出账的全部金额。请检查截至日期，并确认账单已生成（补账）。",

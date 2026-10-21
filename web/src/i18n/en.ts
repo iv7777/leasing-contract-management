@@ -529,7 +529,7 @@ const en = {
     },
   },
   health: {
-    readOnly: "These checks only read and report — they never change data or files. Fixes are made on the screens linked from each result.",
+    readOnly: "These checks only read and report; they never change anything by themselves. Fixes are made on the screens linked from each result (the Delete button on a record that nothing can reach is the one exception).",
     run: "Run check",
     runAgain: "Run again",
     ranAt: "Checked at {{time}}",
@@ -541,6 +541,10 @@ const en = {
     files: {
       title: "Document files",
       description: "Compares the document records with the files kept on the server: records whose file has gone missing, and files that no record points to.",
+      noOwnerless: "Every document record still belongs to something.",
+      someOwnerless: "{{count}} document record(s) belong to something that no longer exists.",
+      ownerlessNote: "Usually meter photos left behind when the database was initialized. They can't be reached from any screen, so remove them here (the record and its file).",
+      removeConfirm: "Remove this record and its file?",
       noneMissing: "All {{count}} document records have their file.",
       someMissing: "{{count}} document record(s) have no file on the server.",
       fixMissing: "Open the document's contract and remove the broken record (or upload the file again).",

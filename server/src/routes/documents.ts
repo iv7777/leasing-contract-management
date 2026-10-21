@@ -60,7 +60,7 @@ function ownerAccessDenied(req: import("express").Request, res: import("express"
   return false;
 }
 
-function ownerExists(ownerType: string, ownerId: number): boolean {
+export function ownerExists(ownerType: string, ownerId: number): boolean {
   switch (ownerType) {
     case "contract":
       return !!db.select({ id: contracts.id }).from(contracts).where(eq(contracts.id, ownerId)).get();
@@ -70,6 +70,8 @@ function ownerExists(ownerType: string, ownerId: number): boolean {
       return !!db.select({ id: units.id }).from(units).where(eq(units.id, ownerId)).get();
     case "party":
       return !!db.select({ id: parties.id }).from(parties).where(eq(parties.id, ownerId)).get();
+    case "usage_entry":
+      return !!db.select({ id: usageEntries.id }).from(usageEntries).where(eq(usageEntries.id, ownerId)).get();
     default:
       return false;
   }

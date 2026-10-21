@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Alert, Button, Card, Space, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Card, Popconfirm, Space, Table, Tag, Typography, message } from "antd";
 import { CheckCircleFilled, ExclamationCircleFilled, PlayCircleOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -19,6 +19,7 @@ interface FilesResult {
   documentCount: number;
   missing: DocRow[];
   orphans: { relativePath: string; sizeBytes: number }[];
+  ownerless: (DocRow & { fileMissing: boolean })[];
 }
 interface ChecksumResult {
   checked: number;
@@ -67,7 +68,7 @@ function Verdict({ ok, children }: { ok: boolean; children: ReactNode }) {
 }
 
 /** One check: a Run button, a verdict line and (when something is wrong) the detail. */
-function CheckCard<T>({ title, description, slow, run, render }: { title: string; description: string; slow?: boolean; run: () => Promise<T>; render: (r: T) => ReactNode }) {
+function CheckCard<T>({ title, description, slow, run, render }: { title: string; description: string; slow?: boolean; run: () => Promise<T>; render: (r: T, rerun: () => void) => ReactNode }) {
   const { t } = useTranslation();
   const [result, setResult] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
@@ -98,7 +99,7 @@ function CheckCard<T>({ title, description, slow, run, render }: { title: string
       </Typography.Paragraph>
       {result && (
         <>
-          {render(result)}
+          {render(result, () => void go())}
           {ranAt && (
             <div style={{ marginTop: 8 }}>
               <Typography.Text type="secondary">{t("health.ranAt", { time: ranAt.toLocaleTimeString() })}</Typography.Text>
@@ -152,8 +153,47 @@ export default function SystemHealthPage() {
         title={t("health.files.title")}
         description={t("health.files.description")}
         run={() => api.get<FilesResult>("/system-health/files")}
-        render={(r) => (
+        render={(r, rerun) => (
           <Space direction="vertical" style={{ width: "100%" }}>
+            <Verdict ok={r.ownerless.length === 0}>
+              {r.ownerless.length === 0 ? t("health.files.noOwnerless") : t("health.files.someOwnerless", { count: r.ownerless.length })}
+            </Verdict>
+            {r.ownerless.length > 0 && (
+              <>
+                <Typography.Text type="secondary">{t("health.files.ownerlessNote")}</Typography.Text>
+                <Table
+                  size="small"
+                  rowKey="id"
+                  pagination={r.ownerless.length > 20 ? { pageSize: 20 } : false}
+                  dataSource={r.ownerless}
+                  scroll={{ x: true }}
+                  columns={[
+                    ...docColumns().slice(0, 2),
+                    { title: t("health.belongsTo"), render: (_: unknown, d: DocRow) => `${d.ownerType} #${d.ownerId}` },
+                    {
+                      title: "",
+                      render: (_: unknown, d: DocRow) => (
+                        <Popconfirm
+                          title={t("health.files.removeConfirm")}
+                          okText={t("common.delete")}
+                          cancelText={t("common.cancel")}
+                          onConfirm={() =>
+                            void api
+                              .delete(`/system-health/documents/${d.id}`)
+                              .then(rerun)
+                              .catch((err) => message.error(apiErrorMessage(err, t)))
+                          }
+                        >
+                          <Button size="small" danger>
+                            {t("common.delete")}
+                          </Button>
+                        </Popconfirm>
+                      ),
+                    },
+                  ]}
+                />
+              </>
+            )}
             <Verdict ok={r.missing.length === 0}>
               {r.missing.length === 0 ? t("health.files.noneMissing", { count: r.documentCount }) : t("health.files.someMissing", { count: r.missing.length })}
             </Verdict>

@@ -3,6 +3,9 @@ import { Router } from "express";
 import { desc } from "drizzle-orm";
 import { db, sqlite } from "../db/client.js";
 import { backupRuns, documents } from "../db/schema.js";
+import { eq } from "drizzle-orm";
+import { recordAudit } from "../lib/audit.js";
+import { ownerExists } from "./documents.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { ownerLabel } from "../lib/auditDetail.js";
 import { findOrphanFiles, sha256File } from "../lib/storageScan.js";
@@ -29,9 +32,30 @@ function describe(d: typeof documents.$inferSelect) {
 /** Document records whose file is gone, and files on disk that no record uses. */
 systemHealthRouter.get("/files", (_req, res) => {
   const all = db.select().from(documents).all();
-  const missing = all.filter((d) => !fs.existsSync(d.filePath)).map(describe);
+  // A record whose owner (reading, contract, ...) no longer exists can't be reached from any screen.
+  const ownerless = all.filter((d) => !ownerExists(d.ownerType, d.ownerId));
+  const ownerlessIds = new Set(ownerless.map((d) => d.id));
+  const missing = all.filter((d) => !ownerlessIds.has(d.id) && !fs.existsSync(d.filePath)).map(describe);
   const orphans = findOrphanFiles(STORAGE_DIR, all.map((d) => d.filePath));
-  res.json({ documentCount: all.length, missing, orphans });
+  res.json({ documentCount: all.length, missing, orphans, ownerless: ownerless.map((d) => ({ ...describe(d), fileMissing: !fs.existsSync(d.filePath) })) });
+});
+
+/** Removes a document record whose owner no longer exists, with its file. Refused while the owner exists. */
+systemHealthRouter.delete("/documents/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const doc = db.select().from(documents).where(eq(documents.id, id)).get();
+  if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
+  if (ownerExists(doc.ownerType, doc.ownerId)) {
+    return res.status(409).json({ error: { code: "owner_exists", message: "This document still belongs to an existing record. Remove it from there." } });
+  }
+  db.delete(documents).where(eq(documents.id, id)).run();
+  try {
+    fs.unlinkSync(doc.filePath);
+  } catch {
+    // The file was already gone.
+  }
+  recordAudit({ actorUserId: req.user!.id, action: "document_deleted", entityType: "document", entityId: id, details: { ownerType: doc.ownerType, docType: doc.docType, name: doc.name, ownerWasGone: true } });
+  res.status(204).send();
 });
 
 /** Re-hashes every stored file against the checksum recorded at upload. Slow on a big archive. */

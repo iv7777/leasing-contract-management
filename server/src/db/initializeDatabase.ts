@@ -86,6 +86,8 @@ function startService() {
 }
 
 const counts = toDelete.map((t) => ({ table: t, rows: count(t) }));
+// Meter photos belong to the readings being wiped, so they go with them (their records and files).
+const photoFiles = (sqlite.prepare(`SELECT file_path FROM documents WHERE owner_type = 'usage_entry'`).all() as { file_path: string }[]).map((r) => r.file_path);
 
 console.log("=".repeat(70));
 console.log(keepContracts ? "INITIALIZE DATABASE — keeping contracts and Tenants & Landlords" : "INITIALIZE DATABASE — full wipe of business data");
@@ -94,6 +96,7 @@ console.log(`Database : ${DB_PATH}`);
 console.log("");
 console.log("Will be DELETED:");
 for (const c of counts.filter((x) => x.rows > 0)) console.log(`  ${c.table.padEnd(26)} ${c.rows} row(s)`);
+if (photoFiles.length > 0) console.log(`  meter photos              ${photoFiles.length} file(s) — deleted from disk with their readings (not part of the safety copy)`);
 if (counts.every((c) => c.rows === 0)) console.log("  (nothing — these tables are already empty)");
 console.log("");
 console.log("Will be KEPT:");
@@ -112,7 +115,7 @@ if (manageService) {
   console.log(`No systemd unit found at ${SERVICE_UNIT_PATH} — stop the server yourself before continuing.`);
 }
 console.log("A safety copy of the current database is saved first, restorable with restore-backup.");
-console.log("Document files on disk are NOT deleted.");
+console.log("Other document files on disk are NOT deleted.");
 console.log("=".repeat(70));
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -151,6 +154,7 @@ try {
     // anyway, but kept users/audit rows may point at things being removed.
     work.pragma("foreign_keys = OFF");
     const wipe = work.transaction(() => {
+      work.prepare(`DELETE FROM documents WHERE owner_type = 'usage_entry'`).run();
       for (const table of toDelete) {
         work.prepare(`DELETE FROM ${table}`).run();
         work.prepare(`DELETE FROM sqlite_sequence WHERE name = ?`).run(table);
@@ -166,6 +170,13 @@ try {
         .run("database_initialized", JSON.stringify({ keepContracts, deleted: counts.filter((c) => c.rows > 0) }), new Date().toISOString());
     });
     wipe();
+    for (const file of photoFiles) {
+      try {
+        fs.unlinkSync(file);
+      } catch {
+        // already gone
+      }
+    }
     work.pragma("foreign_keys = ON");
     work.exec("VACUUM");
     work.pragma("wal_checkpoint(TRUNCATE)");

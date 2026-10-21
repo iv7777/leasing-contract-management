@@ -531,7 +531,7 @@ const zh: Translations = {
     },
   },
   health: {
-    readOnly: "这些检查只读取并报告，不会更改任何数据或文件。如需修复，请到各结果中链接的页面处理。",
+    readOnly: "这些检查只读取并报告，自身不会更改任何内容。如需修复，请到各结果中链接的页面处理（对无法从任何页面访问的记录，可直接点「删除」）。",
     run: "运行检查",
     runAgain: "重新检查",
     ranAt: "检查时间：{{time}}",
@@ -543,6 +543,10 @@ const zh: Translations = {
     files: {
       title: "文件是否齐全",
       description: "对比文件记录与服务器上保存的文件：找出文件已丢失的记录，以及没有任何记录对应的多余文件。",
+      noOwnerless: "所有文件记录都仍有所属对象。",
+      someOwnerless: "有 {{count}} 条文件记录所属的对象已不存在。",
+      ownerlessNote: "通常是初始化数据库后遗留的表计照片。它们在任何页面都无法访问，请在此删除（记录及文件）。",
+      removeConfirm: "删除这条记录及其文件？",
       noneMissing: "全部 {{count}} 条文件记录都有对应文件。",
       someMissing: "有 {{count}} 条文件记录在服务器上找不到文件。",
       fixMissing: "请打开该文件所属合同，删除这条损坏的记录（或重新上传文件）。",
