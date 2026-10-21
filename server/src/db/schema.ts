@@ -98,7 +98,14 @@ export const documents = sqliteTable("documents", {
   ownerType: text("owner_type", { enum: ["property", "unit", "party", "contract"] }).notNull(),
   ownerId: integer("owner_id").notNull(),
   docType: text("doc_type").notNull(),
+  // Optional display name chosen by the uploader; editable at any time.
+  name: text("name"),
   classification: text("classification", { enum: ["ordinary", "sensitive"] }).notNull(),
+  // A contract document is never deleted once the contract has left draft; an
+  // approved amendment voids it instead (the file stays on disk and in backups).
+  voided: integer("voided", { mode: "boolean" }).notNull().default(false),
+  voidedAt: text("voided_at"),
+  voidedByAmendmentId: integer("voided_by_amendment_id"),
   filePath: text("file_path").notNull(),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
@@ -401,6 +408,8 @@ export const amendments = sqliteTable("amendments", {
   status: text("status", { enum: ["draft", "pending", "approved", "rejected", "withdrawn"] })
     .notNull()
     .default("draft"),
+  // Who drafted it; only they (or an Admin) can edit or withdraw the draft.
+  createdBy: integer("created_by").references(() => users.id),
   submittedBy: integer("submitted_by").references(() => users.id),
   submittedAt: text("submitted_at"),
   reviewedBy: integer("reviewed_by").references(() => users.id),

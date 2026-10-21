@@ -41,7 +41,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -136,6 +136,7 @@ interface AmendmentDto {
   status: "draft" | "pending" | "approved" | "rejected" | "withdrawn";
   baseContractVersion: number;
   supportingDocumentId: number | null;
+  createdBy: number | null;
   submittedBy: number | null;
 }
 interface ChargeBalanceDto {
@@ -177,10 +178,13 @@ interface DepositStatusDto {
 }
 interface DocumentDto {
   id: number;
+  name: string | null;
   docType: string;
   classification: "ordinary" | "sensitive";
   mimeType: string;
   uploadedAt: string;
+  uploadedByName: string | null;
+  voided: boolean;
 }
 interface StatementDto {
   periodStart: string;
@@ -267,7 +271,10 @@ export default function ContractDetailPage() {
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number; rentableAreaSqm?: string }[]>([]);
-  const [documents, setDocuments] = useState<DocumentDto[]>([]);
+  const [allDocuments, setDocuments] = useState<DocumentDto[]>([]);
+  const [showVoidedDocs, setShowVoidedDocs] = useState(false);
+  // Voided documents (withdrawn by an approved amendment) are kept on record but are never offered for new work.
+  const documents = allDocuments.filter((d) => !d.voided);
   const [activeTab, setActiveTab] = useState("units");
   useHelpTopic(`contracts.detail.${activeTab}`);
 
@@ -294,7 +301,7 @@ export default function ContractDetailPage() {
   const [reverseReceiptModal, setReverseReceiptModal] = useState<{ receiptId: number } | null>(null);
   const [depositTxnModal, setDepositTxnModal] = useState(false);
   const [depositTxnType, setDepositTxnType] = useState("receipt");
-  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream" | "terminate">("rate_change");
+  const [amendmentKind, setAmendmentKind] = useState<"rate_change" | "add_unit" | "add_pricing_stream" | "terminate" | "void_document">("rate_change");
   const [amendmentStreamTargetType, setAmendmentStreamTargetType] = useState("unit");
   const [editAmendment, setEditAmendment] = useState<AmendmentDto | null>(null);
   const [rejectAmendmentModal, setRejectAmendmentModal] = useState<{ amendmentId: number } | null>(null);
@@ -360,7 +367,7 @@ export default function ContractDetailPage() {
         setDepositStatus(r.status);
       });
     void api.get<{ amendments: AmendmentDto[] }>(`/contracts/${id}/amendments`).then((r) => setAmendments(r.amendments));
-    void api.get<{ documents: DocumentDto[] }>(`/documents?ownerType=contract&ownerId=${id}`).then((r) => setDocuments(r.documents));
+    void api.get<{ documents: DocumentDto[] }>(`/documents?ownerType=contract&ownerId=${id}&includeVoided=true`).then((r) => setDocuments(r.documents));
     void api.get<{ parties: PartyDto[] }>("/parties").then((r) => setParties(r.parties));
     void api.get<{ properties: { id: number }[] }>("/properties").then(async (r) => {
       const allUnits = await Promise.all(
@@ -758,6 +765,7 @@ export default function ContractDetailPage() {
       formData.append("ownerType", "contract");
       formData.append("ownerId", id!);
       formData.append("docType", values.docType);
+      if (values.name?.trim()) formData.append("name", values.name.trim());
       formData.append("classification", values.classification);
       await api.post("/documents", formData);
       setDocModal(false);
@@ -908,6 +916,7 @@ export default function ContractDetailPage() {
           endUnits: units.filter((u) => !u.effectiveEnd || u.effectiveEnd > values.effectiveDate).map((u) => ({ contractUnitId: u.id, effectiveEnd: values.effectiveDate })),
         };
       }
+      if (amendmentKind === "void_document") changes = { voidDocuments: values.voidDocumentIds };
       await api.post(`/contracts/${id}/amendments`, {
         // An internal correction needs no signed supplement; otherwise the type is the kind of change.
         type: values.internalCorrection ? "internal_correction" : amendmentKind,
@@ -975,7 +984,7 @@ export default function ContractDetailPage() {
     }
   };
 
-  const supportingDocOptions = documents.map((d) => ({ value: d.id, label: `${docTypeLabel(t, d.docType)} (${d.uploadedAt.slice(0, 10)})` }));
+  const supportingDocOptions = documents.map((d) => ({ value: d.id, label: `${docDisplayName(t, d)}${d.name?.trim() ? ` · ${docTypeLabel(t, d.docType)}` : ""} (${d.uploadedAt.slice(0, 10)})` }));
   const needsDocument = (a: AmendmentDto) => a.type !== "internal_correction" && !a.supportingDocumentId;
 
   const onSaveAmendment = async () => {
@@ -1815,7 +1824,7 @@ export default function ContractDetailPage() {
                   renderItem={(a) => (
                     <List.Item
                       actions={[
-                        a.status === "draft" && (user?.role === "admin" || user?.role === "manager") && (
+                        a.status === "draft" && (user?.role === "admin" || (user?.role === "manager" && (a.createdBy === null || a.createdBy === user.id))) && (
                           <Button
                             key="edit"
                             size="small"
@@ -1847,7 +1856,7 @@ export default function ContractDetailPage() {
                             {t("contracts.reject")}
                           </Button>
                         ),
-                        (a.status === "draft" || a.status === "pending") && (user?.role === "admin" || a.submittedBy === user?.id) && (
+                        (a.status === "draft" || a.status === "pending") && (user?.role === "admin" || a.submittedBy === user?.id || a.createdBy === user?.id) && (
                           <Button key="withdraw" size="small" onClick={() => withdrawAmendment(a.id)}>
                             {t("contracts.withdraw")}
                           </Button>
@@ -1861,6 +1870,9 @@ export default function ContractDetailPage() {
                         </span>
                         <Typography.Text type="secondary">
                           {t("contracts.effectiveDate")}: {a.effectiveDate} · {t(`contracts.${a.status}`)}
+                          {a.supportingDocumentId && allDocuments.find((d) => d.id === a.supportingDocumentId)
+                            ? ` · ${t("contracts.supportingDocument")}: ${docDisplayName(t, allDocuments.find((d) => d.id === a.supportingDocumentId)!)}`
+                            : ""}
                         </Typography.Text>
                       </Space>
                     </List.Item>
@@ -1879,9 +1891,15 @@ export default function ContractDetailPage() {
                     {t("contracts.uploadDocument")}
                   </Button>
                 )}
+                {allDocuments.some((d) => d.voided) && (
+                  <Space size={4} style={{ marginBottom: 12, marginLeft: 12 }}>
+                    <Switch size="small" checked={showVoidedDocs} onChange={setShowVoidedDocs} />
+                    <Typography.Text type="secondary">{t("contracts.showVoidedDocuments")}</Typography.Text>
+                  </Space>
+                )}
                 <List
                   bordered
-                  dataSource={documents}
+                  dataSource={showVoidedDocs ? allDocuments : documents}
                   renderItem={(d) => (
                     <List.Item
                       actions={[
@@ -1895,31 +1913,48 @@ export default function ContractDetailPage() {
                                 type="link"
                                 icon={<EditOutlined />}
                                 onClick={() => {
-                                  editDocForm.setFieldsValue(d);
+                                  editDocForm.setFieldsValue({ name: d.name ?? undefined, docType: d.docType, classification: d.classification });
                                   setEditDocModal(d);
                                 }}
                               />,
                             ]
                           : []),
-                        ...(user?.role === "admin"
+                        // Deleting is for a draft only (Admin or Manager); afterwards a document is withdrawn by amendment.
+                        ...((user?.role === "admin" || user?.role === "manager") && !d.voided
                           ? [
-                              <Popconfirm
-                                key="del"
-                                title={t("properties.confirmDeleteDocument")}
-                                onConfirm={() => deleteDocument(d.id)}
-                                okText={t("common.delete")}
-                                cancelText={t("common.cancel")}
-                              >
-                                <Button type="link" danger icon={<DeleteOutlined />} />
-                              </Popconfirm>,
+                              isDraft ? (
+                                <Popconfirm
+                                  key="del"
+                                  title={t("properties.confirmDeleteDocument")}
+                                  onConfirm={() => deleteDocument(d.id)}
+                                  okText={t("common.delete")}
+                                  cancelText={t("common.cancel")}
+                                >
+                                  <Button type="link" danger icon={<DeleteOutlined />} />
+                                </Popconfirm>
+                              ) : (
+                                <Tooltip key="del" title={t("contracts.deleteByAmendment")}>
+                                  <span>
+                                    <Button type="link" danger disabled icon={<DeleteOutlined />} />
+                                  </span>
+                                </Tooltip>
+                              ),
                             ]
                           : []),
                       ]}
                     >
-                      <Space>
-                        {d.classification === "sensitive" && <LockOutlined />}
-                        <Typography.Text>{docTypeLabel(t, d.docType)}</Typography.Text>
-                        {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
+                      <Space direction="vertical" size={0}>
+                        <Space wrap>
+                          {d.classification === "sensitive" && <LockOutlined />}
+                          <Typography.Text delete={d.voided}>{docDisplayName(t, d)}</Typography.Text>
+                          {d.name?.trim() && <Tag>{docTypeLabel(t, d.docType)}</Tag>}
+                          {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
+                          {d.voided && <Tag color="red">{t("contracts.documentVoided")}</Tag>}
+                        </Space>
+                        <Typography.Text type="secondary">
+                          {d.uploadedAt.slice(0, 10)}
+                          {d.uploadedByName ? ` · ${d.uploadedByName}` : ""}
+                        </Typography.Text>
                       </Space>
                     </List.Item>
                   )}
@@ -1956,6 +1991,9 @@ export default function ContractDetailPage() {
             >
               <Button icon={<UploadOutlined />}>{t("contracts.selectFile")}</Button>
             </Upload>
+          </Form.Item>
+          <Form.Item name="name" label={t("contracts.documentName")} extra={t("contracts.documentNameHint")}>
+            <Input maxLength={100} />
           </Form.Item>
           <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]} initialValue="signed_lease">
             <Select
@@ -1996,8 +2034,17 @@ export default function ContractDetailPage() {
         destroyOnClose
       >
         <Form form={editDocForm} layout="vertical">
-          <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]}>
+          <Form.Item name="name" label={t("contracts.documentName")} extra={t("contracts.documentNameHint")}>
+            <Input maxLength={100} />
+          </Form.Item>
+          <Form.Item
+            name="docType"
+            label={t("properties.docType")}
+            rules={[{ required: true }]}
+            extra={editDocModal && !isDraft && editDocModal.docType === "signed_lease" ? t("contracts.documentTypeLocked") : undefined}
+          >
             <Select
+              disabled={!!editDocModal && (editDocModal.voided || (!isDraft && editDocModal.docType === "signed_lease"))}
               options={[
                 { value: "signed_lease", label: t("contracts.signedLease") },
                 { value: "signed_supplement", label: t("contracts.signedSupplement") },
@@ -2005,8 +2052,9 @@ export default function ContractDetailPage() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="classification" label={t("properties.classification")} rules={[{ required: true }]}>
+          <Form.Item name="classification" label={t("properties.classification")} rules={[{ required: true }]} extra={user?.role !== "admin" ? t("contracts.classificationAdminOnly") : undefined}>
             <Select
+              disabled={user?.role !== "admin"}
               options={[
                 { value: "ordinary", label: t("properties.ordinary") },
                 { value: "sensitive", label: t("properties.sensitive") },
@@ -2814,6 +2862,7 @@ export default function ContractDetailPage() {
                 { value: "add_unit", label: t("contracts.amendmentKindAddUnit") },
                 { value: "add_pricing_stream", label: t("contracts.amendmentKindAddPricingStream") },
                 { value: "terminate", label: t("contracts.amendmentKindTerminate") },
+                { value: "void_document", label: t("contracts.amendmentKindVoidDocument") },
               ]}
             />
           </Form.Item>
@@ -2919,6 +2968,19 @@ export default function ContractDetailPage() {
           )}
 
           {amendmentKind === "terminate" && <Typography.Text type="secondary">{t("contracts.amendTerminateHint")}</Typography.Text>}
+          {amendmentKind === "void_document" && (
+            <Form.Item name="voidDocumentIds" label={t("contracts.documentsToVoid")} extra={t("contracts.voidDocumentHint")} rules={[{ required: true }]}>
+              <Select
+                mode="multiple"
+                showSearch
+                optionFilterProp="label"
+                options={documents
+                  // Evidence for another amendment can't be withdrawn.
+                  .filter((d) => !amendments.some((a) => ["draft", "pending", "approved"].includes(a.status) && a.supportingDocumentId === d.id))
+                  .map((d) => ({ value: d.id, label: `${docDisplayName(t, d)}${d.name?.trim() ? ` · ${docTypeLabel(t, d.docType)}` : ""} (${d.uploadedAt.slice(0, 10)})` }))}
+              />
+            </Form.Item>
+          )}
         </Form>
       </Modal>
 

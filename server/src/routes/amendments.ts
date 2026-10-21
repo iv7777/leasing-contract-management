@@ -24,6 +24,7 @@ import {
   rateScheduleBelongsToStream,
 } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
+import { citedDocumentIds, liveSignedLeaseIds } from "../lib/documentRules.js";
 import { todayInChina } from "@lcm/shared";
 
 export const amendmentsRouter = Router();
@@ -117,6 +118,10 @@ const changesSchema = z.object({
   retroactiveAdjustments: z
     .array(z.object({ chargeId: z.number(), amountFen: z.number(), reason: z.string() }))
     .optional(),
+  // Withdraws documents from the contract's record: an approved amendment marks
+  // each one voided (the file is kept). The only way to remove a document once
+  // the contract has left draft.
+  voidDocuments: z.array(z.number()).optional(),
 });
 
 const createAmendmentSchema = z.object({
@@ -138,8 +143,32 @@ function supportingDocumentError(contractId: number, type: string, documentId: n
       : { code: "missing_document", message: "Pick the supporting document (a signed supplement, for example) — it is required unless this is an internal correction." };
   }
   const doc = db.select().from(documents).where(eq(documents.id, documentId)).get();
-  if (!doc || doc.ownerType !== "contract" || doc.ownerId !== contractId) {
+  if (!doc || doc.ownerType !== "contract" || doc.ownerId !== contractId || doc.voided) {
     return { code: "invalid_reference", message: "That document does not belong to this contract." };
+  }
+  return null;
+}
+
+/** A void-document amendment may only name this contract's own live documents,
+ * never evidence another amendment (or itself) relies on, and never the last
+ * signed lease. */
+function voidDocumentsError(contractId: number, ids: number[], ownSupportingDocumentId: number | null): { code: string; message: string } | null {
+  if (ids.length === 0) return null;
+  const cited = citedDocumentIds(contractId);
+  if (ownSupportingDocumentId !== null) cited.add(ownSupportingDocumentId);
+  for (const docId of ids) {
+    const doc = db.select().from(documents).where(eq(documents.id, docId)).get();
+    if (!doc || doc.ownerType !== "contract" || doc.ownerId !== contractId) {
+      return { code: "invalid_reference", message: `Document ${docId} does not belong to this contract.` };
+    }
+    if (doc.voided) return { code: "document_voided", message: "That document has already been voided." };
+    if (cited.has(docId)) {
+      return { code: "document_in_use_by_amendment", message: "An amendment relies on this document as its supporting document, so it can't be voided." };
+    }
+  }
+  const remaining = liveSignedLeaseIds(contractId).filter((id) => !ids.includes(id));
+  if (liveSignedLeaseIds(contractId).some((id) => ids.includes(id)) && remaining.length === 0) {
+    return { code: "last_signed_lease", message: "This would void the only signed lease on file. Upload the replacement signed lease first." };
   }
   return null;
 }
@@ -170,6 +199,8 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
 
   const docError = supportingDocumentError(contractId, parsed.data.type, parsed.data.supportingDocumentId ?? null);
   if (docError) return res.status(400).json({ error: docError });
+  const voidError = voidDocumentsError(contractId, parsed.data.changes.voidDocuments ?? [], parsed.data.supportingDocumentId ?? null);
+  if (voidError) return res.status(409).json({ error: voidError });
 
   const inserted = db
     .insert(amendments)
@@ -179,6 +210,7 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
       reason: parsed.data.reason,
       effectiveDate: parsed.data.effectiveDate,
       baseContractVersion: contract.versionNumber,
+      createdBy: req.user!.id,
       changesJson: JSON.stringify(parsed.data.changes),
       supportingDocumentId: parsed.data.supportingDocumentId ?? null,
       status: "draft",
@@ -210,6 +242,10 @@ amendmentsRouter.patch("/amendments/:id", requireRole("admin", "manager"), (req,
   if (amendment.status !== "draft") {
     return res.status(409).json({ error: { code: "invalid_state", message: "Only a draft amendment can be edited." } });
   }
+  // A draft belongs to whoever drafted it (drafts from before this was recorded stay open to any Manager).
+  if (req.user!.role !== "admin" && amendment.createdBy !== null && amendment.createdBy !== req.user!.id) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Only the person who drafted this amendment, or an Admin, can edit it." } });
+  }
   const parsed = updateAmendmentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid amendment payload." } });
 
@@ -238,6 +274,7 @@ function inferAmendmentType(changesJson: string): string {
   try {
     const c = JSON.parse(changesJson) as Record<string, { status?: string } | unknown[] | undefined>;
     if ((c.contract as { status?: string } | undefined)?.status === "terminated") return "terminate";
+    if (Array.isArray(c.voidDocuments) && c.voidDocuments.length) return "void_document";
     if (Array.isArray(c.addUnits) && c.addUnits.length) return "add_unit";
     if (Array.isArray(c.addPricingStreams) && c.addPricingStreams.length) return "add_pricing_stream";
   } catch {
@@ -306,6 +343,8 @@ function applyApproval(req: import("express").Request, res: import("express").Re
   if (referenceError) {
     return res.status(400).json({ error: { code: "invalid_reference", message: referenceError } });
   }
+  const voidError = voidDocumentsError(contract.id, changes.voidDocuments ?? [], amendment.supportingDocumentId);
+  if (voidError) return res.status(409).json({ error: voidError });
 
   db.transaction((tx) => {
     if (changes.contract) {
@@ -346,6 +385,10 @@ function applyApproval(req: import("express").Request, res: import("express").Re
     }
     for (const d of changes.addDepositTerms ?? []) {
       tx.insert(depositTerms).values({ contractId: contract.id, ...d }).run();
+    }
+    for (const docId of changes.voidDocuments ?? []) {
+      tx.update(documents).set({ voided: true, voidedAt: new Date().toISOString(), voidedByAmendmentId: amendment.id }).where(eq(documents.id, docId)).run();
+      recordAudit({ actorUserId: req.user!.id, action: "document_voided", entityType: "document", entityId: docId, reason: amendment.reason, details: { amendmentId: amendment.id } });
     }
     for (const adj of changes.retroactiveAdjustments ?? []) {
       tx.insert(chargeAdjustments).values({
@@ -446,8 +489,8 @@ amendmentsRouter.post("/amendments/:id/withdraw", requireRole("admin", "manager"
   if (amendment.status !== "draft" && amendment.status !== "pending") {
     return res.status(409).json({ error: { code: "invalid_state", message: "Only a draft or pending amendment can be withdrawn." } });
   }
-  if (req.user!.role !== "admin" && amendment.submittedBy !== req.user!.id) {
-    return res.status(403).json({ error: { code: "forbidden", message: "Only the submitter or an Admin can withdraw this amendment." } });
+  if (req.user!.role !== "admin" && amendment.submittedBy !== req.user!.id && amendment.createdBy !== req.user!.id) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Only the person who drafted or submitted this amendment, or an Admin, can withdraw it." } });
   }
 
   const updated = db.update(amendments).set({ status: "withdrawn" }).where(eq(amendments.id, id)).returning().get();

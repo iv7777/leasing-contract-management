@@ -21,13 +21,14 @@ import { useTranslation } from "react-i18next";
 import type { PropertyDto, UnitDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { apiErrorMessage } from "../api/errorMessage";
-import { docTypeLabel } from "../components/billing/format";
+import { docTypeLabel, docDisplayName } from "../components/billing/format";
 import { useAuth } from "../auth/AuthContext";
 import { useHelpTopic } from "../help/HelpContext";
 import { HelpIcon } from "../help/HelpIcon";
 
 interface DocumentDto {
   id: number;
+  name: string | null;
   docType: string;
   classification: "ordinary" | "sensitive";
   mimeType: string;
@@ -164,6 +165,7 @@ export default function PropertyDetailPage() {
       formData.append("ownerType", "property");
       formData.append("ownerId", id!);
       formData.append("docType", values.docType);
+      if (values.name?.trim()) formData.append("name", values.name.trim());
       formData.append("classification", values.classification);
       await api.post("/documents", formData);
       setDocModalOpen(false);
@@ -351,7 +353,7 @@ export default function PropertyDetailPage() {
                                 type="link"
                                 icon={<EditOutlined />}
                                 onClick={() => {
-                                  editDocForm.setFieldsValue(d);
+                                  editDocForm.setFieldsValue({ name: d.name ?? undefined, docType: d.docType, classification: d.classification });
                                   setEditDocModal(d);
                                 }}
                               />,
@@ -374,7 +376,8 @@ export default function PropertyDetailPage() {
                     >
                       <Space>
                         {d.classification === "sensitive" && <LockOutlined />}
-                        <Typography.Text>{docTypeLabel(t, d.docType)}</Typography.Text>
+                        <Typography.Text>{docDisplayName(t, d)}</Typography.Text>
+                        {d.name?.trim() && <Tag>{docTypeLabel(t, d.docType)}</Tag>}
                         {d.classification === "sensitive" && <Tag color="orange">{t("properties.sensitive")}</Tag>}
                       </Space>
                     </List.Item>
@@ -444,6 +447,9 @@ export default function PropertyDetailPage() {
               <Button icon={<UploadOutlined />}>{t("contracts.selectFile")}</Button>
             </Upload>
           </Form.Item>
+          <Form.Item name="name" label={t("contracts.documentName")} extra={t("contracts.documentNameHint")}>
+            <Input maxLength={100} />
+          </Form.Item>
           <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
@@ -477,11 +483,15 @@ export default function PropertyDetailPage() {
         destroyOnClose
       >
         <Form form={editDocForm} layout="vertical">
+          <Form.Item name="name" label={t("contracts.documentName")} extra={t("contracts.documentNameHint")}>
+            <Input maxLength={100} />
+          </Form.Item>
           <Form.Item name="docType" label={t("properties.docType")} rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="classification" label={t("properties.classification")} rules={[{ required: true }]}>
+          <Form.Item name="classification" label={t("properties.classification")} rules={[{ required: true }]} extra={!isAdmin ? t("contracts.classificationAdminOnly") : undefined}>
             <Select
+              disabled={!isAdmin}
               options={[
                 { value: "ordinary", label: t("properties.ordinary") },
                 { value: "sensitive", label: t("properties.sensitive") },

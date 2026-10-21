@@ -13,6 +13,11 @@ export function paymentMethodLabel(t: (key: string) => string, method: string): 
   return (PAYMENT_METHODS as readonly string[]).includes(method) ? t(`billing.methods.${camel(method.toLowerCase().replace(/ /g, "_"))}`) : method;
 }
 
+/** What a document is called in lists: the name its uploader gave it, or else its type. */
+export function docDisplayName(t: (key: string) => string, d: { name?: string | null; docType: string }): string {
+  return d.name?.trim() ? d.name.trim() : docTypeLabel(t, d.docType);
+}
+
 /** Document types the app itself offers; any other value is the user's own wording. */
 export function docTypeLabel(t: (key: string) => string, docType: string): string {
   if (docType === "signed_lease") return t("contracts.signedLease");

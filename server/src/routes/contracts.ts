@@ -791,7 +791,7 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
     .select()
     .from(documentsTable)
     .all()
-    .find((d) => d.ownerType === "contract" && d.ownerId === id && d.docType === "signed_lease");
+    .find((d) => d.ownerType === "contract" && d.ownerId === id && d.docType === "signed_lease" && !d.voided);
   if (!signedLease) {
     return res.status(409).json({ error: { code: "missing_signed_lease", message: "A signed main lease document is required before activation." } });
   }

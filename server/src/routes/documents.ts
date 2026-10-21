@@ -5,10 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { db } from "../db/client.js";
-import { documents, units, contracts } from "../db/schema.js";
+import { documents, units, users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole, canAccessProperty } from "../middleware/auth.js";
 import { recordAudit } from "../lib/audit.js";
+import { canAccessContract } from "../lib/contractScope.js";
+import { citedDocumentIds, contractStatusOf } from "../lib/documentRules.js";
 
 export const documentsRouter = Router();
 documentsRouter.use(requireAuth);
@@ -32,10 +34,27 @@ function ownerPropertyId(ownerType: string, ownerId: number): number | null {
   return null;
 }
 
+/** Sends the 403 and returns true when the caller may not touch documents of
+ * this owner: a property or unit needs assignment to that property, a contract
+ * needs assignment to every property it covers. */
+function ownerAccessDenied(req: import("express").Request, res: import("express").Response, ownerType: string, ownerId: number): boolean {
+  const propertyId = ownerPropertyId(ownerType, ownerId);
+  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
+    res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
+    return true;
+  }
+  if (ownerType === "contract" && !canAccessContract(req.user!, ownerId)) {
+    res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+    return true;
+  }
+  return false;
+}
+
 const uploadMetaSchema = z.object({
   ownerType: z.enum(["property", "unit", "party", "contract"]),
   ownerId: z.coerce.number(),
   docType: z.string().min(1),
+  name: z.string().trim().max(100).optional(),
   classification: z.enum(["ordinary", "sensitive"]),
 });
 
@@ -45,11 +64,10 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
     return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document upload payload." } });
   }
   const { ownerType, ownerId, docType, classification } = parsed.data;
+  const name = parsed.data.name || null;
 
+  if (ownerAccessDenied(req, res, ownerType, ownerId)) return;
   const propertyId = ownerPropertyId(ownerType, ownerId);
-  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
-    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
-  }
   if (propertyId === null && req.user!.role !== "admin" && req.user!.role !== "manager") {
     return res.status(403).json({ error: { code: "forbidden", message: "Insufficient role." } });
   }
@@ -67,6 +85,7 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
       ownerType,
       ownerId,
       docType,
+      name,
       classification,
       filePath,
       mimeType: req.file.mimetype,
@@ -82,7 +101,7 @@ documentsRouter.post("/", requireRole("admin", "manager"), upload.single("file")
     action: "document_uploaded",
     entityType: "document",
     entityId: inserted.id,
-    details: { ownerType, ownerId, docType, classification },
+    details: { ownerType, ownerId, docType, name, classification },
   });
 
   res.status(201).json({ document: { ...inserted, filePath: undefined } });
@@ -95,19 +114,20 @@ documentsRouter.get("/", (req, res) => {
     return res.status(400).json({ error: { code: "invalid_input", message: "ownerType and ownerId are required." } });
   }
 
-  const propertyId = ownerPropertyId(ownerType, ownerId);
-  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
-    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
-  }
+  if (ownerAccessDenied(req, res, ownerType, ownerId)) return;
 
+  const includeVoided = req.query.includeVoided === "true";
+  const names = new Map(db.select({ id: users.id, name: users.name }).from(users).all().map((u) => [u.id, u.name]));
   const rows = db
     .select()
     .from(documents)
     .all()
     .filter((d) => d.ownerType === ownerType && d.ownerId === ownerId)
+    // Voided documents (withdrawn by an approved amendment) stay on record but out of the way.
+    .filter((d) => includeVoided || !d.voided)
     // Sensitive originals never appear in a general listing for non-admins.
     .filter((d) => req.user!.role === "admin" || d.classification !== "sensitive")
-    .map((d) => ({ ...d, filePath: undefined }));
+    .map((d) => ({ ...d, filePath: undefined, uploadedByName: names.get(d.uploadedBy) ?? null }));
 
   res.json({ documents: rows });
 });
@@ -120,10 +140,7 @@ documentsRouter.get("/:id/download", (req, res) => {
   if (doc.classification === "sensitive" && req.user!.role !== "admin") {
     return res.status(403).json({ error: { code: "forbidden", message: "This document is restricted to Admin." } });
   }
-  const propertyId = ownerPropertyId(doc.ownerType, doc.ownerId);
-  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
-    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
-  }
+  if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
   if (!req.user!.canDownloadPdf && req.user!.role !== "admin" && req.user!.role !== "manager") {
     return res.status(403).json({ error: { code: "forbidden", message: "Download is disabled for this account." } });
   }
@@ -138,6 +155,7 @@ documentsRouter.get("/:id/download", (req, res) => {
 });
 
 const updateDocumentSchema = z.object({
+  name: z.string().trim().max(100).nullable().optional(),
   docType: z.string().min(1).optional(),
   classification: z.enum(["ordinary", "sensitive"]).optional(),
 });
@@ -146,59 +164,67 @@ documentsRouter.patch("/:id", requireRole("admin", "manager"), (req, res) => {
   const id = Number(req.params.id);
   const doc = db.select().from(documents).where(eq(documents.id, id)).get();
   if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
-
-  const propertyId = ownerPropertyId(doc.ownerType, doc.ownerId);
-  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
-    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
-  }
+  if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
 
   const parsed = updateDocumentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid document payload." } });
+  const changes = { ...parsed.data, ...(parsed.data.name !== undefined ? { name: parsed.data.name || null } : {}) };
 
-  const updated = db.update(documents).set(parsed.data).where(eq(documents.id, id)).returning().get();
+  // The name is a plain label: anyone allowed to edit documents may change it,
+  // whatever the contract's or the amendment's status.
+  const typeChanging = changes.docType !== undefined && changes.docType !== doc.docType;
+  const classChanging = changes.classification !== undefined && changes.classification !== doc.classification;
+
+  // Making a document ordinary or sensitive decides who can open it — Admin only.
+  if (classChanging && req.user!.role !== "admin") {
+    return res.status(403).json({ error: { code: "forbidden", message: "Only an Admin can change whether a document is sensitive." } });
+  }
+  if (typeChanging && doc.voided) {
+    return res.status(409).json({ error: { code: "document_voided", message: "A voided document can only be renamed." } });
+  }
+  if (typeChanging && doc.ownerType === "contract" && contractStatusOf(doc.ownerId) !== "draft") {
+    // Once the contract is in force the signed lease can't be re-labelled (or
+    // another file passed off as one), and evidence for an amendment stays as filed.
+    if (doc.docType === "signed_lease" || changes.docType === "signed_lease") {
+      return res.status(409).json({ error: { code: "document_type_locked", message: "On a contract that is no longer a draft, a document can't be changed to or from \"Signed lease\"." } });
+    }
+    if (citedDocumentIds(doc.ownerId).has(id)) {
+      return res.status(409).json({ error: { code: "document_in_use_by_amendment", message: "An amendment relies on this document, so its type can't be changed. You can still rename it." } });
+    }
+  }
+
+  const updated = db.update(documents).set(changes).where(eq(documents.id, id)).returning().get();
   recordAudit({
     actorUserId: req.user!.id,
     action: "document_updated",
     entityType: "document",
     entityId: id,
-    details: { before: { docType: doc.docType, classification: doc.classification }, after: parsed.data },
+    details: { before: { name: doc.name, docType: doc.docType, classification: doc.classification }, after: changes },
   });
   res.json({ document: { ...updated, filePath: undefined } });
 });
 
-documentsRouter.delete("/:id", requireRole("admin"), (req, res) => {
+documentsRouter.delete("/:id", requireRole("admin", "manager"), (req, res) => {
   const id = Number(req.params.id);
   const doc = db.select().from(documents).where(eq(documents.id, id)).get();
   if (!doc) return res.status(404).json({ error: { code: "not_found", message: "Document not found." } });
+  if (ownerAccessDenied(req, res, doc.ownerType, doc.ownerId)) return;
 
-  const propertyId = ownerPropertyId(doc.ownerType, doc.ownerId);
-  if (propertyId !== null && !canAccessProperty(req.user!, propertyId)) {
-    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to this property." } });
-  }
-
-  // The one invariant worth protecting: activation required a signed lease
-  // on file, so a contract that has left "draft" must never end up with
-  // zero. Everything else (duplicates, other doc types, drafts) is free to
-  // delete — there's no value in a blanket "keep at least one" rule that
-  // blocks cleaning up a mistaken upload just because it's currently the
-  // only file on record.
-  if (doc.ownerType === "contract" && doc.docType === "signed_lease") {
-    const contract = db.select().from(contracts).where(eq(contracts.id, doc.ownerId)).get();
-    if (contract && contract.status !== "draft") {
-      const remainingSignedLeases = db
-        .select()
-        .from(documents)
-        .all()
-        .filter((d) => d.ownerType === "contract" && d.ownerId === doc.ownerId && d.docType === "signed_lease" && d.id !== id);
-      if (remainingSignedLeases.length === 0) {
-        return res.status(409).json({
-          error: {
-            code: "last_signed_lease",
-            message: "This is the only signed lease on file for a contract that is no longer a draft — upload a replacement before deleting it.",
-          },
-        });
-      }
+  if (doc.ownerType === "contract") {
+    // The paperwork of a contract in force is a legal record: nobody deletes it
+    // directly. It is withdrawn through an approved amendment, which voids the
+    // document and keeps the file. A draft is still being assembled, so Admin
+    // and Manager may delete from it.
+    if (contractStatusOf(doc.ownerId) !== "draft") {
+      return res.status(409).json({
+        error: { code: "delete_by_amendment", message: "A contract that is no longer a draft keeps its documents. To withdraw one, propose an amendment that voids it." },
+      });
     }
+    if (citedDocumentIds(doc.ownerId).has(id)) {
+      return res.status(409).json({ error: { code: "document_in_use_by_amendment", message: "An amendment relies on this document, so it can't be deleted." } });
+    }
+  } else if (req.user!.role !== "admin") {
+    return res.status(403).json({ error: { code: "forbidden", message: "Only an Admin can delete this document." } });
   }
 
   try {
@@ -212,7 +238,7 @@ documentsRouter.delete("/:id", requireRole("admin"), (req, res) => {
     action: "document_deleted",
     entityType: "document",
     entityId: id,
-    details: { ownerType: doc.ownerType, ownerId: doc.ownerId, docType: doc.docType, checksumSha256: doc.checksumSha256 },
+    details: { ownerType: doc.ownerType, ownerId: doc.ownerId, docType: doc.docType, name: doc.name, checksumSha256: doc.checksumSha256 },
   });
   res.status(204).send();
 });
