@@ -2,14 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { and, eq, gt, ne } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { billingRules, charges, contracts, openingBalances, pricingStreams, rateSchedule, receipts, receiptAllocations } from "../db/schema.js";
+import { billingRules, charges, contracts, depositTransactions, openingBalances, pricingStreams, rateSchedule, receipts, receiptAllocations } from "../db/schema.js";
 import { fenAmount, isoDate } from "../lib/validate.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
 import { contractRef } from "../lib/auditDetail.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
-import { computeChargeBalance } from "../billing/ledger.js";
+import { computeChargeBalance, computeDepositBalance } from "../billing/ledger.js";
 import type { OpenCharge } from "../billing/allocation.js";
 import {
   EXTRA_FEE_TYPES,
@@ -97,6 +97,31 @@ export function billsInScope(contractId: number, asOf: string, ignoreReceiptId: 
   return { open, info };
 }
 
+/** The deposit the system holds, leaving out the deposit receipt an opening balance recorded (and its reversal). */
+export function depositHeldExcluding(contractId: number, ignoreTxnId: number | null): number {
+  const rows = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, contractId)).all();
+  const kept = ignoreTxnId === null ? rows : rows.filter((r) => r.id !== ignoreTxnId && r.reversalOfId !== ignoreTxnId);
+  return computeDepositBalance(kept.map((r) => ({ amountFen: r.amountFen, transactionDate: r.transactionDate })), "9999-12-31");
+}
+
+/** What the accountant's deposit figure means for the system: a receipt for the missing amount. A figure below
+ * what the system holds changes nothing (nothing is refunded on the strength of a spreadsheet); it is only flagged. */
+export function planDeposit(contractId: number, confirmedFen: number | null | undefined, ignoreTxnId: number | null) {
+  const systemFen = depositHeldExcluding(contractId, ignoreTxnId);
+  if (confirmedFen === null || confirmedFen === undefined) return { systemFen, confirmedFen: null, receiveFen: 0, lower: false };
+  return { systemFen, confirmedFen, receiveFen: Math.max(0, confirmedFen - systemFen), lower: confirmedFen < systemFen };
+}
+
+/** Takes back the deposit receipt an opening balance recorded. */
+function reverseOpeningDeposit(tx: Tx, row: typeof openingBalances.$inferSelect, userId: number, reason: string) {
+  if (!row.depositTxnId) return;
+  const original = tx.select().from(depositTransactions).where(eq(depositTransactions.id, row.depositTxnId)).get();
+  if (!original || tx.select().from(depositTransactions).all().some((t) => t.reversalOfId === original.id)) return;
+  tx.insert(depositTransactions)
+    .values({ contractId: original.contractId, transactionType: "reversal", amountFen: -original.amountFen, transactionDate: todayInChina(), reversalOfId: original.id, reason, actorUserId: userId, approvedBy: userId })
+    .run();
+}
+
 const extrasSchema = z.array(z.object({ feeType: z.enum(EXTRA_FEE_TYPES), amountFen: fenAmount })).max(EXTRA_FEE_TYPES.length);
 
 const inputSchema = z.object({
@@ -104,6 +129,7 @@ const inputSchema = z.object({
   balanceOwedFen: fenAmount,
   unpaid: z.array(z.object({ chargeId: z.number().int(), unpaidFen: z.number().int().min(0) })).optional(),
   extras: extrasSchema.optional(),
+  depositHeldFen: fenAmount.nullable().optional(),
 });
 
 /** The brought-forward utility bills an accountant's balances would create, with the item each lands on. */
@@ -152,8 +178,9 @@ function checkDate(contractId: number, asOfDate: string): string | null {
   return null;
 }
 
-function describePlan(plan: OpeningPlan, info: ReturnType<typeof billsInScope>["info"], extras: ReturnType<typeof planExtras>) {
+function describePlan(plan: OpeningPlan, info: ReturnType<typeof billsInScope>["info"], extras: ReturnType<typeof planExtras>, deposit: ReturnType<typeof planDeposit>) {
   return {
+    deposit,
     extras: extras.rows,
     extraProblems: extras.problems.map((p) => ({ ...p, message: PROBLEM_MESSAGES[p.code] })),
     billedFen: plan.billedFen,
@@ -176,7 +203,7 @@ openingBalanceRouter.get("/contracts/:id/opening-balance", (req, res) => {
   const standing = standingOf(row);
   const receipt = row.receiptId ? db.select().from(receipts).where(eq(receipts.id, row.receiptId)).get() : null;
   res.json({
-    record: { ...row, ...standing, paymentFen: receipt?.amountFen ?? 0, receiptId: row.receiptId, extras: row.extrasJson ? (JSON.parse(row.extrasJson) as OpeningExtra[]) : [] },
+    record: { ...row, ...standing, paymentFen: receipt?.amountFen ?? 0, receiptId: row.receiptId, extras: row.extrasJson ? (JSON.parse(row.extrasJson) as OpeningExtra[]) : [], depositFen: row.depositFen ?? 0, depositHeldFen: row.depositTxnId ? depositHeldExcluding(row.contractId, row.depositTxnId) + (row.depositFen ?? 0) : null },
     blocked: null,
   });
 });
@@ -200,10 +227,10 @@ openingBalanceRouter.post("/contracts/:id/opening-balance/preview", (req, res) =
   }
   const { open, info } = billsInScope(contractId, parsed.data.asOfDate, live?.receiptId ?? null);
   const plan = planOpening(open, parsed.data.balanceOwedFen, parsed.data.unpaid);
-  res.json({ adjusting: !!live, ...describePlan(plan, info, planExtras(contractId, parsed.data.extras)) });
+  res.json({ adjusting: !!live, ...describePlan(plan, info, planExtras(contractId, parsed.data.extras), planDeposit(contractId, parsed.data.depositHeldFen, live?.depositTxnId ?? null)) });
 });
 
-const applySchema = inputSchema.extend({ expectedBilledFen: z.number().int(), expectedBillCount: z.number().int() });
+const applySchema = inputSchema.extend({ expectedBilledFen: z.number().int(), expectedBillCount: z.number().int(), expectedDepositFen: z.number().int().min(0).optional() });
 
 function reverseReceipt(tx: Tx, receiptId: number, userId: number) {
   const net = new Map<number, number>();
@@ -249,6 +276,10 @@ export interface OpeningInput {
   balanceOwedFen: number;
   unpaid?: { chargeId: number; unpaidFen: number }[];
   extras?: OpeningExtra[];
+  /** The deposit the accountant says is held; any shortfall against the system is recorded as a deposit receipt. */
+  depositHeldFen?: number | null;
+  /** When given, the deposit receipt that was previewed (refuses if it has changed). */
+  expectedDepositFen?: number;
   expectedBilledFen: number;
   expectedBillCount: number;
 }
@@ -281,6 +312,10 @@ export function performOpening(userId: number, contractId: number, input: Openin
   const { open } = billsInScope(contractId, asOfDate, live?.receiptId ?? null);
   const plan = planOpening(open, balanceOwedFen, unpaid);
   if (plan.problems.length > 0) throw new OpeningError(400, plan.problems[0], PROBLEM_MESSAGES[plan.problems[0]]);
+  const depositPlan = planDeposit(contractId, input.depositHeldFen, live?.depositTxnId ?? null);
+  if (input.expectedDepositFen !== undefined && input.expectedDepositFen !== depositPlan.receiveFen) {
+    throw new OpeningError(409, "stale_preview", "The deposit held changed since you previewed this. Open the preview again to see the current figures.");
+  }
   if (plan.billedFen !== expectedBilledFen || plan.rows.length !== expectedBillCount) {
     throw new OpeningError(409, "stale_preview", "The bills changed since you previewed this. Open the preview again to see the current figures.");
   }
@@ -289,6 +324,15 @@ export function performOpening(userId: number, contractId: number, input: Openin
     const result = db.transaction((tx) => {
       if (live?.receiptId) reverseReceipt(tx, live.receiptId, userId);
       if (live) voidBroughtForward(tx, live.id, userId, "Opening balance adjusted");
+      if (live) reverseOpeningDeposit(tx, live, userId, "Opening balance adjusted");
+      const depositTxn =
+        depositPlan.receiveFen > 0
+          ? tx
+              .insert(depositTransactions)
+              .values({ contractId, transactionType: "receipt", amountFen: depositPlan.receiveFen, transactionDate: asOfDate, reason: "Opening balance: deposit held per accountant", actorUserId: userId, approvedBy: userId })
+              .returning()
+              .get()
+          : null;
       const receipt = postOpening(tx, contractId, userId, asOfDate, plan);
       const meteredFrom = meteredStartFor(asOfDate);
       const extrasJson = extraPlan.rows.length ? JSON.stringify(extraPlan.rows.map((r) => ({ feeType: r.feeType, amountFen: r.amountFen }))) : null;
@@ -296,14 +340,14 @@ export function performOpening(userId: number, contractId: number, input: Openin
       if (live) {
         record = tx
           .update(openingBalances)
-          .set({ asOfDate, balanceOwedFen, billedFen: plan.billedFen, receiptId: receipt?.id ?? null, extrasJson, meteredFromSet: meteredFrom })
+          .set({ asOfDate, balanceOwedFen, billedFen: plan.billedFen, receiptId: receipt?.id ?? null, extrasJson, meteredFromSet: meteredFrom, depositTxnId: depositTxn?.id ?? null, depositFen: depositTxn?.amountFen ?? null })
           .where(eq(openingBalances.id, live.id))
           .returning()
           .get();
       } else {
         record = tx
           .insert(openingBalances)
-          .values({ contractId, asOfDate, balanceOwedFen, billedFen: plan.billedFen, receiptId: receipt?.id ?? null, extrasJson, meteredFromSet: meteredFrom, provisionalUntil: provisionalUntil(), createdBy: userId })
+          .values({ contractId, asOfDate, balanceOwedFen, billedFen: plan.billedFen, receiptId: receipt?.id ?? null, extrasJson, meteredFromSet: meteredFrom, depositTxnId: depositTxn?.id ?? null, depositFen: depositTxn?.amountFen ?? null, provisionalUntil: provisionalUntil(), createdBy: userId })
           .returning()
           .get();
       }
@@ -330,6 +374,7 @@ export function performOpening(userId: number, contractId: number, input: Openin
         balanceOwedFen,
         paymentFen: plan.paymentFen,
         unpaidBills: plan.rows.filter((r) => r.unpaidFen > 0).length,
+        ...(depositPlan.receiveFen > 0 ? { depositFen: depositPlan.receiveFen } : {}),
         ...(extraPlan.rows.find((e) => e.feeType === "electricity_base") ? { electricityFen: extraPlan.rows.find((e) => e.feeType === "electricity_base")!.amountFen } : {}),
         ...(extraPlan.rows.find((e) => e.feeType === "water") ? { waterFen: extraPlan.rows.find((e) => e.feeType === "water")!.amountFen } : {}),
         ...(adjusting && live ? { previousAsOfDate: live.asOfDate, previousBalanceOwedFen: live.balanceOwedFen } : {}),
@@ -383,6 +428,7 @@ openingBalanceRouter.post("/contracts/:id/opening-balance/undo", (req, res) => {
   db.transaction((tx) => {
     if (live.receiptId) reverseReceipt(tx, live.receiptId, req.user!.id);
     voidBroughtForward(tx, live.id, req.user!.id, "Opening balance undone");
+    reverseOpeningDeposit(tx, live, req.user!.id, "Opening balance undone");
     restoreMeteredFrom(tx, live);
     tx.update(openingBalances).set({ status: "reversed" }).where(eq(openingBalances.id, live.id)).run();
   });
@@ -396,6 +442,7 @@ export function markOpeningReversedForReceipt(receiptId: number, userId: number)
   if (!row) return;
   db.transaction((tx) => {
     voidBroughtForward(tx, row.id, userId, "Opening balance reversed");
+    reverseOpeningDeposit(tx, row, userId, "Opening balance reversed");
     restoreMeteredFrom(tx, row);
     tx.update(openingBalances).set({ status: "reversed" }).where(eq(openingBalances.id, row.id)).run();
   });

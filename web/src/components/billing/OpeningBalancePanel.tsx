@@ -12,6 +12,8 @@ interface RecordDto {
   paymentFen: number;
   provisionalUntil: string;
   extras?: { feeType: string; amountFen: number }[];
+  depositFen?: number;
+  depositHeldFen?: number | null;
   status: "provisional" | "final";
   finalBecause?: "manual" | "payment" | "expired";
 }
@@ -63,7 +65,7 @@ export default function OpeningBalancePanel({ contractId, onChanged }: { contrac
             date: r.asOfDate,
             balance: yuan(r.balanceOwedFen),
             payment: yuan(r.paymentFen),
-          })}
+          }) + (r.depositFen ? " " + t("openingBalance.depositRecordedNote", { total: yuan(r.depositFen) }) : "")}
           description={
             r.status === "provisional"
               ? t("openingBalance.provisionalNote", { until: r.provisionalUntil.slice(0, 10) })
@@ -92,7 +94,7 @@ export default function OpeningBalancePanel({ contractId, onChanged }: { contrac
         open={modal !== null}
         contractId={contractId}
         adjusting={modal === "adjust"}
-        initial={modal === "adjust" && r ? { asOfDate: r.asOfDate, balanceOwedFen: r.balanceOwedFen, extras: r.extras } : undefined}
+        initial={modal === "adjust" && r ? { asOfDate: r.asOfDate, balanceOwedFen: r.balanceOwedFen, extras: r.extras, depositHeldFen: r.depositHeldFen ?? null } : undefined}
         onClose={() => setModal(null)}
         onDone={changed}
       />

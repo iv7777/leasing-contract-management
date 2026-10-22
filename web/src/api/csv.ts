@@ -62,31 +62,34 @@ export interface BalanceRow {
   balanceOwedFen: number | null;
   electricityFen: number | null;
   waterFen: number | null;
+  /** The deposit the accountant says is held (null when the column is absent or blank). */
+  depositHeldFen: number | null;
 }
 
 /** Reads the accountant's answers: a contract reference, the rent and fixed fees balance and, optionally,
- * the electricity and water balances. Works on the sheet we generate (columns found by their headings) or
- * on pasted columns in the order reference, rent and fixed fees, electricity, water. */
+ * the electricity and water balances and the deposit held. Works on the sheet we generate (columns found by
+ * their headings) or on pasted columns in the order reference, rent and fixed fees, electricity, water, deposit. */
 export function readBalances(rows: string[][]): BalanceRow[] {
   if (rows.length === 0) return [];
   const header = rows[0];
   const find = (re: RegExp) => header.findIndex((h, i) => i > 0 && re.test(h));
-  let rentCol = find(/rent|租金|fixed|固定/i);
+  let rentCol = find(/\brent\b|租金|fixed|固定/i);
   let elecCol = find(/electric|电/i);
   let waterCol = find(/water|水/i);
+  let depositCol = find(/deposit|押金/i);
   let body = rows;
-  if (rentCol >= 0 || elecCol >= 0 || waterCol >= 0) {
+  if (rentCol >= 0 || elecCol >= 0 || waterCol >= 0 || depositCol >= 0) {
     body = rows.slice(1);
-  } else if (rows.every((r) => r.length <= 4)) {
-    [rentCol, elecCol, waterCol] = [1, 2, 3];
+  } else if (rows.every((r) => r.length <= 5)) {
+    [rentCol, elecCol, waterCol, depositCol] = [1, 2, 3, 4];
     // A header row of a pasted block ("Contract no., Balance") has a non-numeric cell where the balance should be.
     if (parseYuanToFen(rows[0][1]) === null && rows[0][1]?.trim()) body = rows.slice(1);
   } else {
-    [rentCol, elecCol, waterCol] = [7, 8, 9];
+    [depositCol, rentCol, elecCol, waterCol] = [6, 7, 8, 9];
     if (parseYuanToFen(rows[0][7]) === null && rows[0][7]?.trim()) body = rows.slice(1);
   }
   const at = (r: string[], col: number) => (col >= 0 ? parseYuanToFen(r[col]) : null);
   return body
-    .map((r) => ({ reference: (r[0] ?? "").trim(), balanceOwedFen: at(r, rentCol), electricityFen: at(r, elecCol), waterFen: at(r, waterCol) }))
+    .map((r) => ({ reference: (r[0] ?? "").trim(), balanceOwedFen: at(r, rentCol), electricityFen: at(r, elecCol), waterFen: at(r, waterCol), depositHeldFen: at(r, depositCol) }))
     .filter((r) => r.reference !== "");
 }

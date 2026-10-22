@@ -24,6 +24,7 @@ interface ExtraRow {
   streamLabel: string;
 }
 interface Preview {
+  deposit: { systemFen: number; confirmedFen: number | null; receiveFen: number; lower: boolean };
   adjusting: boolean;
   extras: ExtraRow[];
   extraProblems: { code: string; feeType: string; message: string }[];
@@ -49,7 +50,7 @@ export default function OpeningBalanceModal({
   open: boolean;
   contractId: number;
   adjusting: boolean;
-  initial?: { asOfDate: string; balanceOwedFen: number; extras?: { feeType: string; amountFen: number }[] };
+  initial?: { asOfDate: string; balanceOwedFen: number; extras?: { feeType: string; amountFen: number }[]; depositHeldFen?: number | null };
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -58,6 +59,7 @@ export default function OpeningBalanceModal({
   const [balance, setBalance] = useState<number | null>(null);
   const [electricity, setElectricity] = useState<number | null>(null);
   const [water, setWater] = useState<number | null>(null);
+  const [deposit, setDeposit] = useState<number | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [unpaid, setUnpaid] = useState<Record<number, number>>({}); // chargeId -> unpaid fen
   const [error, setError] = useState<string | null>(null);
@@ -74,9 +76,11 @@ export default function OpeningBalanceModal({
     const amountOf = (type: string) => initial?.extras?.find((e) => e.feeType === type)?.amountFen;
     setElectricity(amountOf("electricity_base") !== undefined ? amountOf("electricity_base")! / 100 : null);
     setWater(amountOf("water") !== undefined ? amountOf("water")! / 100 : null);
+    setDeposit(initial?.depositHeldFen != null ? initial.depositHeldFen / 100 : null);
   }, [open, initial]);
 
   const balanceFen = balance === null ? null : Math.round(balance * 100);
+  const depositFen = deposit === null ? null : Math.round(deposit * 100);
   const extrasPayload = [
     { feeType: "electricity_base", amountFen: Math.round((electricity ?? 0) * 100) },
     { feeType: "water", amountFen: Math.round((water ?? 0) * 100) },
@@ -87,7 +91,7 @@ export default function OpeningBalanceModal({
     setLoading(true);
     setError(null);
     try {
-      const p = await api.post<Preview>(`/contracts/${contractId}/opening-balance/preview`, { asOfDate: asOf, balanceOwedFen: balanceFen, extras: extrasPayload });
+      const p = await api.post<Preview>(`/contracts/${contractId}/opening-balance/preview`, { asOfDate: asOf, balanceOwedFen: balanceFen, extras: extrasPayload, depositHeldFen: depositFen });
       setPreview(p);
       setUnpaid(Object.fromEntries(p.rows.map((r) => [r.chargeId, r.unpaidFen])));
       if (p.problems.length > 0) setError(p.problems[0].message);
@@ -104,7 +108,7 @@ export default function OpeningBalanceModal({
   useEffect(() => {
     setPreview(null);
     setError(null);
-  }, [asOf, balance, electricity, water]);
+  }, [asOf, balance, electricity, water, deposit]);
 
   const assignedFen = useMemo(() => Object.values(unpaid).reduce((s, v) => s + v, 0), [unpaid]);
   const remainingFen = balanceFen === null ? 0 : balanceFen - assignedFen;
@@ -120,6 +124,8 @@ export default function OpeningBalanceModal({
         balanceOwedFen: balanceFen,
         unpaid: preview.rows.map((r) => ({ chargeId: r.chargeId, unpaidFen: unpaid[r.chargeId] ?? 0 })),
         extras: extrasPayload,
+        depositHeldFen: depositFen,
+        expectedDepositFen: preview.deposit.receiveFen,
         expectedBilledFen: preview.billedFen,
         expectedBillCount: preview.billCount,
       });
@@ -166,6 +172,9 @@ export default function OpeningBalanceModal({
         </Form.Item>
         <Form.Item label={t("openingBalance.waterOwed")}>
           <InputNumber min={0} step={100} precision={2} prefix="¥" value={water} onChange={setWater} style={{ width: 140 }} />
+        </Form.Item>
+        <Form.Item label={t("openingBalance.depositHeld")}>
+          <InputNumber min={0} step={100} precision={2} prefix="¥" value={deposit} onChange={setDeposit} style={{ width: 140 }} />
         </Form.Item>
         <Form.Item>
           <Button type="primary" ghost loading={loading} disabled={!asOf || balance === null} onClick={() => void showBills()}>
@@ -222,6 +231,21 @@ export default function OpeningBalanceModal({
               showIcon
               message={t("openingBalance.broughtForwardBills")}
               description={preview.extras.map((e) => `${t(`contracts.${e.feeType === "water" ? "water" : "electricityBase"}`)}: ${yuan(e.amountFen)}`).join(" · ") + " — " + t("openingBalance.broughtForwardNote", { date: asOf })}
+            />
+          )}
+          {preview.deposit.confirmedFen !== null && (
+            <Alert
+              style={{ marginTop: 8 }}
+              type={preview.deposit.lower ? "warning" : "info"}
+              showIcon
+              message={t("openingBalance.depositLine", { held: yuan(preview.deposit.confirmedFen), system: yuan(preview.deposit.systemFen) })}
+              description={
+                preview.deposit.lower
+                  ? t("openingBalance.depositLower")
+                  : preview.deposit.receiveFen > 0
+                    ? t("openingBalance.depositRecord", { total: yuan(preview.deposit.receiveFen), date: asOf })
+                    : t("openingBalance.depositSame")
+              }
             />
           )}
           <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>

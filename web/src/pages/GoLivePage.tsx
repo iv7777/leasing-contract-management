@@ -42,6 +42,7 @@ interface PlanResult {
   catchUp?: { count: number; totalFen: number } | null;
   missingReadings?: number;
   extras?: { feeType: string; amountFen: number; streamLabel: string }[];
+  deposit?: { systemFen: number; confirmedFen: number | null; receiveFen: number; lower: boolean };
 }
 interface ApplyResult {
   contractId: number;
@@ -85,6 +86,7 @@ export default function GoLivePage() {
   const ready = (plan ?? []).filter((r) => r.state === "ready");
   const skipped = (plan ?? []).filter((r) => r.state === "skipped");
   const readyPaymentFen = ready.reduce((s, r) => s + (r.paymentFen ?? 0), 0);
+  const readyDepositFen = ready.reduce((s, r) => s + (r.deposit?.receiveFen ?? 0), 0);
   const readyExtrasFen = ready.reduce((s, r) => s + (r.extras ?? []).reduce((a, e) => a + e.amountFen, 0), 0);
 
   const checkText = async (text: string) => {
@@ -108,7 +110,7 @@ export default function GoLivePage() {
   const applyAll = () => {
     Modal.confirm({
       title: t("goLive.import.confirmTitle", { count: ready.length }),
-      content: t("goLive.import.confirmBody", { total: yuan(readyPaymentFen), skipped: skipped.length }) + (readyExtrasFen > 0 ? " " + t("goLive.import.confirmExtras", { total: yuan(readyExtrasFen) }) : ""),
+      content: t("goLive.import.confirmBody", { total: yuan(readyPaymentFen), skipped: skipped.length }) + (readyExtrasFen > 0 ? " " + t("goLive.import.confirmExtras", { total: yuan(readyExtrasFen) }) : "") + (readyDepositFen > 0 ? " " + t("goLive.import.confirmDeposit", { total: yuan(readyDepositFen) }) : ""),
       okText: t("goLive.import.apply", { count: ready.length }),
       cancelText: t("common.cancel"),
       onOk: async () => {
@@ -122,6 +124,8 @@ export default function GoLivePage() {
               expectedBilledFen: x.billedFen,
               expectedBillCount: x.billCount,
               extras: (x.extras ?? []).map((e) => ({ feeType: e.feeType, amountFen: e.amountFen })),
+              depositHeldFen: x.deposit?.confirmedFen ?? null,
+              expectedDepositFen: x.deposit?.receiveFen ?? 0,
               catchUp: x.catchUp ?? null,
             })),
           });
@@ -294,6 +298,19 @@ export default function GoLivePage() {
                             {t(`contracts.${e.feeType === "water" ? "water" : "electricityBase"}`)} {yuan(e.amountFen)}
                           </span>
                         ))}
+                      </Space>
+                    ),
+                },
+                {
+                  title: t("goLive.import.deposit"),
+                  render: (_: unknown, r: PlanResult) =>
+                    !r.deposit || r.deposit.confirmedFen === null ? (
+                      ""
+                    ) : (
+                      <Space direction="vertical" size={0}>
+                        <span>{t("goLive.import.depositLine", { held: yuan(r.deposit.confirmedFen), system: yuan(r.deposit.systemFen) })}</span>
+                        {r.deposit.receiveFen > 0 && <Tag color="green">{t("goLive.import.depositRecord", { total: yuan(r.deposit.receiveFen) })}</Tag>}
+                        {r.deposit.lower && <Tag color="orange">{t("goLive.import.depositLower")}</Tag>}
                       </Space>
                     ),
                 },

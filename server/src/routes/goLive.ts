@@ -12,7 +12,7 @@ import { isoDate } from "../lib/validate.js";
 import { loadChargeContext } from "../billing/generate.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling } from "../billing/autoBilling.js";
 import type { OpenCharge } from "../billing/allocation.js";
-import { OpeningError, billsInScope, hasOtherPayments, liveRecord, performOpening, planExtras } from "./openingBalance.js";
+import { OpeningError, billsInScope, hasOtherPayments, liveRecord, performOpening, planDeposit, planExtras } from "./openingBalance.js";
 import { EXTRA_FEE_TYPES, meteredStartFor, type OpeningExtra } from "../lib/openingBalance.js";
 import { todayInChina } from "@lcm/shared";
 
@@ -91,6 +91,7 @@ const planItems = z.object({
         balanceOwedFen: z.number().int().nullable(),
         electricityFen: z.number().int().min(0).nullable().optional(),
         waterFen: z.number().int().min(0).nullable().optional(),
+        depositHeldFen: z.number().int().min(0).nullable().optional(),
       }),
     )
     .min(1)
@@ -126,7 +127,7 @@ function predictOne(contractId: number, balanceOwedFen: number, asOfDate: string
 
 /** What would happen for one contract: bills still to be created (catch-up), then the opening payment with
  * the newest bills left unpaid. Read-only. */
-function planOne(reference: string, balanceOwedFen: number | null, asOfDate: string, extras: OpeningExtra[]) {
+function planOne(reference: string, balanceOwedFen: number | null, asOfDate: string, extras: OpeningExtra[], depositHeldFen: number | null | undefined) {
   const contract = db.select().from(contracts).where(eq(contracts.referenceNumber, reference)).get();
   const skip = (reason: SkipReason, extra: Record<string, unknown> = {}) => ({ reference, contractId: contract?.id ?? null, tenantName: null as string | null, state: "skipped" as const, reason, ...extra });
   if (!contract) return skip("unknown_contract");
@@ -163,6 +164,7 @@ function planOne(reference: string, balanceOwedFen: number | null, asOfDate: str
     catchUp,
     missingReadings,
     extras: extraPlan.rows,
+    deposit: planDeposit(contract.id, depositHeldFen, null),
   };
 }
 
@@ -173,7 +175,7 @@ goLiveRouter.post("/plan", (req, res) => {
   const results = parsed.data.items.map((it) => {
     if (seen.has(it.reference)) return { reference: it.reference, contractId: null, tenantName: null, state: "skipped" as const, reason: "duplicate_row" };
     seen.add(it.reference);
-    return planOne(it.reference, it.balanceOwedFen, parsed.data.asOfDate, extrasOf(it));
+    return planOne(it.reference, it.balanceOwedFen, parsed.data.asOfDate, extrasOf(it), it.depositHeldFen);
   });
   res.json({ results });
 });
@@ -188,6 +190,8 @@ const applyItems = z.object({
         expectedBilledFen: z.number().int(),
         expectedBillCount: z.number().int(),
         extras: z.array(z.object({ feeType: z.enum(EXTRA_FEE_TYPES), amountFen: z.number().int().min(0) })).optional(),
+        depositHeldFen: z.number().int().min(0).nullable().optional(),
+        expectedDepositFen: z.number().int().min(0).optional(),
         catchUp: z.object({ count: z.number().int(), totalFen: z.number().int() }).nullable(),
       }),
     )
@@ -222,7 +226,7 @@ goLiveRouter.post("/apply", (req, res) => {
         billsCreated = applyPlan(ctx, plan, true);
         recordAudit({ actorUserId: userId, action: "billing_catch_up", entityType: "contract", entityId: it.contractId, details: { contract: contractRef(it.contractId), created: billsCreated, totalFen: plan.totalFen, cutoff: plan.cutoff, missingReadings: plan.missingReadings.length } });
       }
-      const r = performOpening(userId, it.contractId, { asOfDate: parsed.data.asOfDate, balanceOwedFen: it.balanceOwedFen, extras: it.extras, expectedBilledFen: it.expectedBilledFen, expectedBillCount: it.expectedBillCount }, false);
+      const r = performOpening(userId, it.contractId, { asOfDate: parsed.data.asOfDate, balanceOwedFen: it.balanceOwedFen, extras: it.extras, depositHeldFen: it.depositHeldFen, expectedDepositFen: it.expectedDepositFen, expectedBilledFen: it.expectedBilledFen, expectedBillCount: it.expectedBillCount }, false);
       results.push({ contractId: it.contractId, ok: true, billsCreated, paymentFen: r.paymentFen });
     } catch (err) {
       if (err instanceof OpeningError) results.push({ contractId: it.contractId, ok: false, error: { code: err.code, message: err.message } });

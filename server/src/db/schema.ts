@@ -392,6 +392,9 @@ export const openingBalances = sqliteTable("opening_balances", {
   receiptId: integer("receipt_id").references(() => receipts.id),
   // Balances brought forward for metered items, as JSON [{feeType, amountFen}], and the metered start date this set.
   extrasJson: text("extras_json"),
+  // The deposit the accountant says is held beyond what the system had: one deposit receipt, reversed if this is undone.
+  depositTxnId: integer("deposit_txn_id"),
+  depositFen: integer("deposit_fen"),
   meteredFromSet: text("metered_from_set"),
   status: text("status", { enum: ["provisional", "final", "reversed"] }).notNull().default("provisional"),
   provisionalUntil: text("provisional_until").notNull(),
