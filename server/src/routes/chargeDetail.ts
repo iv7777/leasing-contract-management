@@ -17,6 +17,35 @@ import { todayInChina } from "@lcm/shared";
 export const chargeDetailRouter = Router();
 chargeDetailRouter.use(requireAuth);
 
+/** The reading behind a bill (or a bill still to come): this item's own, or the metered item whose usage a service fee follows. */
+export function readingBehind(pricingStreamId: number, serviceStart: string, serviceEnd: string) {
+  const followed = db
+    .select()
+    .from(rateSchedule)
+    .where(eq(rateSchedule.pricingStreamId, pricingStreamId))
+    .all()
+    .find((r) => r.linkedStreamId && r.effectiveStart <= serviceStart && (!r.effectiveEnd || r.effectiveEnd >= serviceStart));
+  const readingStreamId = followed?.linkedStreamId ?? pricingStreamId;
+  const entry = db
+    .select()
+    .from(usageEntries)
+    .where(eq(usageEntries.pricingStreamId, readingStreamId))
+    .all()
+    .find((u) => u.serviceStart === serviceStart && u.serviceEnd === serviceEnd);
+  if (!entry) return null;
+  const photo = db.select().from(documents).all().find((d) => d.ownerType === "usage_entry" && d.ownerId === entry.id);
+  const readingStream = readingStreamId !== pricingStreamId ? db.select().from(pricingStreams).where(eq(pricingStreams.id, readingStreamId)).get() : null;
+  return {
+    id: entry.id,
+    quantity: entry.quantity,
+    unit: entry.unit,
+    amountFen: entry.amountFen,
+    itemName: readingStream ? readingStream.label ?? readingStream.feeType : null,
+    photoDocumentId: photo?.id ?? null,
+    photoMissing: photo ? !fs.existsSync(photo.filePath) : false,
+  };
+}
+
 chargeDetailRouter.get("/charges/:id", (req, res) => {
   const id = Number(req.params.id);
   const charge = db.select().from(charges).where(eq(charges.id, id)).get();
@@ -69,22 +98,7 @@ chargeDetailRouter.get("/charges/:id", (req, res) => {
     .all()
     .map((a) => ({ id: a.id, amountFen: a.amountFen, reason: a.reason, createdAt: a.createdAt, by: names.get(a.actorUserId) ?? null }));
 
-  // The reading behind it: this item's own, or the metered item whose usage a service fee follows.
-  const followed = db
-    .select()
-    .from(rateSchedule)
-    .where(eq(rateSchedule.pricingStreamId, charge.pricingStreamId))
-    .all()
-    .find((r) => r.linkedStreamId && r.effectiveStart <= charge.serviceStart && (!r.effectiveEnd || r.effectiveEnd >= charge.serviceStart));
-  const readingStreamId = followed?.linkedStreamId ?? charge.pricingStreamId;
-  const reading = db
-    .select()
-    .from(usageEntries)
-    .where(eq(usageEntries.pricingStreamId, readingStreamId))
-    .all()
-    .find((u) => u.serviceStart === charge.serviceStart && u.serviceEnd === charge.serviceEnd);
-  const photo = reading ? db.select().from(documents).all().find((d) => d.ownerType === "usage_entry" && d.ownerId === reading.id) : null;
-  const readingStream = reading && readingStreamId !== charge.pricingStreamId ? db.select().from(pricingStreams).where(eq(pricingStreams.id, readingStreamId)).get() : null;
+  const reading = readingBehind(charge.pricingStreamId, charge.serviceStart, charge.serviceEnd);
 
   res.json({
     charge: {
@@ -109,17 +123,7 @@ chargeDetailRouter.get("/charges/:id", (req, res) => {
     balance: { balanceFen: balance.balanceFen, allocatedFen: balance.allocatedFen, adjustedFen: balance.adjustedFen, isOverdue: balance.isOverdue, daysOverdue: balance.daysOverdue, latePenaltyFen },
     payments,
     adjustments,
-    reading: reading
-      ? {
-          id: reading.id,
-          quantity: reading.quantity,
-          unit: reading.unit,
-          amountFen: reading.amountFen,
-          itemName: readingStream ? readingStream.label ?? readingStream.feeType : null,
-          photoDocumentId: photo?.id ?? null,
-          photoMissing: photo ? !fs.existsSync(photo.filePath) : false,
-        }
-      : null,
+    reading,
   });
 });
 

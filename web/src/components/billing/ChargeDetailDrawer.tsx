@@ -29,7 +29,7 @@ interface Subperiod {
 }
 interface Detail {
   charge: {
-    id: number;
+    id: number | null;
     contractId: number;
     contractRef: string | null;
     contractStatus: string | null;
@@ -39,15 +39,15 @@ interface Detail {
     serviceEnd: string;
     dueDate: string;
     amountFen: number;
-    status: "posted" | "voided";
-    createdAt: string;
+    status: "posted" | "voided" | "projected";
+    createdAt: string | null;
     voidedAt: string | null;
     voidedBy: string | null;
     voidReason: string | null;
     broughtForward: boolean;
   };
   snapshot: { subperiods?: Subperiod[]; totalBeforeRounding?: string } | null;
-  balance: { balanceFen: number; allocatedFen: number; adjustedFen: number; isOverdue: boolean; daysOverdue: number; latePenaltyFen: number };
+  balance: null | { balanceFen: number; allocatedFen: number; adjustedFen: number; isOverdue: boolean; daysOverdue: number; latePenaltyFen: number };
   payments: { id: number; receiptId: number; amountFen: number; reversal: boolean; receivedDate: string | null; paymentMethod: string | null }[];
   adjustments: { id: number; amountFen: number; reason: string; createdAt: string; by: string | null }[];
   reading: { id: number; quantity: string; unit: string; amountFen: number | null; itemName: string | null; photoDocumentId: number | null; photoMissing: boolean } | null;
@@ -96,10 +96,13 @@ const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 /** Side panel with everything about one bill: how it was worked out, what was paid on it, the reading behind it. */
 export default function ChargeDetailDrawer({
   chargeId,
+  projected = null,
   onClose,
   onVoid,
 }: {
   chargeId: number | null;
+  /** A bill not made yet: opens its preview instead of a real bill. */
+  projected?: { contractId: number; pricingStreamId: number; serviceStart: string; serviceEnd: string } | null;
   onClose: () => void;
   /** Offered to Admins on a bill that can still be voided. */
   onVoid?: (chargeId: number) => void;
@@ -111,21 +114,23 @@ export default function ChargeDetailDrawer({
   useEffect(() => {
     setData(null);
     setError(null);
-    if (chargeId === null) return;
+    const url = chargeId !== null ? `/charges/${chargeId}` : projected ? `/contracts/${projected.contractId}/billing/projected?${new URLSearchParams({ pricingStreamId: String(projected.pricingStreamId), serviceStart: projected.serviceStart, serviceEnd: projected.serviceEnd })}` : null;
+    if (!url) return;
     api
-      .get<Detail>(`/charges/${chargeId}`)
+      .get<Detail>(url)
       .then(setData)
       .catch((err) => setError(apiErrorMessage(err, t)));
-  }, [chargeId, t]);
+  }, [chargeId, projected?.contractId, projected?.pricingStreamId, projected?.serviceStart, projected?.serviceEnd, t]);
 
   const c = data?.charge;
   const item = c ? streamName(t, c.itemName, c.feeType) : "";
   const netPaid = data ? data.payments.reduce((s, p) => s + p.amountFen, 0) : 0;
-  const canVoid = !!(onVoid && c && c.status === "posted" && netPaid === 0 && (data?.adjustments.length ?? 0) === 0);
+  const canVoid = !!(onVoid && c && c.id !== null && c.status === "posted" && netPaid === 0 && (data?.adjustments.length ?? 0) === 0);
 
   const statusTag = () => {
     if (!data || !c) return null;
     if (c.status === "voided") return <Tag>{t("billing.void.voided")}</Tag>;
+    if (c.status === "projected" || !data.balance) return <Tag>{t("chargeDetail.notBilledTitle")}</Tag>;
     if (data.balance.balanceFen === 0) return <Tag color="green">{t("chargeDetail.paid")}</Tag>;
     if (data.balance.isOverdue) return <Tag color="red">{t("contracts.overdueDays", { days: data.balance.daysOverdue })}</Tag>;
     return <Tag color="orange">{data.balance.allocatedFen > 0 ? t("chargeDetail.partPaid") : t("chargeDetail.unpaid")}</Tag>;
@@ -139,7 +144,7 @@ export default function ChargeDetailDrawer({
       `${c.contractRef ?? ""} ${item}`,
       `<h1>${esc(`${c.contractRef ?? ""} · ${item} · ${periodLabel(c.serviceStart, c.serviceEnd)}`)}</h1>
 <table><tr><th>${esc(t("contracts.dueDate"))}</th><td>${esc(c.dueDate)}</td><th>${esc(t("contracts.amount"))}</th><td class="r">${esc(yuan(c.amountFen))}</td></tr>
-<tr><th>${esc(t("chargeDetail.paidSoFar"))}</th><td class="r">${esc(yuan(netPaid))}</td><th>${esc(t("contracts.balance"))}</th><td class="r">${esc(yuan(data.balance.balanceFen))}</td></tr></table>
+${data.balance ? `<tr><th>${esc(t("chargeDetail.paidSoFar"))}</th><td class="r">${esc(yuan(netPaid))}</td><th>${esc(t("contracts.balance"))}</th><td class="r">${esc(yuan(data.balance.balanceFen))}</td></tr>` : ""}</table>
 ${rows ? `<h2>${esc(t("chargeDetail.how"))}</h2><table>${rows}</table>` : ""}
 ${data.reading ? `<p>${esc(t("chargeDetail.reading"))}: ${esc(`${data.reading.quantity} ${data.reading.unit}${data.reading.amountFen != null ? ` · ${yuan(data.reading.amountFen)}` : ""}`)}</p>` : ""}
 ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : ""}`,
@@ -158,6 +163,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
         {c.status === "voided" && (
           <Alert type="warning" showIcon message={t("chargeDetail.voidedBy", { who: c.voidedBy ?? "—", when: (c.voidedAt ?? "").slice(0, 10) })} description={c.voidReason ?? undefined} />
         )}
+        {c.status === "projected" && <Alert type="info" showIcon message={t("chargeDetail.notBilledTitle")} description={t("chargeDetail.notBilledNote")} />}
         {c.broughtForward && <Alert type="info" showIcon message={t("chargeDetail.broughtForwardNote", { date: c.serviceStart })} />}
         <Descriptions bordered size="small" column={1}>
           <Descriptions.Item label={t("audit.fields.contract")}>
@@ -170,7 +176,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
           <Descriptions.Item label={t("contracts.amount")}>
             <Typography.Text strong>{yuan(c.amountFen)}</Typography.Text>
           </Descriptions.Item>
-          {c.status === "posted" && (
+          {c.status === "posted" && data.balance && (
             <>
               <Descriptions.Item label={t("chargeDetail.paidSoFar")}>{yuan(netPaid)}</Descriptions.Item>
               {data.balance.adjustedFen !== 0 && <Descriptions.Item label={t("contracts.adjustments")}>{yuan(data.balance.adjustedFen)}</Descriptions.Item>}
@@ -182,7 +188,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
               {data.balance.latePenaltyFen > 0 && <Descriptions.Item label={t("chargeDetail.lateFee")}>{yuan(data.balance.latePenaltyFen)}</Descriptions.Item>}
             </>
           )}
-          <Descriptions.Item label={t("chargeDetail.created")}>{c.createdAt.slice(0, 10)}</Descriptions.Item>
+          {c.createdAt && <Descriptions.Item label={t("chargeDetail.created")}>{c.createdAt.slice(0, 10)}</Descriptions.Item>}
         </Descriptions>
 
         {!c.broughtForward && data.snapshot?.subperiods && data.snapshot.subperiods.length > 0 && (
@@ -228,7 +234,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
 
         {data.reading && (
           <Descriptions bordered size="small" column={1} title={t("chargeDetail.reading")}>
-            <Descriptions.Item label={data.reading.itemName ?? c.itemName}>
+            <Descriptions.Item label={data.reading.itemName ? streamName(t, data.reading.itemName, data.reading.itemName) : item}>
               {data.reading.quantity} {data.reading.unit}
               {data.reading.amountFen != null ? ` · ${yuan(data.reading.amountFen)}` : ""}
             </Descriptions.Item>
@@ -284,7 +290,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
 
   return (
     <Drawer
-      open={chargeId !== null}
+      open={chargeId !== null || projected !== null}
       onClose={onClose}
       width={Math.min(580, typeof window === "undefined" ? 580 : window.innerWidth)}
       title={c ? `${item} · ${periodLabel(c.serviceStart, c.serviceEnd)}` : t("chargeDetail.title")}
@@ -294,7 +300,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
             {t("chargeDetail.print")}
           </Button>
           {canVoid && (
-            <Button danger onClick={() => onVoid!(c!.id)}>
+            <Button danger onClick={() => onVoid!(c!.id!)}>
               {t("billing.void.button")}
             </Button>
           )}

@@ -93,13 +93,13 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "**Record payment**: date, amount and method — it is applied to the oldest unpaid bills.",
         "**Bulk payments** enters many past payments at once, in date order.",
         "**Allocate** puts leftover credit onto a bill later.",
-        "The **pencil** corrects a payment for 24 hours after you saved it (you, or an Admin).",
+        "The **pencil** corrects a payment for 24 hours after you saved it (you, or an Admin); the **bin** removes it (no reason needed — the record stays, marked Removed). The time left shows beside the pencil.",
         "Admin: **Reverse** a wrong receipt (a reason is required).",
         "A bank reference can only be used once per contract, and the received date can't be in the future.",
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A billed reading can still be corrected for 24 hours (if no payment is on its bill) — saving remakes the bill.", "A reading covers one whole calendar month — the grid does this for you.", "For electricity billed from the tariff bill (peak / off-peak bands worked out outside), set the item's rate to **Amount entered with the reading**: type the **kWh** and the **Amount (¥)** each month. The kWh drives the per-kWh service fee; a price that is far from last month's is flagged.", "Optionally add a **photo of the meter** to a reading (camera or photo library on a phone). Use **Replace** or open it with **View**; it is kept with the reading and in backups."],
+      steps: ["**Meter readings grid**: type each month's quantity for every metered fee, then save.", "**Record usage** adds a single reading — **Last month** / **This month** fill the service dates, and the unit is prefilled (kWh for electricity, m³ for water).", "A billed reading can still be corrected or removed for 24 hours (if no payment is on its bill) — saving remakes the bill; removing voids it and waits for the reading again.", "A reading covers one whole calendar month — the grid does this for you.", "For electricity billed from the tariff bill (peak / off-peak bands worked out outside), set the item's rate to **Amount entered with the reading**: type the **kWh** and the **Amount (¥)** each month. The kWh drives the per-kWh service fee; a price that is far from last month's is flagged.", "Optionally add a **photo of the meter** to a reading (camera or photo library on a phone). Use **Replace** or open it with **View**; it is kept with the reading and in backups."],
     },
     "contracts.detail.charges": {
       steps: [
@@ -233,13 +233,13 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
         "**录入收款**：日期、金额和方式——自动核销到最早的未付账单。",
         "**批量录入收款**一次录入多笔历史收款，按日期顺序处理。",
         "**核销**可以之后把剩余余额用到某笔账单上。",
-        "保存后的 24 小时内，录入者本人（或管理员）可用**铅笔**按钮更正这笔收款。",
+        "保存后的 24 小时内，录入者本人（或管理员）可用**铅笔**按钮更正这笔收款，或用**垃圾桶**删除（无需填写原因，记录会保留并标记为已删除）。铅笔旁边会显示剩余时间。",
         "管理员：**冲销**录错的收款（需填写原因）。",
         "同一份合同上，一个银行流水号只能使用一次；收款日期不能晚于今天。",
       ],
     },
     "contracts.detail.usage": {
-      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数出账后，24 小时内（且其账单还没有收款）仍可更正——保存会重新出账。", "一条读数对应一个完整的自然月——抄表网格会自动帮你按整月填写。", "电费若按电价账单结算（尖峰平谷在系统外算好），可把该项费率设为**随读数录入金额**：每月录入**用量（度）**和**金额（¥）**。用量用于按度计算的服务费；若折算单价与上月相差很大会有提示。", "可为读数添加**电表/水表照片**（手机上可直接拍照或从相册选择）。用**替换**更换，用**查看**打开；照片随读数保存并包含在备份中。"],
+      steps: ["**读数表格录入**：为每项计量费用逐月填写用量，然后保存。", "**录入用量**可单独添加一条读数——**上个月**/**本月**按钮可快速填入服务起止日期，计量单位会自动预填（电费 kWh，水费 m³）。", "读数出账后，24 小时内（且其账单还没有收款）仍可更正或删除——保存会重新出账，删除会作废账单并重新等待该读数。", "一条读数对应一个完整的自然月——抄表网格会自动帮你按整月填写。", "电费若按电价账单结算（尖峰平谷在系统外算好），可把该项费率设为**随读数录入金额**：每月录入**用量（度）**和**金额（¥）**。用量用于按度计算的服务费；若折算单价与上月相差很大会有提示。", "可为读数添加**电表/水表照片**（手机上可直接拍照或从相册选择）。用**替换**更换，用**查看**打开；照片随读数保存并包含在备份中。"],
     },
     "contracts.detail.charges": {
       steps: [

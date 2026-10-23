@@ -263,13 +263,29 @@ usageEntriesRouter.delete("/usage-entries/:id", requireRole("admin", "manager"),
   if (!ensureContractAccess(req, res, existing.contractId)) return;
   if (rejectIfDraft(res, existing.contractId)) return;
 
-  if (chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd)) {
-    return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
+  // A reading that has already been billed can still be removed during the 24-hour correction window, by whoever
+  // entered it (or an Admin), as long as no payment is on the bill: the bill is voided and the reading is
+  // waited for again.
+  const billed = chargeAlreadyPosted(existing.contractId, existing.pricingStreamId, existing.serviceStart, existing.serviceEnd);
+  const billedCharges = billed ? billedChargesFor(existing) : [];
+  if (billed) {
+    if (!canEditEntry(req.user!, existing.enteredBy, existing.createdAt)) {
+      return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
+    }
+    if (billedCharges.some((c) => hasMoneyOn(c.id))) {
+      return res.status(409).json({ error: { code: "charge_has_payments", message: "A payment is already applied to the bill made from this reading, so it can't be removed. An Admin can reverse the payment first." } });
+    }
   }
 
-  removePhoto(id);
-  db.delete(usageEntries).where(eq(usageEntries.id, id)).run();
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_removed", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, quantity: existing.quantity, unit: existing.unit } });
+  db.transaction(() => {
+    for (const c of billedCharges) {
+      db.update(charges).set({ status: "voided", voidedAt: new Date().toISOString(), voidedBy: req.user!.id, voidReason: "Meter reading removed" }).where(eq(charges.id, c.id)).run();
+      recordAudit({ actorUserId: req.user!.id, action: "charge_voided", entityType: "charge", entityId: c.id, reason: "Meter reading removed", details: { ...chargeFacts(c.id), chargeAmountFen: c.amountFen } });
+    }
+    removePhoto(id);
+    db.delete(usageEntries).where(eq(usageEntries.id, id)).run();
+  });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_removed", entityType: "contract", entityId: existing.contractId, details: { contract: contractRef(existing.contractId), item: streamName(existing.pricingStreamId), servicePeriod: `${existing.serviceStart} → ${existing.serviceEnd}`, quantity: existing.quantity, unit: existing.unit, ...(billed ? { billsVoided: billedCharges.length } : {}) } });
   res.status(204).send();
 });
 

@@ -247,6 +247,53 @@ depositTransactionsRouter.patch("/deposit-transactions/:id", requireRole("admin"
   res.json({ transaction: updated });
 });
 
+/** Removes a deposit entry made by mistake: the person who recorded it (or an Admin) can do this, without a reason,
+ * during the first 24 hours. It adds a reversal dated the same day as the entry (so nothing in between changes)
+ * and keeps both rows, marked Removed. */
+depositTransactionsRouter.post("/deposit-transactions/:id/remove", requireRole("admin", "manager", "collector"), (req, res) => {
+  const id = Number(req.params.id);
+  const original = db.select().from(depositTransactions).where(eq(depositTransactions.id, id)).get();
+  if (!original) return res.status(404).json({ error: { code: "not_found", message: "Deposit transaction not found." } });
+  if (!ensureContractAccess(req, res, original.contractId)) return;
+  if (rejectIfDraft(res, original.contractId)) return;
+
+  const all = db.select().from(depositTransactions).where(eq(depositTransactions.contractId, original.contractId)).all();
+  if (!["receipt", "refund", "deduction"].includes(original.transactionType) || original.reversalOfId !== null || all.some((t) => t.reversalOfId === id)) {
+    return res.status(409).json({ error: { code: "not_editable", message: "This entry can't be removed." } });
+  }
+  if (req.user!.role !== "admin" && req.user!.id !== original.actorUserId) {
+    return res.status(403).json({ error: { code: "forbidden", message: EDIT_NOT_YOURS } });
+  }
+  if (!withinEditWindow(original.createdAt)) {
+    return res.status(409).json({ error: { code: "edit_window_closed", message: EDIT_WINDOW_CLOSED } });
+  }
+
+  // Taking a deposit receipt back must not leave the deposit held below zero, now or at any later time.
+  const others = all.filter((t) => t.id !== id).map((t) => ({ amountFen: t.amountFen, transactionDate: t.transactionDate }));
+  const checkDates = [...all.map((t) => t.transactionDate), "9999-12-31"].filter((d) => d >= original.transactionDate);
+  if (Math.min(...checkDates.map((d) => computeDepositBalance(others, d))) < 0) {
+    return res.status(409).json({ error: { code: "insufficient_deposit", message: "Removing this entry would take the deposit held below zero." } });
+  }
+
+  const reversal = db
+    .insert(depositTransactions)
+    .values({
+      contractId: original.contractId,
+      transactionType: "reversal",
+      amountFen: -original.amountFen,
+      transactionDate: original.transactionDate,
+      reversalOfId: id,
+      reason: "Removed",
+      actorUserId: req.user!.id,
+      approvedBy: req.user!.id,
+      removedAt: new Date().toISOString(),
+    })
+    .returning()
+    .get();
+  recordAudit({ actorUserId: req.user!.id, action: "deposit_transaction_removed", entityType: "deposit_transaction", entityId: id, details: { contract: contractRef(original.contractId), originalType: original.transactionType, amountFen: original.amountFen, transactionDate: original.transactionDate } });
+  res.status(201).json({ reversal });
+});
+
 depositTransactionsRouter.post("/deposit-transactions/:id/reverse", requireRole("admin"), (req, res) => {
   const id = Number(req.params.id);
   const original = db.select().from(depositTransactions).where(eq(depositTransactions.id, id)).get();

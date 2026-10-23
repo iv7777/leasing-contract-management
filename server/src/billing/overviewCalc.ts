@@ -15,6 +15,9 @@ export interface OverviewCharge {
 export interface OverviewProjected {
   feeType: string;
   itemName?: string | null;
+  /** Which item and period it is, so its preview can be opened. */
+  pricingStreamId?: number;
+  serviceEnd?: string;
   serviceStart: string;
   dueDate: string;
   amountFen: number;
@@ -32,6 +35,9 @@ export type ItemStatus = "overdue" | "due" | "upcoming" | "projected";
 
 export interface OverviewItem {
   chargeId: number | null;
+  /** Only on a bill not made yet: what its preview needs. */
+  pricingStreamId?: number;
+  serviceEnd?: string;
   feeType: string;
   itemName: string | null;
   serviceStart: string;
@@ -83,7 +89,17 @@ export function buildOverview(inputs: OverviewContractInput[], today: string): {
       items.push({ chargeId: ch.chargeId, feeType: ch.feeType, itemName: ch.itemName ?? null, serviceStart: ch.serviceStart, dueDate: ch.dueDate, amountFen: ch.balanceFen, status, daysOverdue: ch.daysOverdue });
     }
     for (const p of c.projected) {
-      items.push({ chargeId: null, feeType: p.feeType, itemName: p.itemName ?? null, serviceStart: p.serviceStart, dueDate: p.dueDate, amountFen: p.amountFen, status: "projected", daysOverdue: 0 });
+      items.push({
+        chargeId: null,
+        ...(p.pricingStreamId !== undefined && p.serviceEnd !== undefined ? { pricingStreamId: p.pricingStreamId, serviceEnd: p.serviceEnd } : {}),
+        feeType: p.feeType,
+        itemName: p.itemName ?? null,
+        serviceStart: p.serviceStart,
+        dueDate: p.dueDate,
+        amountFen: p.amountFen,
+        status: "projected",
+        daysOverdue: 0,
+      });
     }
     if (items.length === 0) continue;
 

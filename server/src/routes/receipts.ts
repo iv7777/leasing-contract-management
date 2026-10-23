@@ -253,6 +253,23 @@ receiptsRouter.post("/receipt-allocations/:id/reverse", requireRole("admin"), (r
  * call regardless of allocation history) before marking the receipt itself
  * reversed. Everything is additive rows, never an edit — matching the
  * brief's "linked history retained, balances correct" requirement. */
+/** Takes back what a receipt had paid off and marks it reversed. Returns the allocation reversals made. */
+function reverseReceiptCore(receiptId: number, userId: number, removedAt: string | null) {
+  const allocations = db.select().from(receiptAllocations).where(eq(receiptAllocations.receiptId, receiptId)).all();
+  const netByCharge = new Map<number, number>();
+  for (const a of allocations) netByCharge.set(a.chargeId, (netByCharge.get(a.chargeId) ?? 0) + a.amountFen);
+
+  return db.transaction((tx) => {
+    const created: (typeof receiptAllocations.$inferSelect)[] = [];
+    for (const [chargeId, net] of netByCharge) {
+      if (net === 0) continue;
+      created.push(tx.insert(receiptAllocations).values({ receiptId, chargeId, amountFen: -net, createdBy: userId }).returning().get());
+    }
+    tx.update(receipts).set({ status: "reversed", ...(removedAt ? { removedAt } : {}) }).where(eq(receipts.id, receiptId)).run();
+    return created;
+  });
+}
+
 receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) => {
   const id = Number(req.params.id);
   const receipt = db.select().from(receipts).where(eq(receipts.id, id)).get();
@@ -266,25 +283,7 @@ receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) =>
   const reason = req.body?.reason as string | undefined;
   if (!reason) return res.status(400).json({ error: { code: "invalid_input", message: "A reason is required to reverse a receipt." } });
 
-  const allocations = db.select().from(receiptAllocations).where(eq(receiptAllocations.receiptId, id)).all();
-  const netByCharge = new Map<number, number>();
-  for (const a of allocations) netByCharge.set(a.chargeId, (netByCharge.get(a.chargeId) ?? 0) + a.amountFen);
-
-  const reversals = db.transaction((tx) => {
-    const created: (typeof receiptAllocations.$inferSelect)[] = [];
-    for (const [chargeId, net] of netByCharge) {
-      if (net === 0) continue;
-      created.push(
-        tx
-          .insert(receiptAllocations)
-          .values({ receiptId: id, chargeId, amountFen: -net, createdBy: req.user!.id })
-          .returning()
-          .get(),
-      );
-    }
-    tx.update(receipts).set({ status: "reversed" }).where(eq(receipts.id, id)).run();
-    return created;
-  });
+  const reversals = reverseReceiptCore(id, req.user!.id, null);
   if (receipt.paymentMethod === OPENING_METHOD) markOpeningReversedForReceipt(id, req.user!.id);
 
   recordAudit({
@@ -293,6 +292,35 @@ receiptsRouter.post("/receipts/:id/reverse", requireRole("admin"), (req, res) =>
     entityType: "receipt",
     entityId: id,
     reason,
+    details: { ...receiptFacts(id), reversedAllocationCount: reversals.length },
+  });
+  res.status(200).json({ reversals });
+});
+
+/** Removes a receipt entered by mistake: the person who recorded it (or an Admin) can do this, without a reason,
+ * during the first 24 hours. It takes back what the receipt had paid off and keeps the record, marked Removed. */
+receiptsRouter.post("/receipts/:id/remove", requireRole("admin", "manager", "collector"), (req, res) => {
+  const id = Number(req.params.id);
+  const receipt = db.select().from(receipts).where(eq(receipts.id, id)).get();
+  if (!receipt) return res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
+  if (!ensureContractAccess(req, res, receipt.contractId)) return;
+  if (rejectIfDraft(res, receipt.contractId)) return;
+  if (receipt.status !== "posted" || receipt.paymentMethod === "deposit_transfer" || receipt.paymentMethod === OPENING_METHOD) {
+    return res.status(409).json({ error: { code: "not_editable", message: "This entry can't be removed." } });
+  }
+  if (req.user!.role !== "admin" && req.user!.id !== receipt.recordedBy) {
+    return res.status(403).json({ error: { code: "forbidden", message: EDIT_NOT_YOURS } });
+  }
+  if (!withinEditWindow(receipt.createdAt)) {
+    return res.status(409).json({ error: { code: "edit_window_closed", message: EDIT_WINDOW_CLOSED } });
+  }
+
+  const reversals = reverseReceiptCore(id, req.user!.id, new Date().toISOString());
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "receipt_removed",
+    entityType: "receipt",
+    entityId: id,
     details: { ...receiptFacts(id), reversedAllocationCount: reversals.length },
   });
   res.status(200).json({ reversals });

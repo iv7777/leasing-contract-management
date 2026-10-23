@@ -24,6 +24,9 @@ type ItemStatus = "overdue" | "due" | "upcoming" | "projected";
 
 interface Item {
   chargeId: number | null;
+  /** Only on a bill not made yet: which item and period it is. */
+  pricingStreamId?: number;
+  serviceEnd?: string;
   feeType: string;
   itemName: string | null;
   serviceStart: string;
@@ -32,6 +35,8 @@ interface Item {
   status: ItemStatus;
   daysOverdue: number;
 }
+type ProjectedRef = { contractId: number; pricingStreamId: number; serviceStart: string; serviceEnd: string };
+
 interface ContractRow {
   contractId: number;
   referenceNumber: string;
@@ -94,6 +99,12 @@ export default function BillingOverview() {
   const { user } = useAuth();
   const [data, setData] = useState<Overview | null>(null);
   const [detailChargeId, setDetailChargeId] = useState<number | null>(null);
+  const [detailProjected, setDetailProjected] = useState<ProjectedRef | null>(null);
+  // A bill opens its details; a bill not made yet opens its preview.
+  const openItem = (contractId: number, i: Item) => {
+    if (i.chargeId !== null) setDetailChargeId(i.chargeId);
+    else if (i.pricingStreamId !== undefined && i.serviceEnd !== undefined) setDetailProjected({ contractId, pricingStreamId: i.pricingStreamId, serviceStart: i.serviceStart, serviceEnd: i.serviceEnd });
+  };
   const isPhone = !Grid.useBreakpoint().md;
 
   useEffect(() => {
@@ -348,10 +359,7 @@ export default function BillingOverview() {
                                 : t(`billing.overview.status.${i.status}`)}
                             </Tag>
                           ),
-                          onClick:
-                            i.chargeId === null
-                              ? undefined
-                              : () => setDetailChargeId(i.chargeId),
+                          onClick: () => openItem(row.contractId, i),
                         }))}
                       />
                     ),
@@ -379,15 +387,10 @@ export default function BillingOverview() {
                 }
                 dataSource={row.items}
                 pagination={false}
-                // A bill that exists (not a projected one) opens its details.
-                onRow={(i: Item) =>
-                  i.chargeId === null
-                    ? {}
-                    : {
-                        onClick: () => setDetailChargeId(i.chargeId),
-                        style: { cursor: "pointer" },
-                      }
-                }
+                onRow={(i: Item) => ({
+                  onClick: () => openItem(row.contractId, i),
+                  style: { cursor: "pointer" },
+                })}
                 columns={[
                   {
                     title: t("contracts.fee"),
@@ -477,7 +480,11 @@ export default function BillingOverview() {
       )}
       <ChargeDetailDrawer
         chargeId={detailChargeId}
-        onClose={() => setDetailChargeId(null)}
+        projected={detailProjected}
+        onClose={() => {
+          setDetailChargeId(null);
+          setDetailProjected(null);
+        }}
       />
     </div>
   );

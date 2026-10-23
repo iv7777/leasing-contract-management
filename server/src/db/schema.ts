@@ -356,6 +356,8 @@ export const receipts = sqliteTable("receipts", {
   recordedBy: integer("recorded_by").notNull().references(() => users.id),
   evidenceDocumentId: integer("evidence_document_id").references(() => documents.id),
   status: text("status", { enum: ["posted", "reversed"] }).notNull().default("posted"),
+  /** Set when the person who recorded it took it back during the correction window (the receipt is then also "reversed"). */
+  removedAt: text("removed_at"),
   createdAt: text("created_at").notNull().default(nowIso),
 }, (t) => ({
   contractIdx: index("receipts_contract_idx").on(t.contractId),
@@ -425,6 +427,8 @@ export const depositTransactions = sqliteTable("deposit_transactions", {
   reason: text("reason").notNull(),
   actorUserId: integer("actor_user_id").notNull().references(() => users.id),
   approvedBy: integer("approved_by").references(() => users.id),
+  /** On a reversal row: set when it took back an entry during the correction window rather than being an Admin reversal. */
+  removedAt: text("removed_at"),
   createdAt: text("created_at").notNull().default(nowIso),
 }, (t) => ({
   contractIdx: index("deposit_transactions_contract_idx").on(t.contractId),

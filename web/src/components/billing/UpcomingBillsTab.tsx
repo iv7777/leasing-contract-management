@@ -3,6 +3,7 @@ import { Alert, Space, Statistic, Table, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
 import { streamName, yuan } from "./format";
+import ChargeDetailDrawer from "./ChargeDetailDrawer";
 
 interface UpcomingDto {
   asOf: string;
@@ -10,7 +11,7 @@ interface UpcomingDto {
   status: string;
   billingFrequency: string;
   autoBilling: boolean;
-  items: { feeType: string; streamLabel: string; serviceStart: string; serviceEnd: string; dueDate: string; amountFen: number }[];
+  items: { pricingStreamId: number; feeType: string; streamLabel: string; serviceStart: string; serviceEnd: string; dueDate: string; amountFen: number }[];
   totalFen: number;
   missingReadings: { feeType: string; streamLabel: string; month: string; dueDate: string }[];
 }
@@ -22,6 +23,7 @@ export default function UpcomingBillsTab({ contractId, reloadKey }: { contractId
   const { t } = useTranslation();
   const [data, setData] = useState<UpcomingDto | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<{ contractId: number; pricingStreamId: number; serviceStart: string; serviceEnd: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -58,6 +60,7 @@ export default function UpcomingBillsTab({ contractId, reloadKey }: { contractId
         loading={loading}
         pagination={false}
         dataSource={data.items}
+        onRow={(r) => ({ onClick: () => setPreview({ contractId, pricingStreamId: r.pricingStreamId, serviceStart: r.serviceStart, serviceEnd: r.serviceEnd }), style: { cursor: "pointer" } })}
         locale={{ emptyText: t("billing.upcoming.empty") }}
         columns={[
           { title: t("billing.upcoming.dueDate"), dataIndex: "dueDate", width: 120 },
@@ -67,6 +70,7 @@ export default function UpcomingBillsTab({ contractId, reloadKey }: { contractId
         ]}
       />
       <Typography.Text type="secondary">{t("billing.upcoming.forecastNote")}</Typography.Text>
+      <ChargeDetailDrawer chargeId={null} projected={preview} onClose={() => setPreview(null)} />
     </Space>
   );
 }

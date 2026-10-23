@@ -9,6 +9,7 @@ import { recordAudit } from "../lib/audit.js";
 import { contractRef, chargeFacts } from "../lib/auditDetail.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
 import { loadChargeContext } from "../billing/generate.js";
+import { readingBehind } from "./chargeDetail.js";
 import { runDailyBilling } from "../jobs/billing.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { loadDepositStatus } from "../billing/depositLoad.js";
@@ -212,13 +213,67 @@ billingRouter.get("/contracts/:id/billing/upcoming", (req, res) => {
   }
   const p = projectContract(ctx, today, cutoff);
   const items = p.charges
-    .map((c) => ({ feeType: c.feeType, streamLabel: c.streamLabel, serviceStart: c.serviceStart, serviceEnd: c.serviceEnd, dueDate: c.dueDate, amountFen: c.amountFen }))
+    .map((c) => ({ pricingStreamId: c.pricingStreamId, feeType: c.feeType, streamLabel: c.streamLabel, serviceStart: c.serviceStart, serviceEnd: c.serviceEnd, dueDate: c.dueDate, amountFen: c.amountFen }))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.serviceStart.localeCompare(b.serviceStart));
   res.json({
     ...base,
     items,
     totalFen: items.reduce((sum, i) => sum + i.amountFen, 0),
     missingReadings: p.missingReadings.map((m) => ({ feeType: m.feeType, streamLabel: m.streamLabel, month: m.periodStart.slice(0, 7), dueDate: m.dueDate })),
+  });
+});
+
+/** A bill that does not exist yet, laid out like a real one's details: what it will be, how it is worked out, and the
+ * reading behind it. Nothing is posted. */
+billingRouter.get("/contracts/:id/billing/projected", (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
+  const pricingStreamId = Number(req.query.pricingStreamId);
+  const serviceStart = String(req.query.serviceStart ?? "");
+  const serviceEnd = String(req.query.serviceEnd ?? "");
+  let ctx;
+  try {
+    ctx = loadChargeContext(contractId);
+  } catch {
+    return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  }
+  const today = todayInChina();
+  const planned = projectContract(ctx, today, lookAheadCutoffFor(today)).charges.find(
+    (c) => c.pricingStreamId === pricingStreamId && c.serviceStart === serviceStart && c.serviceEnd === serviceEnd,
+  );
+  if (!planned) {
+    return res.status(404).json({ error: { code: "not_found", message: "This bill is no longer expected — it may have been made already. Refresh the page." } });
+  }
+  let snapshot: unknown = null;
+  try {
+    snapshot = JSON.parse(planned.snapshotJson);
+  } catch {
+    snapshot = null;
+  }
+  res.json({
+    charge: {
+      id: null,
+      contractId,
+      contractRef: contractRef(contractId),
+      contractStatus: ctx.contract.status,
+      feeType: planned.feeType,
+      itemName: planned.streamLabel,
+      serviceStart: planned.serviceStart,
+      serviceEnd: planned.serviceEnd,
+      dueDate: planned.dueDate,
+      amountFen: planned.amountFen,
+      status: "projected",
+      createdAt: null,
+      voidedAt: null,
+      voidedBy: null,
+      voidReason: null,
+      broughtForward: false,
+    },
+    snapshot,
+    balance: null,
+    payments: [],
+    adjustments: [],
+    reading: readingBehind(planned.pricingStreamId, planned.serviceStart, planned.serviceEnd),
   });
 });
 
@@ -274,7 +329,7 @@ billingRouter.get("/billing/overview", (req, res) => {
       } else {
         if (!ctx.rules.autoBilling) notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
         const p = projectContract(ctx, today, lookAheadCutoff);
-        projected = p.charges.map((c) => ({ feeType: c.feeType, itemName: c.streamLabel !== c.feeType ? c.streamLabel : null, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
+        projected = p.charges.map((c) => ({ feeType: c.feeType, itemName: c.streamLabel !== c.feeType ? c.streamLabel : null, pricingStreamId: c.pricingStreamId, serviceStart: c.serviceStart, serviceEnd: c.serviceEnd, dueDate: c.dueDate, amountFen: c.amountFen }));
         for (const m of p.missingReadings) {
           missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
         }

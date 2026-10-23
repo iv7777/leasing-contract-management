@@ -169,6 +169,7 @@ interface ReceiptDto {
   paymentMethod: string;
   externalReference: string | null;
   status: "posted" | "reversed";
+  removedAt?: string | null;
   canEdit?: boolean;
   editableUntil?: string | null;
 }
@@ -183,6 +184,7 @@ interface DepositTransactionDto {
   transactionDate: string;
   reason: string;
   reversalOfId: number | null;
+  removedAt?: string | null;
   canEdit?: boolean;
   editableUntil?: string | null;
 }
@@ -295,6 +297,7 @@ export default function ContractDetailPage() {
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number; rentableAreaSqm?: string }[]>([]);
   const [allDocuments, setDocuments] = useState<DocumentDto[]>([]);
   const [showVoidedDocs, setShowVoidedDocs] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
   // Voided documents (withdrawn by an approved amendment) are kept on record but are never offered for new work.
   const documents = allDocuments.filter((d) => !d.voided);
   const [activeTab, setActiveTab] = useState("units");
@@ -456,6 +459,10 @@ export default function ContractDetailPage() {
   const termStart = contract?.termStart;
   const areaOfUnit = (unitId?: number) => availableUnits.find((u) => u.id === unitId)?.rentableAreaSqm;
   const feeName = (feeType: string) => t(`contracts.${camel(feeType)}`);
+  // Entries taken back during their correction window are out of the way unless asked for.
+  const removedDepositIds = new Set(depositTxns.filter((x) => x.removedAt && x.reversalOfId !== null).map((x) => x.reversalOfId));
+  const shownReceipts = showRemoved ? receipts : receipts.filter((r) => !r.removedAt);
+  const shownDepositTxns = showRemoved ? depositTxns : depositTxns.filter((x) => !x.removedAt && !removedDepositIds.has(x.id));
   // The buttons on a receipt: apply the unallocated part, correct it while that is allowed, reverse it (Admin).
   const receiptActions = (r: ReceiptDto) => (
                     <Space>
@@ -477,6 +484,11 @@ export default function ContractDetailPage() {
                                   {timeLeft(r.editableUntil)}
                                 </Button>
                               </Tooltip>
+                            )}
+                            {r.canEdit && (
+                              <Popconfirm title={t("contracts.confirmRemoveReceipt")} okText={t("contracts.removeEntry")} cancelText={t("common.cancel")} onConfirm={() => onRemoveEntry(`/receipts/${r.id}/remove`)}>
+                                <Button size="small" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>
                             )}
                             {user?.role === "admin" && (
                               <Button size="small" danger onClick={() => setReverseReceiptModal({ receiptId: r.id })}>
@@ -821,6 +833,17 @@ export default function ContractDetailPage() {
     try {
       await api.delete(`/usage-entries/${usageEntryId}`);
       message.success(t("common.deleted"));
+      load();
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
+  // Takes back an entry made by mistake during its correction window (no reason needed).
+  const onRemoveEntry = async (path: string) => {
+    try {
+      await api.post(path, {});
+      message.success(t("contracts.entryRemoved"));
       load();
     } catch (err) {
       handleError(err);
@@ -1560,9 +1583,9 @@ export default function ContractDetailPage() {
                                       </Button>
                                     </Tooltip>
                                   )}
-                                  {!u.billed && (
+                                  {(!u.billed || u.canEdit) && (
                                     <Popconfirm
-                                      title={t("contracts.confirmDeleteUsageEntry")}
+                                      title={u.billed ? t("contracts.confirmRemoveBilledReading") : t("contracts.confirmDeleteUsageEntry")}
                                       onConfirm={() => onDeleteUsageEntry(u.id)}
                                       okText={t("common.delete")}
                                       cancelText={t("common.cancel")}
@@ -1832,10 +1855,16 @@ export default function ContractDetailPage() {
                     </Button>
                   )}
                 </Space>
+                {depositTxns.some((x) => x.removedAt) && (
+                  <Space size={4} style={{ marginBottom: 12 }}>
+                    <Switch size="small" checked={showRemoved} onChange={setShowRemoved} />
+                    <Typography.Text type="secondary">{t("contracts.showRemoved")}</Typography.Text>
+                  </Space>
+                )}
                 <Table
                   rowKey="id"
                   size="small"
-                  dataSource={depositTxns}
+                  dataSource={shownDepositTxns}
                   columns={[
                     { title: t("contracts.transactionDate"), dataIndex: "transactionDate" },
                     { title: t("contracts.transactionType"), dataIndex: "transactionType", render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
@@ -1845,9 +1874,9 @@ export default function ContractDetailPage() {
                       title: t("common.actions"),
                       key: "actions",
                       render: (_: unknown, txn: DepositTransactionDto) => {
-                        const isReversed = depositTxns.some((t) => t.reversalOfId === txn.id);
-                        if (isReversed) return <Tag color="red">{t("contracts.reversed")}</Tag>;
-                        if (txn.transactionType === "reversal") return null;
+                        const reversal = depositTxns.find((t) => t.reversalOfId === txn.id);
+                        if (reversal) return reversal.removedAt ? <Tag>{t("contracts.removed")}</Tag> : <Tag color="red">{t("contracts.reversed")}</Tag>;
+                        if (txn.transactionType === "reversal") return txn.removedAt ? <Tag>{t("contracts.removed")}</Tag> : null;
                         return (
                           <Space>
                             {txn.canEdit && (
@@ -1863,6 +1892,11 @@ export default function ContractDetailPage() {
                                   {timeLeft(txn.editableUntil)}
                                 </Button>
                               </Tooltip>
+                            )}
+                            {txn.canEdit && (
+                              <Popconfirm title={t("contracts.confirmRemoveDeposit")} okText={t("contracts.removeEntry")} cancelText={t("common.cancel")} onConfirm={() => onRemoveEntry(`/deposit-transactions/${txn.id}/remove`)}>
+                                <Button size="small" danger icon={<DeleteOutlined />} />
+                              </Popconfirm>
                             )}
                             {user?.role === "admin" && (
                               <Button size="small" danger onClick={() => setReverseDepositTxnModal({ depositTxnId: txn.id })}>
@@ -1962,11 +1996,17 @@ export default function ContractDetailPage() {
                     </Button>
                   </Space>
                 )}
+                {receipts.some((r) => r.removedAt) && (
+                  <Space size={4} style={{ marginBottom: 12 }}>
+                    <Switch size="small" checked={showRemoved} onChange={setShowRemoved} />
+                    <Typography.Text type="secondary">{t("contracts.showRemoved")}</Typography.Text>
+                  </Space>
+                )}
                 {isPhone ? (
                   <List
                     bordered
                     size="small"
-                    dataSource={receipts}
+                    dataSource={shownReceipts}
                     locale={{ emptyText: t("common.noneYet") }}
                     renderItem={(r: ReceiptDto) => {
                       const unallocated = receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0;
@@ -1980,7 +2020,7 @@ export default function ContractDetailPage() {
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                             <Space size={4} wrap>
-                              {r.status === "reversed" ? <Tag color="red">{t("contracts.reversed")}</Tag> : null}
+                              {r.removedAt ? <Tag>{t("contracts.removed")}</Tag> : r.status === "reversed" ? <Tag color="red">{t("contracts.reversed")}</Tag> : null}
                               {unallocated > 0 && (
                                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                                   {t("contracts.unallocated")} {yuan(unallocated)}
@@ -1997,7 +2037,7 @@ export default function ContractDetailPage() {
                 <Table
                   rowKey="id"
                   size="small"
-                  dataSource={receipts}
+                  dataSource={shownReceipts}
                   columns={[
                     { title: t("contracts.receivedDate"), dataIndex: "receivedDate" },
                     { title: t("contracts.paymentMethod"), dataIndex: "paymentMethod", render: (v: string) => paymentMethodLabel(t, v) },
@@ -2007,7 +2047,7 @@ export default function ContractDetailPage() {
                       key: "unallocated",
                       render: (_: unknown, r: ReceiptDto) => yuan(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0),
                     },
-                    { title: t("common.actions"), dataIndex: "status", render: (s: string) => (s === "reversed" ? <Tag color="red">{t("contracts.reversed")}</Tag> : <Tag>{t(`contracts.receiptStatus.${s}`, { defaultValue: s })}</Tag>) },
+                    { title: t("common.actions"), dataIndex: "status", render: (s: string, r: ReceiptDto) => (r.removedAt ? <Tag>{t("contracts.removed")}</Tag> : s === "reversed" ? <Tag color="red">{t("contracts.reversed")}</Tag> : <Tag>{t(`contracts.receiptStatus.${s}`, { defaultValue: s })}</Tag>) },
                     {
                       title: "",
                       key: "action",
