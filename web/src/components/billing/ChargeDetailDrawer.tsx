@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { TFunction } from "i18next";
 import { api } from "../../api/client";
 import { apiErrorMessage } from "../../api/errorMessage";
-import { camel, paymentMethodLabel, streamName, yuan } from "./format";
+import { camel, paymentMethodLabel, periodLabel, streamName, yuan } from "./format";
 import { MeterPhotoCell } from "./MeterPhoto";
 
 interface Subperiod {
@@ -56,7 +56,6 @@ interface Detail {
 /** "10008.8000" -> "10008.8". */
 const num = (v: string | undefined) => (v === undefined ? "?" : String(Number(v)));
 const money = (v: string) => `¥${Number(v).toFixed(2)}`;
-const periodLabel = (start: string, end: string) => (start.endsWith("-01") && end.slice(0, 7) === start.slice(0, 7) ? start.slice(0, 7) : `${start} → ${end}`);
 
 /** One line of words for how a part of the period was priced. */
 function rateLine(t: TFunction, s: Subperiod): string {

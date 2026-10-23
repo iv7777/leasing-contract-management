@@ -3,7 +3,7 @@ import path from "node:path";
 
 /** major.minor.patch — patch goes up by one with every release (no carry at 9);
  * minor only for a milestone release, and patch then restarts at 0. */
-export const APP_VERSION = "1.73.0";
+export const APP_VERSION = "1.74.0";
 
 const SERVER_START_TIME = new Date().toISOString();
 

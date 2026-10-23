@@ -1,6 +1,8 @@
 export interface OverviewCharge {
   chargeId: number;
   feeType: string;
+  /** The item's own name (its label), when it has one. */
+  itemName?: string | null;
   serviceStart: string;
   dueDate: string;
   balanceFen: number;
@@ -12,6 +14,7 @@ export interface OverviewCharge {
  * see what is coming next without anything being posted early. */
 export interface OverviewProjected {
   feeType: string;
+  itemName?: string | null;
   serviceStart: string;
   dueDate: string;
   amountFen: number;
@@ -30,6 +33,7 @@ export type ItemStatus = "overdue" | "due" | "upcoming" | "projected";
 export interface OverviewItem {
   chargeId: number | null;
   feeType: string;
+  itemName: string | null;
   serviceStart: string;
   dueDate: string;
   amountFen: number;
@@ -76,10 +80,10 @@ export function buildOverview(inputs: OverviewContractInput[], today: string): {
     for (const ch of c.charges) {
       if (ch.balanceFen <= 0) continue;
       const status: ItemStatus = ch.isOverdue ? "overdue" : ch.dueDate <= today ? "due" : "upcoming";
-      items.push({ chargeId: ch.chargeId, feeType: ch.feeType, serviceStart: ch.serviceStart, dueDate: ch.dueDate, amountFen: ch.balanceFen, status, daysOverdue: ch.daysOverdue });
+      items.push({ chargeId: ch.chargeId, feeType: ch.feeType, itemName: ch.itemName ?? null, serviceStart: ch.serviceStart, dueDate: ch.dueDate, amountFen: ch.balanceFen, status, daysOverdue: ch.daysOverdue });
     }
     for (const p of c.projected) {
-      items.push({ chargeId: null, feeType: p.feeType, serviceStart: p.serviceStart, dueDate: p.dueDate, amountFen: p.amountFen, status: "projected", daysOverdue: 0 });
+      items.push({ chargeId: null, feeType: p.feeType, itemName: p.itemName ?? null, serviceStart: p.serviceStart, dueDate: p.dueDate, amountFen: p.amountFen, status: "projected", daysOverdue: 0 });
     }
     if (items.length === 0) continue;
 

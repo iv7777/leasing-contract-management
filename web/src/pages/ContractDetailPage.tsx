@@ -27,7 +27,7 @@ import {
   Upload,
   message,
 } from "antd";
-import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
+import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { FormInstance } from "antd";
 import { useTranslation } from "react-i18next";
@@ -43,9 +43,10 @@ import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
+import BillRows from "../components/billing/BillRows";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -454,6 +455,41 @@ export default function ContractDetailPage() {
   const termStart = contract?.termStart;
   const areaOfUnit = (unitId?: number) => availableUnits.find((u) => u.id === unitId)?.rentableAreaSqm;
   const feeName = (feeType: string) => t(`contracts.${camel(feeType)}`);
+  // The buttons on a receipt: apply the unallocated part, correct it while that is allowed, reverse it (Admin).
+  const receiptActions = (r: ReceiptDto) => (
+                    <Space>
+                            {(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0) > 0 && (
+                              <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
+                                {t("contracts.allocate")}
+                              </Button>
+                            )}
+                            {r.canEdit && (
+                              <Tooltip title={t("contracts.editableFor", { time: timeLeft(r.editableUntil) })}>
+                                <Button
+                                  size="small"
+                                  icon={<EditOutlined />}
+                                  onClick={() => {
+                                    editReceiptForm.setFieldsValue({ receivedDate: r.receivedDate, amount: r.amountFen / 100, paymentMethod: r.paymentMethod, externalReference: r.externalReference ?? undefined });
+                                    setEditReceiptModal(r);
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                            {user?.role === "admin" && (
+                              <Button size="small" danger onClick={() => setReverseReceiptModal({ receiptId: r.id })}>
+                                {t("contracts.reverse")}
+                              </Button>
+                            )}
+                    </Space>
+  );
+  // One status tag for a bill: voided, paid, overdue (with days), or what is still owed.
+  const chargeStatusTag = (c: ChargeDto, b: { balanceFen: number; isOverdue: boolean; daysOverdue: number } | undefined) => {
+    if (c.status === "voided") return <Tag title={c.voidReason ?? undefined}>{t("billing.void.voided")}</Tag>;
+    if (!b) return null;
+    if (b.balanceFen === 0) return <Tag color="green">{t("chargeDetail.paid")}</Tag>;
+    if (b.isOverdue) return <Tag color="red">{t("contracts.overdueDays", { days: b.daysOverdue })} · {yuan(b.balanceFen)}</Tag>;
+    return <Tag color="orange">{yuan(b.balanceFen)}</Tag>;
+  };
   // A bill is shown by the name of its item (two electricity items would otherwise look the same).
   const itemNameOf = (streamId: number, feeType: string) => streams.find((s) => s.id === streamId)?.label ?? feeName(feeType);
   // A usage service fee follows one of this contract's metered (usage-based) items.
@@ -1862,6 +1898,19 @@ export default function ContractDetailPage() {
                 {statement && (
                   <div style={{ marginTop: 16 }}>
                     <Typography.Title level={5}>{t("chargeDetail.statementBills")}</Typography.Title>
+                    {isPhone ? (
+                      <BillRows
+                        empty={t("common.noneYet")}
+                        rows={charges.filter((c) => c.status === "posted" && c.serviceStart >= statement.periodStart && c.serviceStart <= statement.periodEnd).map((c) => ({
+                          key: c.id,
+                          name: itemNameOf(c.pricingStreamId, c.feeType),
+                          detail: `${t("contracts.dueDate")} ${c.dueDate}`,
+                          amountFen: c.amountFen,
+                          status: chargeStatusTag(c, chargeBalances.find((x) => x.chargeId === c.id)),
+                          onClick: () => setDetailChargeId(c.id),
+                        }))}
+                      />
+                    ) : (
                     <Table
                       size="small"
                       rowKey="id"
@@ -1883,6 +1932,7 @@ export default function ContractDetailPage() {
                         },
                       ]}
                     />
+                    )}
                   </div>
                 )}
               </>
@@ -1905,6 +1955,38 @@ export default function ContractDetailPage() {
                     </Button>
                   </Space>
                 )}
+                {isPhone ? (
+                  <List
+                    bordered
+                    size="small"
+                    dataSource={receipts}
+                    locale={{ emptyText: t("common.noneYet") }}
+                    renderItem={(r: ReceiptDto) => {
+                      const unallocated = receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0;
+                      return (
+                        <List.Item style={{ display: "block" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <Typography.Text strong>
+                              {r.receivedDate} · {paymentMethodLabel(t, r.paymentMethod)}
+                            </Typography.Text>
+                            <Typography.Text style={{ whiteSpace: "nowrap" }}>{yuan(r.amountFen)}</Typography.Text>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                            <Space size={4} wrap>
+                              {r.status === "reversed" ? <Tag color="red">{t("contracts.reversed")}</Tag> : null}
+                              {unallocated > 0 && (
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                  {t("contracts.unallocated")} {yuan(unallocated)}
+                                </Typography.Text>
+                              )}
+                            </Space>
+                            {r.status === "posted" && receiptActions(r)}
+                          </div>
+                        </List.Item>
+                      );
+                    }}
+                  />
+                ) : (
                 <Table
                   rowKey="id"
                   size="small"
@@ -1923,35 +2005,11 @@ export default function ContractDetailPage() {
                       title: "",
                       key: "action",
                       render: (_: unknown, r: ReceiptDto) =>
-                        r.status === "posted" && (
-                          <Space>
-                            {(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0) > 0 && (
-                              <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
-                                {t("contracts.allocate")}
-                              </Button>
-                            )}
-                            {r.canEdit && (
-                              <Tooltip title={t("contracts.editableFor", { time: timeLeft(r.editableUntil) })}>
-                                <Button
-                                  size="small"
-                                  icon={<EditOutlined />}
-                                  onClick={() => {
-                                    editReceiptForm.setFieldsValue({ receivedDate: r.receivedDate, amount: r.amountFen / 100, paymentMethod: r.paymentMethod, externalReference: r.externalReference ?? undefined });
-                                    setEditReceiptModal(r);
-                                  }}
-                                />
-                              </Tooltip>
-                            )}
-                            {user?.role === "admin" && (
-                              <Button size="small" danger onClick={() => setReverseReceiptModal({ receiptId: r.id })}>
-                                {t("contracts.reverse")}
-                              </Button>
-                            )}
-                          </Space>
-                        ),
+                        r.status === "posted" && receiptActions(r),
                     },
                   ]}
                 />
+                )}
               </>
             ),
           },
@@ -2010,6 +2068,32 @@ export default function ContractDetailPage() {
                     {t("contracts.generateCharges")}
                   </Button>
                 )}
+                {isPhone ? (
+                  <BillRows
+                    empty={t("common.noneYet")}
+                    rows={charges.map((c) => {
+                      const b = chargeBalances.find((x) => x.chargeId === c.id);
+                      return {
+                        key: c.id,
+                        name: (
+                          <>
+                            {itemNameOf(c.pricingStreamId, c.feeType)}
+                            {c.calculationSnapshotJson?.includes('"opening_balance"') && (
+                              <Tag color="blue" style={{ marginLeft: 6 }}>
+                                {t("openingBalance.broughtForward")}
+                              </Tag>
+                            )}
+                          </>
+                        ),
+                        period: periodLabel(c.serviceStart, c.serviceEnd),
+                        detail: `${t("contracts.dueDate")} ${c.dueDate}`,
+                        amountFen: c.amountFen,
+                        status: chargeStatusTag(c, b),
+                        onClick: () => setDetailChargeId(c.id),
+                      };
+                    })}
+                  />
+                ) : (
                 <Table
                   rowKey="id"
                   size="small"
@@ -2025,8 +2109,7 @@ export default function ContractDetailPage() {
                         </Space>
                       ),
                     },
-                    { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
-                    { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
+                    { title: t("chargeDetail.servicePeriod"), render: (_: unknown, c: ChargeDto) => periodLabel(c.serviceStart, c.serviceEnd) },
                     { title: t("contracts.dueDate"), dataIndex: "dueDate" },
                     { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
                     {
@@ -2035,11 +2118,7 @@ export default function ContractDetailPage() {
                       render: (_: unknown, c: ChargeDto) => {
                         const b = chargeBalances.find((x) => x.chargeId === c.id);
                         if (!b) return null;
-                        if (c.status === "voided") {
-                          return (
-                            <Tag title={c.voidReason ?? undefined}>{t("billing.void.voided")}</Tag>
-                          );
-                        }
+                        if (c.status === "voided") return chargeStatusTag(c, b);
                         return (
                           <Space>
                             {yuan(b.balanceFen)}
@@ -2051,11 +2130,12 @@ export default function ContractDetailPage() {
                     {
                       title: "",
                       key: "details",
+                      width: 90,
                       render: (_: unknown, c: ChargeDto) => (
                         <Space size={0}>
-                          <Button size="small" type="link" onClick={(e) => { e.stopPropagation(); setDetailChargeId(c.id); }}>
-                            {t("chargeDetail.title")}
-                          </Button>
+                          <Tooltip title={t("chargeDetail.title")}>
+                            <Button size="small" type="text" icon={<InfoCircleOutlined />} onClick={(e) => { e.stopPropagation(); setDetailChargeId(c.id); }} />
+                          </Tooltip>
                           {user?.role === "admin" &&
                             (() => {
                               const b = chargeBalances.find((x) => x.chargeId === c.id);
@@ -2072,6 +2152,7 @@ export default function ContractDetailPage() {
                     },
                   ]}
                 />
+                )}
               </>
             ),
           },

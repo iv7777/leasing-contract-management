@@ -812,6 +812,7 @@ const zh: Translations = {
       dueNow: "当前应收",
       dueLater: "本月稍后到期",
       nextMonth: "尚未出账",
+      billsCount: "{{count}} 笔账单",
       tenant: "租户",
       nextDue: "下一笔账单",
       empty: "目前没有逾期或即将到期的款项——所有租户账目均已结清。",

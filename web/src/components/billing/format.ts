@@ -59,3 +59,8 @@ export function priceDeviation(now: number | null, before: number | null): numbe
 
 /** Further than this from last month's price is worth a second look (a slipped decimal, a wrong kWh). */
 export const PRICE_JUMP = 0.3;
+
+/** "2026-11" for a whole calendar month, otherwise "2026-11-01 → 2026-11-15". */
+export function periodLabel(start: string, end: string): string {
+  return start.endsWith("-01") && end.slice(0, 7) === start.slice(0, 7) && end >= `${start.slice(0, 7)}-28` ? start.slice(0, 7) : `${start} → ${end}`;
+}

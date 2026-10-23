@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { billingRules, billingRuns, charges, chargeAdjustments, contracts, parties, receiptAllocations } from "../db/schema.js";
+import { billingRules, billingRuns, charges, chargeAdjustments, contracts, parties, pricingStreams, receiptAllocations } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
@@ -257,12 +257,13 @@ billingRouter.get("/billing/overview", (req, res) => {
     }
     const ledger = loadLedgerInputs(contract.id);
     const rawById = new Map(ledger.chargesRaw.map((c) => [c.id, c]));
+    const labelOfStream = new Map(db.select({ id: pricingStreams.id, label: pricingStreams.label }).from(pricingStreams).where(eq(pricingStreams.contractId, contract.id)).all().map((s) => [s.id, s.label]));
 
     const balances = ledger.charges
       .filter((c) => c.status === "posted")
       .map((c) => {
         const b = computeChargeBalance(c, ledger.adjustments, ledger.allocations, today, ledger.overdueGraceDays);
-        return { chargeId: c.id, feeType: rawById.get(c.id)!.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, balanceFen: b.balanceFen, isOverdue: b.isOverdue, daysOverdue: b.daysOverdue };
+        return { chargeId: c.id, feeType: rawById.get(c.id)!.feeType, itemName: labelOfStream.get(rawById.get(c.id)!.pricingStreamId) ?? null, serviceStart: c.serviceStart, dueDate: c.dueDate, balanceFen: b.balanceFen, isOverdue: b.isOverdue, daysOverdue: b.daysOverdue };
       });
 
     let projected: OverviewContractInput["projected"] = [];
@@ -273,7 +274,7 @@ billingRouter.get("/billing/overview", (req, res) => {
       } else {
         if (!ctx.rules.autoBilling) notAutoBilled.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, reason: "off" });
         const p = projectContract(ctx, today, lookAheadCutoff);
-        projected = p.charges.map((c) => ({ feeType: c.feeType, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
+        projected = p.charges.map((c) => ({ feeType: c.feeType, itemName: c.streamLabel !== c.feeType ? c.streamLabel : null, serviceStart: c.serviceStart, dueDate: c.dueDate, amountFen: c.amountFen }));
         for (const m of p.missingReadings) {
           missingReadings.push({ contractId: contract.id, referenceNumber: contract.referenceNumber, tenantName, stream: m.streamLabel, feeType: m.feeType, month: m.periodStart.slice(0, 7) });
         }

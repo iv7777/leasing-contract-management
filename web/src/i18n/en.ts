@@ -810,6 +810,7 @@ const en = {
       dueNow: "Due now",
       dueLater: "Due later this month",
       nextMonth: "Not billed yet",
+      billsCount: "{{count}} bill(s)",
       tenant: "Tenant",
       nextDue: "Next bill",
       empty: "Nothing is overdue or coming due — everyone is up to date.",
