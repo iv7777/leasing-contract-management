@@ -862,12 +862,14 @@ type ActivationOutcome =
   | { ok: true; contract: typeof contracts.$inferSelect }
   | { ok: false; status: number; code: string; message: string; details?: unknown };
 
-/** Activates one draft contract if it passes every check; shared by the single and the "activate all" routes. */
-function activateContract(userId: number, id: number): ActivationOutcome {
+type ActivationRefusal = { status: number; code: string; message: string; details?: unknown };
+
+/** Why a contract can't be activated right now, or null when it can. Writes nothing. */
+function activationRefusal(id: number): ActivationRefusal | null {
   const contract = db.select().from(contracts).where(eq(contracts.id, id)).get();
-  if (!contract) return { ok: false, status: 404, code: "not_found", message: "Contract not found." };
+  if (!contract) return { status: 404, code: "not_found", message: "Contract not found." };
   if (contract.status !== "draft") {
-    return { ok: false, status: 409, code: "not_draft", message: "Only a draft contract can be activated." };
+    return { status: 409, code: "not_draft", message: "Only a draft contract can be activated." };
   }
 
   const signedLease = db
@@ -877,13 +879,20 @@ function activateContract(userId: number, id: number): ActivationOutcome {
     .all()
     .find((d) => d.docType === "signed_lease" && !d.voided);
   if (!signedLease) {
-    return { ok: false, status: 409, code: "missing_signed_lease", message: "A signed main lease document is required before activation." };
+    return { status: 409, code: "missing_signed_lease", message: "A signed main lease document is required before activation." };
   }
 
   const problems = activationProblems(id);
   if (problems.length > 0) {
-    return { ok: false, status: 409, code: "activation_blocked", message: "This contract can't be activated yet. Fix the items listed and try again.", details: { problems } };
+    return { status: 409, code: "activation_blocked", message: "This contract can't be activated yet. Fix the items listed and try again.", details: { problems } };
   }
+  return null;
+}
+
+/** Activates one draft contract if it passes every check; shared by the single and the "activate all" routes. */
+function activateContract(userId: number, id: number): ActivationOutcome {
+  const refusal = activationRefusal(id);
+  if (refusal) return { ok: false, ...refusal };
 
   // All-or-nothing: a failure part-way must not leave an activated contract
   // with no version snapshot.
@@ -909,6 +918,17 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
   const outcome = activateContract(req.user!.id, Number(req.params.id));
   if (!outcome.ok) return res.status(outcome.status).json({ error: { code: outcome.code, message: outcome.message, ...(outcome.details ? { details: outcome.details } : {}) } });
   res.json({ contract: outcome.contract });
+});
+
+// Which drafts could be activated right now, and why not for the others. Nothing is changed.
+contractsRouter.post("/activation-check", requireRole("admin"), (_req, res) => {
+  const drafts = db.select().from(contracts).where(eq(contracts.status, "draft")).all().sort((a, b) => a.referenceNumber.localeCompare(b.referenceNumber));
+  res.json({
+    contracts: drafts.map((c) => {
+      const refusal = activationRefusal(c.id);
+      return { id: c.id, referenceNumber: c.referenceNumber, ok: !refusal, ...(refusal ? { error: { code: refusal.code, message: refusal.message, ...(refusal.details ? { details: refusal.details } : {}) } } : {}) };
+    }),
+  });
 });
 
 // Activates every draft that passes the checks in one go; the ones that don't stay drafts and are reported with why.

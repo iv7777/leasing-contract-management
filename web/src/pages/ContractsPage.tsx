@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
-import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, Card } from "antd";
+import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, Card, message } from "antd";
 import { PlusOutlined, DownloadOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -103,37 +103,50 @@ export default function ContractsPage() {
 
   const canCreate = user?.role === "admin" || user?.role === "manager";
 
-  // Admin: every draft on the list that passes the activation checks goes live; the rest stay drafts, with the reason.
+  // Admin: pick which drafts to activate. Each is checked first, so the list shows which are ready and why the others aren't.
   const drafts = visibleContracts.filter((c) => c.status === "draft");
+  type DraftCheck = { id: number; referenceNumber: string; ok: boolean; error?: { code: string; message: string; details?: unknown } };
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [checks, setChecks] = useState<DraftCheck[]>([]);
+  const [checking, setChecking] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
   const [activating, setActivating] = useState(false);
-  const [activationResult, setActivationResult] = useState<{ id: number; referenceNumber: string; ok: boolean; error?: { code: string; message: string; details?: unknown } }[] | null>(null);
+  const [activationResult, setActivationResult] = useState<DraftCheck[] | null>(null);
   const failedActivations = (activationResult ?? []).filter((x) => !x.ok);
-  const activateAll = () => {
-    Modal.confirm({
-      title: t("contracts.activateAllTitle", { count: drafts.length }),
-      width: 520,
-      content: (
-        <div>
-          <Typography.Paragraph>{t("contracts.activateAllBody")}</Typography.Paragraph>
-          <Typography.Text type="secondary">{drafts.map((c) => c.referenceNumber).join(", ")}</Typography.Text>
-        </div>
-      ),
-      okText: t("contracts.activateAllConfirm", { count: drafts.length }),
-      cancelText: t("common.cancel"),
-      onOk: async () => {
-        setActivating(true);
-        try {
-          const r = await api.post<{
-            results: { id: number; referenceNumber: string; ok: boolean; error?: { code: string; message: string; details?: unknown } }[];
-          }>("/contracts/activate-all", { contractIds: drafts.map((c) => c.id) });
-          setActivationResult(r.results);
-        } finally {
-          setActivating(false);
-          load();
-        }
-      },
-    });
+  const readyChecks = checks.filter((c) => c.ok);
+
+  const openPicker = async () => {
+    setPicked([]); // nothing is chosen until the Admin chooses
+    setPickerOpen(true);
+    setChecking(true);
+    try {
+      const r = await api.post<{ contracts: DraftCheck[] }>("/contracts/activation-check");
+      const shown = new Set(drafts.map((c) => c.id));
+      setChecks(r.contracts.filter((c) => shown.has(c.id)));
+    } catch (err) {
+      message.error(apiErrorMessage(err, t));
+      setPickerOpen(false);
+    } finally {
+      setChecking(false);
+    }
   };
+
+  const activateSelected = async () => {
+    setActivating(true);
+    try {
+      const r = await api.post<{ results: DraftCheck[] }>("/contracts/activate-all", { contractIds: picked });
+      setPickerOpen(false);
+      setActivationResult(r.results);
+    } catch (err) {
+      message.error(apiErrorMessage(err, t));
+    } finally {
+      setActivating(false);
+      load();
+    }
+  };
+
+  const reasonText = (c: DraftCheck) => (c.error ? apiErrorMessage(new ApiError(c.error.code, c.error.message, 409, c.error.details), t) : "");
+  const contractOf = (id: number) => contracts.find((c) => c.id === id);
 
   return (
     <div>
@@ -150,7 +163,7 @@ export default function ContractsPage() {
             {t("contracts.exportCsv")}
           </Button>
           {user?.role === "admin" && (
-            <Button icon={<CheckCircleOutlined />} disabled={drafts.length === 0} loading={activating} onClick={activateAll}>
+            <Button icon={<CheckCircleOutlined />} disabled={drafts.length === 0} onClick={() => void openPicker()}>
               {t("contracts.activateAll", { count: drafts.length })}
             </Button>
           )}
@@ -268,6 +281,61 @@ export default function ContractsPage() {
           ]}
         />
       )}
+
+      <Modal
+        open={pickerOpen}
+        title={t("contracts.pickTitle")}
+        width={760}
+        onCancel={() => setPickerOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setPickerOpen(false)}>{t("common.cancel")}</Button>
+            <Button type="primary" disabled={picked.length === 0} loading={activating} onClick={() => void activateSelected()}>
+              {t("contracts.activateSelected", { count: picked.length })}
+            </Button>
+          </Space>
+        }
+      >
+        <Typography.Paragraph type="secondary">{t("contracts.pickHelp")}</Typography.Paragraph>
+        <Space style={{ marginBottom: 8 }} wrap>
+          <Button size="small" onClick={() => setPicked(readyChecks.map((c) => c.id))} disabled={readyChecks.length === 0}>
+            {t("contracts.pickAll", { count: readyChecks.length })}
+          </Button>
+          <Button size="small" onClick={() => setPicked([])} disabled={picked.length === 0}>
+            {t("contracts.pickNone")}
+          </Button>
+        </Space>
+        <Table
+          size="small"
+          rowKey="id"
+          loading={checking}
+          dataSource={checks}
+          pagination={false}
+          scroll={{ y: 360, x: true }}
+          rowSelection={{
+            selectedRowKeys: picked,
+            onChange: (keys) => setPicked(keys as number[]),
+            getCheckboxProps: (c: DraftCheck) => ({ disabled: !c.ok }),
+          }}
+          columns={[
+            { title: t("contracts.reference"), dataIndex: "referenceNumber", render: (v: string, c: DraftCheck) => <Link to={`/contracts/${c.id}`}>{v}</Link> },
+            { title: t("contracts.tenant"), render: (_: unknown, c: DraftCheck) => (contractOf(c.id) ? partyName(contractOf(c.id)!.tenantPartyId) : "") },
+            { title: t("contracts.termStart"), render: (_: unknown, c: DraftCheck) => contractOf(c.id)?.termStart ?? "" },
+            {
+              title: t("contracts.pickStatus"),
+              render: (_: unknown, c: DraftCheck) =>
+                c.ok ? (
+                  <Tag color="green">{t("contracts.pickReady")}</Tag>
+                ) : (
+                  <div>
+                    <Tag color="red">{t("contracts.pickBlocked")}</Tag>
+                    <div style={{ whiteSpace: "pre-line", fontSize: 12 }}>{reasonText(c)}</div>
+                  </div>
+                ),
+            },
+          ]}
+        />
+      </Modal>
 
       <Modal
         open={activationResult !== null}
