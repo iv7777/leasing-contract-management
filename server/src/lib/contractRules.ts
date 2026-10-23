@@ -60,6 +60,7 @@ export function rateShapeError(r: RateShape): string | null {
       if (!r.escalationBase || !r.escalationPercentage || !r.escalationIntervalMonths || r.escalationIntervalMonths < 1) return MSG.escalationFields;
       return null;
     case "metered":
+    case "metered_amount":
       if (r.rateBasis !== "per_unit" && r.rateBasis !== "per_month") return MSG.basisMismatch;
       return r.unit && r.unit.trim() ? null : MSG.meteredUnit;
     default:

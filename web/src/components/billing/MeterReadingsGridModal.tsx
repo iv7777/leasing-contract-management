@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, InputNumber, Modal, Table, Typography, message } from "antd";
+import { Alert, InputNumber, Modal, Space, Table, Typography, message } from "antd";
 import { useTranslation } from "react-i18next";
 import { addMonths, todayInChina } from "@lcm/shared";
 import { api, ApiError } from "../../api/client";
 import { apiErrorMessage } from "../../api/errorMessage";
+import { PRICE_JUMP, impliedPrice, priceDeviation } from "./format";
 
 export interface MeteredStream {
   id: number;
   name: string;
   unit: string;
+  /** The reading carries its own amount (¥) as well as the quantity. */
+  amountMode?: boolean;
 }
 interface UsageEntry {
   pricingStreamId: number;
   serviceStart: string;
   quantity: string;
+  amountFen?: number | null;
 }
 interface PostedCharge {
   pricingStreamId: number;
@@ -49,12 +53,19 @@ export default function MeterReadingsGridModal({
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState<Record<string, number | null>>({});
+  const [amounts, setAmounts] = useState<Record<string, number | null>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const initial = useMemo(() => {
     const m: Record<string, number> = {};
     for (const u of usageEntries) m[cellKey(u.pricingStreamId, u.serviceStart.slice(0, 7))] = Number(u.quantity);
+    return m;
+  }, [usageEntries]);
+
+  const initialAmounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const u of usageEntries) if (u.amountFen !== null && u.amountFen !== undefined) m[cellKey(u.pricingStreamId, u.serviceStart.slice(0, 7))] = u.amountFen / 100;
     return m;
   }, [usageEntries]);
 
@@ -75,14 +86,33 @@ export default function MeterReadingsGridModal({
   useEffect(() => {
     if (open) {
       setValues({ ...initial });
+      setAmounts({ ...initialAmounts });
       setError(null);
     }
-  }, [open, initial]);
+  }, [open, initial, initialAmounts]);
 
   // The month just ended is the one being read; the current month is still running.
   const lastMonth = addMonths(`${todayInChina().slice(0, 7)}-01`, -1).slice(0, 7);
 
-  const changed = Object.entries(values).filter(([k, v]) => v !== null && v !== undefined && v !== initial[k]);
+  const amountStreams = new Set(streams.filter((s) => s.amountMode).map((s) => String(s.id)));
+  const isAmountCell = (k: string) => amountStreams.has(k.split("|")[0]);
+  const cents = (v: number) => Math.round(v * 100);
+  // A cell is sent when its quantity (or, for an amount-entered item, its amount) was changed.
+  const changedKeys = new Set<string>();
+  for (const [k, v] of Object.entries(values)) if (v !== null && v !== undefined && v !== initial[k]) changedKeys.add(k);
+  for (const [k, v] of Object.entries(amounts)) if (v !== null && v !== undefined && v !== initialAmounts[k]) changedKeys.add(k);
+  const changed = [...changedKeys].map((k) => [k, values[k] ?? null] as [string, number | null]);
+  // An amount-entered reading needs both numbers.
+  const incomplete = changed.filter(([k, q]) => isAmountCell(k) && (q === null || amounts[k] === null || amounts[k] === undefined));
+  // The price per unit an amount-entered month works out to, compared with the nearest earlier month that has one.
+  const averageBefore = (streamId: number, month: string): number | null => {
+    for (const m of months) {
+      if (m >= month) continue;
+      const price = impliedPrice(values[cellKey(streamId, m)], amounts[cellKey(streamId, m)]);
+      if (price !== null) return price;
+    }
+    return null;
+  };
 
   const onOk = async () => {
     setSubmitting(true);
@@ -91,7 +121,7 @@ export default function MeterReadingsGridModal({
       const r = await api.post<{ created: number; updated: number }>(`/contracts/${contractId}/usage-entries/bulk`, {
         entries: changed.map(([k, v]) => {
           const [streamId, period] = k.split("|");
-          return { pricingStreamId: Number(streamId), period, quantity: String(v) };
+          return { pricingStreamId: Number(streamId), period, quantity: String(v), ...(isAmountCell(k) ? { amountFen: cents(amounts[k] ?? 0) } : {}) };
         }),
       });
       message.success(t("billing.readings.done", { created: r.created, updated: r.updated }));
@@ -108,12 +138,12 @@ export default function MeterReadingsGridModal({
     <Modal
       title={t("billing.readings.title")}
       open={open}
-      width={Math.min(900, 280 + streams.length * 200)}
+      width={Math.min(980, 280 + streams.reduce((w, s) => w + (s.amountMode ? 300 : 200), 0))}
       onCancel={onClose}
       onOk={onOk}
       okText={t("billing.readings.save", { count: changed.length })}
       cancelText={t("common.cancel")}
-      okButtonProps={{ disabled: changed.length === 0, loading: submitting }}
+      okButtonProps={{ disabled: changed.length === 0 || incomplete.length > 0, loading: submitting }}
       destroyOnClose
     >
       <Typography.Paragraph type="secondary">{t("billing.readings.intro")}</Typography.Paragraph>
@@ -127,11 +157,11 @@ export default function MeterReadingsGridModal({
         columns={[
           { title: t("billing.month"), key: "month", width: 100, render: (_: unknown, m: string) => m },
           ...streams.map((s) => ({
-            title: `${s.name} (${s.unit})`,
+            title: s.amountMode ? `${s.name} (${s.unit} · ¥)` : `${s.name} (${s.unit})`,
             key: String(s.id),
             render: (_: unknown, m: string) => {
               const k = cellKey(s.id, m);
-              return (
+              const quantityInput = (
                 <InputNumber
                   style={{ width: "100%" }}
                   min={0}
@@ -141,6 +171,32 @@ export default function MeterReadingsGridModal({
                   value={values[k] ?? null}
                   onChange={(v) => setValues((cur) => ({ ...cur, [k]: v as number | null }))}
                 />
+              );
+              if (!s.amountMode) return quantityInput;
+              const price = impliedPrice(values[k], amounts[k]);
+              const dev = priceDeviation(price, averageBefore(s.id, m));
+              const jumped = dev !== null && Math.abs(dev) > PRICE_JUMP;
+              return (
+                <div>
+                  <Space.Compact style={{ width: "100%" }}>
+                    {quantityInput}
+                    <InputNumber
+                      style={{ width: "100%" }}
+                      min={0}
+                      precision={2}
+                      prefix="¥"
+                      disabled={locked.has(k)}
+                      value={amounts[k] ?? null}
+                      onChange={(v) => setAmounts((cur) => ({ ...cur, [k]: v as number | null }))}
+                    />
+                  </Space.Compact>
+                  {price !== null && (
+                    <Typography.Text type={jumped ? "warning" : "secondary"} style={{ fontSize: 12 }}>
+                      {t("billing.readings.impliedPrice", { price: price.toFixed(4), unit: s.unit })}
+                      {jumped ? ` — ${t("billing.readings.priceJump", { pct: Math.round(Math.abs(dev!) * 100), dir: t(dev! > 0 ? "billing.readings.higher" : "billing.readings.lower") })}` : ""}
+                    </Typography.Text>
+                  )}
+                </div>
               );
             },
           })),

@@ -234,7 +234,7 @@ export const rateSchedule = sqliteTable("rate_schedule", {
   calculationMethod: text("calculation_method", {
     // usage_fee_per_unit / usage_fee_percent: a service fee on a metered item's
     // usage (e.g. 0.10 per kWh, or 10% of the usage charge), billed as its own line.
-    enum: ["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"],
+    enum: ["flat", "per_sqm", "percentage_escalation", "metered", "metered_amount", "usage_fee_per_unit", "usage_fee_percent"],
   }).notNull(),
   // Decimal yuan as text — exact precision, converted to fen only at charge time.
   // For "metered" this is the price per unit (e.g. yuan per kWh), paired with `unit` below.
@@ -277,6 +277,8 @@ export const usageEntries = sqliteTable("usage_entries", {
   serviceStart: text("service_start").notNull(),
   serviceEnd: text("service_end").notNull(),
   quantity: text("quantity").notNull(),
+  // Only for an item priced "amount entered with the reading": what the reading is worth, in fen.
+  amountFen: integer("amount_fen"),
   unit: text("unit").notNull(),
   source: text("source"),
   enteredBy: integer("entered_by").notNull().references(() => users.id),

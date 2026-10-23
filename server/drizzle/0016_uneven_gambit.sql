@@ -1,0 +1,1 @@
+ALTER TABLE `usage_entries` ADD `amount_fen` integer;

@@ -41,7 +41,7 @@ function addDays(date: IsoDate, delta: number): IsoDate {
 }
 
 function isUsageBased(method: string): boolean {
-  return method === "metered" || method === "usage_fee_per_unit" || method === "usage_fee_percent";
+  return method === "metered" || method === "metered_amount" || method === "usage_fee_per_unit" || method === "usage_fee_percent";
 }
 
 function findRateAt(rates: RateScheduleInput[], streamId: number, date: IsoDate): RateScheduleInput | undefined {
@@ -156,19 +156,22 @@ export function generateChargeLines(
     const rateAtStart = findRateAt(streamRates, stream.id, periodStart);
     // Months before go-live were settled outside the system: no reading is needed or billed for them.
     if (rateAtStart && isUsageBased(rateAtStart.calculationMethod) && input.meteredFrom && periodStart < input.meteredFrom) continue;
-    if (rateAtStart?.calculationMethod === "metered") {
+    if (rateAtStart?.calculationMethod === "metered" || rateAtStart?.calculationMethod === "metered_amount") {
+      // "metered_amount": the reading carries the amount itself (worked out outside, e.g. from a time-of-use
+      // tariff), so the charge is that amount; the quantity is kept for a service fee that follows it.
+      const amountMode = rateAtStart.calculationMethod === "metered_amount";
       const usage = input.usageEntries.find(
         (u) => u.pricingStreamId === stream.id && u.serviceStart === periodStart && u.serviceEnd === periodEnd,
       );
-      if (!usage) {
+      if (!usage || (amountMode && (usage.amountFen === null || usage.amountFen === undefined))) {
         skippedMissingUsage.push(stream.id);
         missingUsage.push({ pricingStreamId: stream.id, dueDate: meteredDueDate });
         continue;
       }
 
-      const pricePerUnit = new Decimal(rateAtStart.amountOrRate);
       const quantity = new Decimal(usage.quantity);
-      const rawAmount = pricePerUnit.times(quantity);
+      const rawAmount = amountMode ? new Decimal(usage.amountFen!).dividedBy(100) : new Decimal(rateAtStart.amountOrRate).times(quantity);
+      const pricePerUnit = amountMode ? (quantity.isZero() ? new Decimal(0) : rawAmount.dividedBy(quantity)) : new Decimal(rateAtStart.amountOrRate);
 
       const concession = findConcessionAt(streamConcessions, stream.id, periodStart);
       const afterConcession = concession
@@ -222,13 +225,14 @@ export function generateChargeLines(
       }
       // The followed item has no price yet (or any more) on this date: nothing to follow, so no fee line.
       if (!linkedRate) continue;
-      if (linkedRate.calculationMethod !== "metered") {
+      if (linkedRate.calculationMethod !== "metered" && linkedRate.calculationMethod !== "metered_amount") {
         throw new Error(`Usage service fee (rate schedule ${rateAtStart.id}) is linked to an item that is not metered`);
       }
       const usage = input.usageEntries.find(
         (u) => u.pricingStreamId === rateAtStart.linkedStreamId && u.serviceStart === periodStart && u.serviceEnd === periodEnd,
       );
-      if (!usage) continue;
+      // An amount-entered reading isn't complete until its amount is there; the fee waits with it.
+      if (!usage || (linkedRate.calculationMethod === "metered_amount" && (usage.amountFen === null || usage.amountFen === undefined))) continue;
 
       const quantity = new Decimal(usage.quantity);
       const value = new Decimal(rateAtStart.amountOrRate);
@@ -237,7 +241,7 @@ export function generateChargeLines(
       const rawAmount =
         rateAtStart.calculationMethod === "usage_fee_per_unit"
           ? value.times(quantity)
-          : new Decimal(linkedRate.amountOrRate).times(quantity).times(value).dividedBy(100);
+          : (linkedRate.calculationMethod === "metered_amount" ? new Decimal(usage.amountFen ?? 0).dividedBy(100) : new Decimal(linkedRate.amountOrRate).times(quantity)).times(value).dividedBy(100);
 
       const concession = findConcessionAt(streamConcessions, stream.id, periodStart);
       const afterConcession = concession

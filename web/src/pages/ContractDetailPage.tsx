@@ -44,7 +44,7 @@ import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -103,6 +103,7 @@ interface UsageEntryDto {
   serviceStart: string;
   serviceEnd: string;
   quantity: string;
+  amountFen?: number | null;
   unit: string;
   source: string | null;
   billed?: boolean;
@@ -415,19 +416,52 @@ export default function ContractDetailPage() {
       .catch((err) => message.error(apiErrorMessage(err, t)));
   }, [id, statementPeriod, receipts.length, charges.length]);
 
+  // Items whose readings carry their own amount (¥) beside the quantity.
+  const amountStreamIds = new Set(streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered_amount")).map((s) => s.id));
+  const newUsageStreamId = Form.useWatch("pricingStreamId", usageEntryForm) as number | undefined;
+  const newUsageQuantity = Form.useWatch("quantity", usageEntryForm) as number | undefined;
+  const newUsageAmount = Form.useWatch("amount", usageEntryForm) as number | undefined;
+  const editUsageQuantity = Form.useWatch("quantity", editUsageEntryForm) as number | undefined;
+  const editUsageAmount = Form.useWatch("amount", editUsageEntryForm) as number | undefined;
+  /** Price per unit of the latest earlier reading of the same item that has an amount, to spot a slipped decimal. */
+  const priceHint = (streamId: number | undefined, before: string | undefined, quantity: number | undefined, amount: number | undefined, unit: string) => {
+    if (!streamId || !amountStreamIds.has(streamId)) return null;
+    const price = impliedPrice(quantity, amount);
+    if (price === null) return null;
+    const prev = usageEntries
+      .filter((u) => u.pricingStreamId === streamId && u.amountFen != null && (!before || u.serviceStart < before))
+      .sort((a, b) => b.serviceStart.localeCompare(a.serviceStart))[0];
+    const prevPrice = prev ? impliedPrice(Number(prev.quantity), (prev.amountFen ?? 0) / 100) : null;
+    const dev = priceDeviation(price, prevPrice);
+    return (
+      <div style={{ marginTop: -8, marginBottom: 12 }}>
+        <Typography.Text type="secondary">{t("billing.readings.impliedPrice", { price: price.toFixed(4), unit })}</Typography.Text>
+        {dev !== null && Math.abs(dev) > PRICE_JUMP && (
+          <Alert
+            style={{ marginTop: 6 }}
+            type="warning"
+            showIcon
+            message={t("billing.readings.priceJumpLong", { pct: Math.round(Math.abs(dev) * 100), dir: t(dev > 0 ? "billing.readings.higher" : "billing.readings.lower"), prev: prevPrice!.toFixed(4), unit })}
+          />
+        )}
+      </div>
+    );
+  };
+
   // ---- Prefills: each form opens with the values you would almost always type. ----
   const termStart = contract?.termStart;
   const areaOfUnit = (unitId?: number) => availableUnits.find((u) => u.id === unitId)?.rentableAreaSqm;
   const feeName = (feeType: string) => t(`contracts.${camel(feeType)}`);
   // A usage service fee follows one of this contract's metered (usage-based) items.
   const meteredStreamOptions = streams
-    .filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"))
+    .filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)))
     .map((s) => ({ value: s.id, label: s.label ?? feeName(s.feeType) }));
   const methodOptions = [
     { value: "flat", label: t("contracts.flat") },
     { value: "per_sqm", label: t("contracts.perSqm") },
     { value: "percentage_escalation", label: t("contracts.percentageEscalation") },
     { value: "metered", label: t("contracts.metered") },
+    { value: "metered_amount", label: t("contracts.meteredAmount") },
     ...(meteredStreamOptions.length > 0
       ? [
           { value: "usage_fee_per_unit", label: t("contracts.usageFeePerUnit") },
@@ -496,7 +530,7 @@ export default function ContractDetailPage() {
     if (!usageEntryModal) return;
     // Usage is normally entered for the month that just ended.
     const { start, end } = monthRange(-1);
-    const metered = streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"));
+    const metered = streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)));
     usageEntryForm.setFieldsValue({
       serviceStart: start,
       serviceEnd: end,
@@ -549,7 +583,7 @@ export default function ContractDetailPage() {
       await api.post(`/contracts/${id}/pricing-streams`, {
         ...rest,
         contractUnitIds,
-        initialRate: { effectiveStart, calculationMethod, amountOrRate: String(amountOrRate), rateBasis, unit, linkedStreamId: isUsageFee(calculationMethod) ? linkedStreamId : undefined },
+        initialRate: { effectiveStart, calculationMethod, amountOrRate: calculationMethod === "metered_amount" ? "0" : String(amountOrRate), rateBasis, unit, linkedStreamId: isUsageFee(calculationMethod) ? linkedStreamId : undefined },
       });
       setStreamModal(false);
       streamForm.resetFields();
@@ -638,7 +672,7 @@ export default function ContractDetailPage() {
     if (!rateModal) return;
     try {
       const values = await rateForm.validateFields();
-      const payload = { ...values, amountOrRate: String(values.amountOrRate), linkedStreamId: isUsageFee(values.calculationMethod) ? values.linkedStreamId : undefined };
+      const payload = { ...values, amountOrRate: values.calculationMethod === "metered_amount" ? "0" : String(values.amountOrRate), linkedStreamId: isUsageFee(values.calculationMethod) ? values.linkedStreamId : undefined };
       if (rateModal.rate) {
         await api.patch(`/contracts/${id}/pricing-streams/${rateModal.streamId}/rate-schedule/${rateModal.rate.id}`, payload);
       } else {
@@ -666,7 +700,8 @@ export default function ContractDetailPage() {
   const onAddUsageEntry = async () => {
     try {
       const values = await usageEntryForm.validateFields();
-      const created = await api.post<{ usageEntry: { id: number } }>(`/contracts/${id}/usage-entries`, { ...values, quantity: String(values.quantity) });
+      const { amount: enteredAmount, ...entryValues } = values;
+      const created = await api.post<{ usageEntry: { id: number } }>(`/contracts/${id}/usage-entries`, { ...entryValues, quantity: String(entryValues.quantity), ...(amountStreamIds.has(entryValues.pricingStreamId) ? { amountFen: Math.round((enteredAmount ?? 0) * 100) } : {}) });
       if (newPhoto) {
         // The reading is saved either way; a photo that fails to upload can be added again from the list.
         try {
@@ -689,7 +724,8 @@ export default function ContractDetailPage() {
     if (!editUsageEntryModal) return;
     try {
       const values = await editUsageEntryForm.validateFields();
-      await api.patch(`/usage-entries/${editUsageEntryModal.id}`, { ...values, quantity: String(values.quantity) });
+      const { amount: editedAmount, ...editValues } = values;
+      await api.patch(`/usage-entries/${editUsageEntryModal.id}`, { ...editValues, quantity: String(editValues.quantity), ...(amountStreamIds.has(editUsageEntryModal.pricingStreamId) ? { amountFen: Math.round((editedAmount ?? 0) * 100) } : {}) });
       if (editPhoto) {
         try {
           await uploadMeterPhoto(editUsageEntryModal.id, editPhoto);
@@ -980,7 +1016,7 @@ export default function ContractDetailPage() {
               calculationMethod: currentRate?.calculationMethod ?? "flat",
               amountOrRate: String(values.newAmountOrRate),
               rateBasis: currentRate?.rateBasis ?? "per_month",
-              unit: currentRate?.calculationMethod === "metered" ? values.amendRateUnit : undefined,
+              unit: isMeteredMethod(currentRate?.calculationMethod) ? values.amendRateUnit : undefined,
               linkedStreamId: currentRate?.linkedStreamId ?? undefined,
             },
           ],
@@ -1006,9 +1042,9 @@ export default function ContractDetailPage() {
               initialRate: {
                 effectiveStart: values.effectiveDate,
                 calculationMethod: values.amendStreamCalculationMethod,
-                amountOrRate: String(values.amendStreamAmountOrRate),
+                amountOrRate: values.amendStreamCalculationMethod === "metered_amount" ? "0" : String(values.amendStreamAmountOrRate),
                 rateBasis: isUsageFee(values.amendStreamCalculationMethod) ? usageFeeBasis(values.amendStreamCalculationMethod) : values.amendStreamRateBasis,
-                unit: values.amendStreamCalculationMethod === "metered" ? values.amendStreamUnit : undefined,
+                unit: isMeteredMethod(values.amendStreamCalculationMethod) ? values.amendStreamUnit : undefined,
                 linkedStreamId: isUsageFee(values.amendStreamCalculationMethod) ? values.amendStreamLinkedStreamId : undefined,
               },
             },
@@ -1371,7 +1407,7 @@ export default function ContractDetailPage() {
                           <>
                             {active.map((r) => (
                               <div key={r.id}>
-                                {t(`contracts.${camel(r.calculationMethod)}`)} — {r.amountOrRate}
+                                {t(`contracts.${camel(r.calculationMethod)}`)}{r.calculationMethod === "metered_amount" ? "" : ` — ${r.amountOrRate}`}
                                 {r.calculationMethod === "usage_fee_percent" ? "%" : ""} ({t(`contracts.${camel(r.rateBasis)}`)}
                                 {r.unit ? ` / ${r.unit}` : ""}
                                 {isUsageFee(r.calculationMethod)
@@ -1456,7 +1492,7 @@ export default function ContractDetailPage() {
             key: "usage",
             label: t("contracts.usageEntries"),
             children: (() => {
-              const meteredStreams = streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"));
+              const meteredStreams = streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)));
               const streamLabel = (streamId: number) => {
                 const s = streams.find((x) => x.id === streamId);
                 return s ? s.label ?? t(`contracts.${camel(s.feeType)}`) : streamId;
@@ -1473,7 +1509,7 @@ export default function ContractDetailPage() {
                                         size="small"
                                         icon={<EditOutlined />}
                                         onClick={() => {
-                                          editUsageEntryForm.setFieldsValue(u);
+                                          editUsageEntryForm.setFieldsValue({ ...u, amount: u.amountFen != null ? u.amountFen / 100 : undefined });
                                           setEditUsageEntryModal(u);
                                         }}
                                       />
@@ -1527,7 +1563,7 @@ export default function ContractDetailPage() {
                             <Typography.Text strong>
                               {streamLabel(u.pricingStreamId)} · {periodOf(u)}
                             </Typography.Text>
-                            <Typography.Text>{`${u.quantity} ${u.unit}`}</Typography.Text>
+                            <Typography.Text>{`${u.quantity} ${u.unit}${u.amountFen != null ? ` · ${yuan(u.amountFen)}` : ""}`}</Typography.Text>
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6 }}>
                             <Typography.Text type="secondary" ellipsis style={{ flex: 1, minWidth: 0 }}>
@@ -1551,7 +1587,7 @@ export default function ContractDetailPage() {
                       { title: t("contracts.usageEntryStream"), key: "stream", render: (_: unknown, u: UsageEntryDto) => streamLabel(u.pricingStreamId) },
                       { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
                       { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
-                      { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}` },
+                      { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}${u.amountFen != null ? ` · ${yuan(u.amountFen)}` : ""}` },
                       { title: t("contracts.usageEntrySource"), dataIndex: "source" },
                       {
                         title: t("contracts.photo"),
@@ -2407,7 +2443,7 @@ export default function ContractDetailPage() {
               streamForm.setFieldsValue({ rateBasis: usageFeeBasis(v.calculationMethod) });
               if (meteredStreamOptions.length === 1) streamForm.setFieldsValue({ linkedStreamId: meteredStreamOptions[0].value });
             }
-            if (v.calculationMethod === "metered") {
+            if (isMeteredMethod(v.calculationMethod)) {
               streamForm.setFieldsValue({ rateBasis: "per_unit" });
               const unit = defaultMeterUnit(streamForm.getFieldValue("feeType"), i18n.language);
               const cur = streamForm.getFieldValue("unit");
@@ -2460,12 +2496,12 @@ export default function ContractDetailPage() {
           >
             <Select disabled={isUsageFee(streamMethod)} options={rateBases.map((b) => ({ value: b, label: t(`contracts.${camel(b)}`) }))} />
           </Form.Item>
-          <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]} extra={usageFeeValueExtra(streamMethod)}>
+          <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} hidden={streamMethod === "metered_amount"} rules={[{ required: streamMethod !== "metered_amount" }]} extra={usageFeeValueExtra(streamMethod)}>
             <InputNumber style={{ width: "100%" }} min={0} max={streamMethod === "usage_fee_percent" ? 100 : undefined} />
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, cur) => prev.calculationMethod !== cur.calculationMethod}>
             {() =>
-              streamForm.getFieldValue("calculationMethod") === "metered" && (
+              isMeteredMethod(streamForm.getFieldValue("calculationMethod")) && (
                 <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
                   <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
                 </Form.Item>
@@ -2525,7 +2561,7 @@ export default function ContractDetailPage() {
               rateForm.setFieldsValue({ rateBasis: usageFeeBasis(v.calculationMethod) });
               if (!rateForm.getFieldValue("linkedStreamId") && meteredStreamOptions.length === 1) rateForm.setFieldsValue({ linkedStreamId: meteredStreamOptions[0].value });
             }
-            if (v.calculationMethod === "metered" && !rateModal?.rate) {
+            if (isMeteredMethod(v.calculationMethod) && !rateModal?.rate) {
               rateForm.setFieldsValue({ rateBasis: "per_unit" });
               const stream = streams.find((st) => st.id === rateModal?.streamId);
               const unit = defaultMeterUnit(stream?.feeType, i18n.language);
@@ -2559,12 +2595,12 @@ export default function ContractDetailPage() {
           >
             <Select disabled={isUsageFee(rateMethod)} options={rateBases.map((b) => ({ value: b, label: t(`contracts.${camel(b)}`) }))} />
           </Form.Item>
-          <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]} extra={usageFeeValueExtra(rateMethod)}>
+          <Form.Item name="amountOrRate" label={t("contracts.amountOrRate")} hidden={rateMethod === "metered_amount"} rules={[{ required: rateMethod !== "metered_amount" }]} extra={usageFeeValueExtra(rateMethod)}>
             <InputNumber style={{ width: "100%" }} min={0} max={rateMethod === "usage_fee_percent" ? 100 : undefined} />
           </Form.Item>
           <Form.Item noStyle shouldUpdate={(prev, cur) => prev.calculationMethod !== cur.calculationMethod}>
             {() =>
-              rateForm.getFieldValue("calculationMethod") === "metered" && (
+              isMeteredMethod(rateForm.getFieldValue("calculationMethod")) && (
                 <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
                   <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
                 </Form.Item>
@@ -2607,7 +2643,7 @@ export default function ContractDetailPage() {
           <Form.Item name="pricingStreamId" label={t("contracts.usageEntryStream")} rules={[{ required: true }]}>
             <Select
               options={streams
-                .filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"))
+                .filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)))
                 .map((s) => ({ value: s.id, label: s.label ?? t(`contracts.${camel(s.feeType)}`) }))}
             />
           </Form.Item>
@@ -2621,6 +2657,14 @@ export default function ContractDetailPage() {
           <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
+          {newUsageStreamId !== undefined && amountStreamIds.has(newUsageStreamId) && (
+            <>
+              <Form.Item name="amount" label={t("contracts.usageEntryAmount")} rules={[{ required: true }]} extra={t("contracts.usageEntryAmountHint")}>
+                <InputNumber style={{ width: "100%" }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+              {priceHint(newUsageStreamId, usageEntryForm.getFieldValue("serviceStart"), newUsageQuantity, newUsageAmount, usageEntryForm.getFieldValue("unit") ?? "")}
+            </>
+          )}
           <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
             <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
           </Form.Item>
@@ -2657,6 +2701,14 @@ export default function ContractDetailPage() {
           <Form.Item name="quantity" label={t("contracts.usageEntryQuantity")} rules={[{ required: true }]}>
             <InputNumber style={{ width: "100%" }} min={0} />
           </Form.Item>
+          {editUsageEntryModal && amountStreamIds.has(editUsageEntryModal.pricingStreamId) && (
+            <>
+              <Form.Item name="amount" label={t("contracts.usageEntryAmount")} rules={[{ required: true }]} extra={t("contracts.usageEntryAmountHint")}>
+                <InputNumber style={{ width: "100%" }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+              {priceHint(editUsageEntryModal.pricingStreamId, editUsageEntryModal.serviceStart, editUsageQuantity, editUsageAmount, editUsageEntryModal.unit)}
+            </>
+          )}
           <Form.Item name="unit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
             <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
           </Form.Item>
@@ -3166,12 +3218,12 @@ export default function ContractDetailPage() {
                 {({ getFieldValue }) => {
                   const currentRate = rates.find((r) => r.pricingStreamId === getFieldValue("pricingStreamId") && !r.effectiveEnd);
                   return (
-                    currentRate?.calculationMethod === "metered" && (
+                    isMeteredMethod(currentRate?.calculationMethod) && (
                       <Form.Item
                         name="amendRateUnit"
                         label={t("contracts.meteredUnit")}
                         rules={[{ required: true }]}
-                        initialValue={currentRate.unit ?? undefined}
+                        initialValue={currentRate?.unit ?? undefined}
                       >
                         <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
                       </Form.Item>
@@ -3222,12 +3274,12 @@ export default function ContractDetailPage() {
               <Form.Item name="amendStreamRateBasis" label={t("contracts.rateBasis")} rules={[{ required: true }]} initialValue="per_month">
                 <Select disabled={isUsageFee(amendStreamMethod)} options={rateBases.map((b) => ({ value: b, label: t(`contracts.${camel(b)}`) }))} />
               </Form.Item>
-              <Form.Item name="amendStreamAmountOrRate" label={t("contracts.amountOrRate")} rules={[{ required: true }]} extra={usageFeeValueExtra(amendStreamMethod)}>
+              <Form.Item name="amendStreamAmountOrRate" label={t("contracts.amountOrRate")} hidden={amendStreamMethod === "metered_amount"} rules={[{ required: amendStreamMethod !== "metered_amount" }]} extra={usageFeeValueExtra(amendStreamMethod)}>
                 <InputNumber style={{ width: "100%" }} min={0} max={amendStreamMethod === "usage_fee_percent" ? 100 : undefined} />
               </Form.Item>
               <Form.Item noStyle shouldUpdate={(prev, cur) => prev.amendStreamCalculationMethod !== cur.amendStreamCalculationMethod}>
                 {({ getFieldValue }) =>
-                  getFieldValue("amendStreamCalculationMethod") === "metered" && (
+                  isMeteredMethod(getFieldValue("amendStreamCalculationMethod")) && (
                     <Form.Item name="amendStreamUnit" label={t("contracts.meteredUnit")} rules={[{ required: true }]}>
                       <Input placeholder={t("contracts.meteredUnitPlaceholder")} />
                     </Form.Item>
@@ -3295,11 +3347,12 @@ export default function ContractDetailPage() {
         termStart={contract.termStart}
         termEnd={contract.termEnd}
         streams={streams
-          .filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered"))
+          .filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)))
           .map((s) => ({
             id: s.id,
             name: s.label ?? t(`contracts.${camel(s.feeType)}`),
-            unit: rates.find((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered")?.unit ?? "",
+            unit: rates.find((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod))?.unit ?? "",
+            amountMode: rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered_amount"),
           }))}
         usageEntries={usageEntries}
         charges={charges}

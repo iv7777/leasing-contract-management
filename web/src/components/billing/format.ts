@@ -39,3 +39,23 @@ export function timeLeft(untilIso: string | null | undefined, now: number = Date
   const m = minutes % 60;
   return h > 0 ? `${h}h ${m}m` : `${Math.max(m, 1)}m`;
 }
+
+/** Metered items are priced per unit from a reading ("metered") or take the amount typed with the reading ("metered_amount"). */
+export function isMeteredMethod(method: string | null | undefined): boolean {
+  return method === "metered" || method === "metered_amount";
+}
+
+/** The price per unit an entered amount works out to, or null when it can't be told. */
+export function impliedPrice(quantity: number | null | undefined, amountYuan: number | null | undefined): number | null {
+  if (!quantity || quantity <= 0 || amountYuan === null || amountYuan === undefined) return null;
+  return amountYuan / quantity;
+}
+
+/** How far a price is from the one before it (0.4 = 40% higher, -0.4 = 40% lower); null when there is nothing to compare. */
+export function priceDeviation(now: number | null, before: number | null): number | null {
+  if (now === null || before === null || before <= 0) return null;
+  return (now - before) / before;
+}
+
+/** Further than this from last month's price is worth a second look (a slipped decimal, a wrong kWh). */
+export const PRICE_JUMP = 0.3;

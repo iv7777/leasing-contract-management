@@ -109,7 +109,7 @@ exportsRouter.get("/contracts/:id/pdf-summary", (req, res) => {
     doc.text(`  ${s.label ?? (L[s.feeType] ?? s.feeType)} (${L[s.feeType] ?? s.feeType})`);
     for (const r of rates.filter((r) => r.pricingStreamId === s.id)) {
       // A metered price is per unit of use (kWh, ton…), not per month.
-      const basis = r.calculationMethod === "metered" ? `${L.yuan}/${r.unit ?? L.per_unit}` : (L[r.rateBasis] ?? r.rateBasis);
+      const basis = (r.calculationMethod === "metered" || r.calculationMethod === "metered_amount") ? `${L.yuan}/${r.unit ?? L.per_unit}` : (L[r.rateBasis] ?? r.rateBasis);
       doc.text(`    ${L[r.calculationMethod] ?? r.calculationMethod} — ${r.amountOrRate}${r.calculationMethod === "usage_fee_percent" ? "%" : ""} (${basis}), ${L.from} ${r.effectiveStart}${r.effectiveEnd ? ` ${L.to} ${r.effectiveEnd}` : ""}`);
     }
   }

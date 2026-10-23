@@ -340,3 +340,31 @@ test("metered billing starts at go-live: earlier months bill nothing and report 
   const noReading = generateChargeLines({ ...input, usageEntries: [] }, "2026-11-01", "2026-11-30");
   assert.equal(noReading.missingUsage.length, 1);
 });
+
+// ---- "amount entered with the reading": the charge is the typed amount, the kWh feeds the service fee ----
+const amountRate = (): RateScheduleInput => ({ ...meteredRate("0"), calculationMethod: "metered_amount" });
+const amountInput = (usage: { quantity: string; amountFen: number | null } | null, fee: RateScheduleInput) =>
+  baseInput({
+    pricingStreams: [
+      { id: 10, feeType: "electricity_base", targetType: "contract" },
+      { id: 11, feeType: "other", targetType: "contract" },
+    ],
+    rateSchedule: [amountRate(), fee],
+    usageEntries: usage ? [{ pricingStreamId: 10, serviceStart: "2026-11-01", serviceEnd: "2026-11-30", ...usage }] : [],
+  });
+
+test("amount-entered electricity bills the typed amount, and the per-kWh service fee follows the kWh (the sample notice)", () => {
+  const r = generateChargeLines(amountInput({ quantity: "10008.80", amountFen: 850737 }, feeRate("usage_fee_per_unit", "0.10")), "2026-11-01", "2026-11-30");
+  const byStream = new Map(r.lines.map((l) => [l.pricingStreamId, l.amountFen]));
+  assert.equal(byStream.get(10), 850737); // ¥8,507.37 energy charge
+  assert.equal(byStream.get(11), 100088); // 10,008.80 kWh × ¥0.10
+  assert.deepEqual(r.missingUsage, []);
+});
+
+test("a percentage service fee follows the typed amount; a missing amount counts as a missing reading", () => {
+  const pct = generateChargeLines(amountInput({ quantity: "1000", amountFen: 100000 }, feeRate("usage_fee_percent", "10")), "2026-11-01", "2026-11-30");
+  assert.equal(pct.lines.find((l) => l.pricingStreamId === 11)?.amountFen, 10000);
+  const none = generateChargeLines(amountInput({ quantity: "1000", amountFen: null }, feeRate("usage_fee_per_unit", "0.10")), "2026-11-01", "2026-11-30");
+  assert.equal(none.lines.length, 0);
+  assert.equal(none.missingUsage.length, 1);
+});

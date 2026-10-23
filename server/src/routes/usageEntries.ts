@@ -61,15 +61,18 @@ function ensureContractAccess(req: import("express").Request, res: import("expre
 /** A usage entry only makes sense against a stream whose rate at the entry's
  * service-start date is "metered" — otherwise there is no price-per-unit to
  * multiply the quantity by. */
-function streamIsMeteredAt(pricingStreamId: number, atDate: string): boolean {
+function meteredMethodAt(pricingStreamId: number, atDate: string): "metered" | "metered_amount" | null {
   const rate = db
     .select()
     .from(rateSchedule)
     .where(eq(rateSchedule.pricingStreamId, pricingStreamId))
     .all()
     .find((r) => r.effectiveStart <= atDate && (!r.effectiveEnd || r.effectiveEnd >= atDate));
-  return rate?.calculationMethod === "metered";
+  return rate?.calculationMethod === "metered" || rate?.calculationMethod === "metered_amount" ? rate.calculationMethod : null;
 }
+const streamIsMeteredAt = (pricingStreamId: number, atDate: string) => meteredMethodAt(pricingStreamId, atDate) !== null;
+
+const AMOUNT_REQUIRED = "Enter the amount for this reading too: this item is billed from the amount you type with the kWh.";
 
 /** Once a charge has been posted for this exact stream+period, the usage
  * entry that fed it must not silently change underneath the posted amount. */
@@ -139,6 +142,8 @@ const addUsageEntrySchema = z.object({
   serviceStart: isoDate,
   serviceEnd: isoDate,
   quantity: decimalString,
+  /** Fen; required for an item priced "amount entered with the reading", ignored otherwise. */
+  amountFen: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
   unit: z.string().trim().min(1).max(20),
   source: z.string().max(200).optional(),
 });
@@ -157,9 +162,14 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("adm
   if (!pricingStreamBelongsToContract(pricingStreamId, contractId)) {
     return res.status(400).json({ error: { code: "invalid_reference", message: "Pricing stream does not belong to this contract." } });
   }
-  if (!streamIsMeteredAt(pricingStreamId, serviceStart)) {
+  const method = meteredMethodAt(pricingStreamId, serviceStart);
+  if (!method) {
     return res.status(400).json({ error: { code: "not_metered", message: "This pricing stream is not on a metered rate at the given service start date." } });
   }
+  if (method === "metered_amount" && (rest.amountFen === null || rest.amountFen === undefined)) {
+    return res.status(400).json({ error: { code: "amount_required", message: AMOUNT_REQUIRED } });
+  }
+  if (method === "metered") rest.amountFen = null;
 
   const duplicate = db
     .select()
@@ -175,7 +185,7 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries", requireRole("adm
     .values({ contractId, pricingStreamId, serviceStart, serviceEnd, source: source ?? null, enteredBy: req.user!.id, ...rest })
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_recorded", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(pricingStreamId), servicePeriod: `${serviceStart} → ${serviceEnd}`, quantity: rest.quantity, unit: rest.unit } });
+  recordAudit({ actorUserId: req.user!.id, action: "usage_entry_recorded", entityType: "contract", entityId: contractId, details: { contract: contractRef(contractId), item: streamName(pricingStreamId), servicePeriod: `${serviceStart} → ${serviceEnd}`, quantity: rest.quantity, unit: rest.unit, ...(rest.amountFen != null ? { amountFen: rest.amountFen } : {}) } });
   res.status(201).json({ usageEntry: inserted });
 });
 
@@ -183,6 +193,7 @@ const updateUsageEntrySchema = z.object({
   serviceStart: isoDate.optional(),
   serviceEnd: isoDate.optional(),
   quantity: decimalString.optional(),
+  amountFen: z.number().int().min(0).max(1_000_000_000_000).nullable().optional(),
   unit: z.string().trim().min(1).max(20).optional(),
   source: z.string().max(200).nullable().optional(),
 });
@@ -213,9 +224,14 @@ usageEntriesRouter.patch("/usage-entries/:id", requireRole("admin", "manager"), 
   const nextServiceStart = parsed.data.serviceStart ?? existing.serviceStart;
   const periodError = wholeMonthError(nextServiceStart, parsed.data.serviceEnd ?? existing.serviceEnd);
   if (periodError) return res.status(400).json({ error: { code: "invalid_period", message: periodError } });
-  if (!streamIsMeteredAt(existing.pricingStreamId, nextServiceStart)) {
+  const nextMethod = meteredMethodAt(existing.pricingStreamId, nextServiceStart);
+  if (!nextMethod) {
     return res.status(400).json({ error: { code: "not_metered", message: "This pricing stream is not on a metered rate at the given service start date." } });
   }
+  if (nextMethod === "metered_amount" && (parsed.data.amountFen === null || (parsed.data.amountFen === undefined && existing.amountFen === null))) {
+    return res.status(400).json({ error: { code: "amount_required", message: AMOUNT_REQUIRED } });
+  }
+  if (nextMethod === "metered") parsed.data.amountFen = null;
 
   if (billed && (parsed.data.serviceStart !== undefined || parsed.data.serviceEnd !== undefined) && (nextServiceStart !== existing.serviceStart || (parsed.data.serviceEnd ?? existing.serviceEnd) !== existing.serviceEnd)) {
     return res.status(409).json({ error: { code: "charge_already_posted", message: "A charge has already been generated from this usage entry." } });
@@ -330,7 +346,7 @@ usageEntriesRouter.delete("/usage-entries/:id/photo", requireRole("admin", "mana
 
 const bulkUsageSchema = z.object({
   entries: z
-    .array(z.object({ pricingStreamId: z.number().int(), period: z.string().regex(/^\d{4}-\d{2}$/), quantity: decimalString }))
+    .array(z.object({ pricingStreamId: z.number().int(), period: z.string().regex(/^\d{4}-\d{2}$/), quantity: decimalString, amountFen: z.number().int().min(0).max(1_000_000_000_000).nullable().optional() }))
     .min(1)
     .max(1000),
 });
@@ -343,7 +359,7 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries/bulk", requireRole
   const parsed = bulkUsageSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid readings payload." } });
 
-  type Op = { kind: "insert"; pricingStreamId: number; serviceStart: string; serviceEnd: string; quantity: string; unit: string } | { kind: "update"; id: number; quantity: string };
+  type Op = { kind: "insert"; pricingStreamId: number; serviceStart: string; serviceEnd: string; quantity: string; amountFen: number | null; unit: string } | { kind: "update"; id: number; quantity: string; amountFen: number | null };
   const ops: Op[] = [];
   const errors: { row: number; message: string }[] = [];
   let unchanged = 0;
@@ -362,19 +378,22 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries/bulk", requireRole
       .where(eq(rateSchedule.pricingStreamId, e.pricingStreamId))
       .all()
       .find((r) => r.effectiveStart <= serviceStart && (!r.effectiveEnd || r.effectiveEnd >= serviceStart));
-    if (rate?.calculationMethod !== "metered") return errors.push({ row, message: `${e.period}: this stream is not metered then.` });
+    if (rate?.calculationMethod !== "metered" && rate?.calculationMethod !== "metered_amount") return errors.push({ row, message: `${e.period}: this stream is not metered then.` });
+    const amountMode = rate.calculationMethod === "metered_amount";
+    if (amountMode && (e.amountFen === null || e.amountFen === undefined)) return errors.push({ row, message: `${e.period}: ${AMOUNT_REQUIRED}` });
+    const amountFen = amountMode ? e.amountFen ?? null : null;
 
     const existing = db
       .select()
       .from(usageEntries)
       .where(and(eq(usageEntries.pricingStreamId, e.pricingStreamId), eq(usageEntries.serviceStart, serviceStart), eq(usageEntries.serviceEnd, serviceEnd)))
       .get();
-    if (!existing) return ops.push({ kind: "insert", pricingStreamId: e.pricingStreamId, serviceStart, serviceEnd, quantity: e.quantity, unit: rate.unit ?? "unit" });
-    if (new Decimal(existing.quantity).equals(new Decimal(e.quantity))) return void unchanged++;
+    if (!existing) return ops.push({ kind: "insert", pricingStreamId: e.pricingStreamId, serviceStart, serviceEnd, quantity: e.quantity, amountFen, unit: rate.unit ?? "unit" });
+    if (new Decimal(existing.quantity).equals(new Decimal(e.quantity)) && (existing.amountFen ?? null) === amountFen) return void unchanged++;
     if (chargeAlreadyPosted(contractId, e.pricingStreamId, serviceStart, serviceEnd)) {
       return errors.push({ row, message: `${e.period}: a charge was already generated from this reading, so it can't be changed.` });
     }
-    ops.push({ kind: "update", id: existing.id, quantity: e.quantity });
+    ops.push({ kind: "update", id: existing.id, quantity: e.quantity, amountFen });
   });
 
   if (errors.length > 0) {
@@ -385,10 +404,10 @@ usageEntriesRouter.post("/contracts/:contractId/usage-entries/bulk", requireRole
     for (const op of ops) {
       if (op.kind === "insert") {
         tx.insert(usageEntries)
-          .values({ contractId, pricingStreamId: op.pricingStreamId, serviceStart: op.serviceStart, serviceEnd: op.serviceEnd, quantity: op.quantity, unit: op.unit, source: "bulk entry", enteredBy: req.user!.id })
+          .values({ contractId, pricingStreamId: op.pricingStreamId, serviceStart: op.serviceStart, serviceEnd: op.serviceEnd, quantity: op.quantity, amountFen: op.amountFen, unit: op.unit, source: "bulk entry", enteredBy: req.user!.id })
           .run();
       } else {
-        tx.update(usageEntries).set({ quantity: op.quantity }).where(eq(usageEntries.id, op.id)).run();
+        tx.update(usageEntries).set({ quantity: op.quantity, amountFen: op.amountFen }).where(eq(usageEntries.id, op.id)).run();
       }
     }
   });

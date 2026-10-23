@@ -1,6 +1,6 @@
 import type { IsoDate } from "@lcm/shared";
 
-export type CalculationMethod = "flat" | "per_sqm" | "percentage_escalation" | "metered" | "usage_fee_per_unit" | "usage_fee_percent";
+export type CalculationMethod = "flat" | "per_sqm" | "percentage_escalation" | "metered" | "metered_amount" | "usage_fee_per_unit" | "usage_fee_percent";
 export type RateBasis = "per_month" | "per_quarter" | "per_year" | "per_sqm_per_month" | "per_unit" | "percent_of_usage";
 
 export interface ContractUnitInput {
@@ -54,6 +54,8 @@ export interface UsageEntryInput {
   serviceStart: IsoDate;
   serviceEnd: IsoDate;
   quantity: string; // decimal
+  /** For a "metered_amount" item: the amount (fen) typed in with the reading. */
+  amountFen?: number | null;
 }
 
 export interface ChargeEngineInput {

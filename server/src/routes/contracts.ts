@@ -397,7 +397,7 @@ const addPricingStreamSchema = z.object({
   initialRate: z.object({
     effectiveStart: isoDate,
     effectiveEnd: isoDate.optional(),
-    calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
+    calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "metered_amount", "usage_fee_per_unit", "usage_fee_percent"]),
     amountOrRate: decimalString,
     rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
     escalationBase: z.enum(["initial", "previous"]).optional(),
@@ -529,7 +529,7 @@ contractsRouter.delete("/:id/pricing-streams/:streamId", requireRole("admin", "m
 const rateScheduleTierSchema = z.object({
   effectiveStart: isoDate,
   effectiveEnd: isoDate.optional(),
-  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "usage_fee_per_unit", "usage_fee_percent"]),
+  calculationMethod: z.enum(["flat", "per_sqm", "percentage_escalation", "metered", "metered_amount", "usage_fee_per_unit", "usage_fee_percent"]),
   amountOrRate: decimalString,
   rateBasis: z.enum(["per_month", "per_quarter", "per_year", "per_sqm_per_month", "per_unit", "percent_of_usage"]),
   escalationBase: z.enum(["initial", "previous"]).optional(),

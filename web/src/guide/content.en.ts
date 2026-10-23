@@ -57,7 +57,7 @@ export const guideEn: GuideContent = {
               steps: [
                 "Add properties, units and parties if they are not on file yet.",
                 "**Contracts** → **Add contract**, then fill in units, pricing, deposit and documents. An Admin activates it when it's ready.",
-                "Each month, enter **meter readings** for electricity and water (Dashboard tells you which are missing). You can attach a photo of the meter to a reading — on a phone it opens the camera.",
+                "Each month, enter **meter readings** for electricity and water (Dashboard tells you which are missing). You can attach a photo of the meter to a reading — on a phone it opens the camera. For electricity billed from the utility tariff bill (peak and off-peak bands worked out outside the system), give the item the rate **Amount entered with the reading** and type the month's kWh and the amount; the per-kWh service fee follows the kWh.",
                 "Use **Propose amendment** for any change to an active contract — an Admin approves it.",
               ],
             },

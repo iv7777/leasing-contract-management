@@ -144,7 +144,7 @@ export function planExtras(contractId: number, extras: OpeningExtra[] | undefine
       problems.push({ code: "extra_no_item", feeType: e.feeType });
       continue;
     }
-    const metered = ofType.find((s) => db.select().from(rateSchedule).where(eq(rateSchedule.pricingStreamId, s.id)).all().some((r) => r.calculationMethod === "metered"));
+    const metered = ofType.find((s) => db.select().from(rateSchedule).where(eq(rateSchedule.pricingStreamId, s.id)).all().some((r) => r.calculationMethod === "metered" || r.calculationMethod === "metered_amount"));
     if (!metered) {
       problems.push({ code: "extra_not_metered", feeType: e.feeType });
       continue;

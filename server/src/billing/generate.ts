@@ -102,6 +102,7 @@ export function loadChargeContext(contractId: number): ChargeContext {
       serviceStart: u.serviceStart,
       serviceEnd: u.serviceEnd,
       quantity: u.quantity,
+      amountFen: u.amountFen,
     })),
   };
 
