@@ -164,7 +164,8 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
             <Link to={`/contracts/${c.contractId}`}>{c.contractRef}</Link>
           </Descriptions.Item>
           <Descriptions.Item label={t("contracts.fee")}>{item}</Descriptions.Item>
-          <Descriptions.Item label={t("chargeDetail.servicePeriod")}>{periodLabel(c.serviceStart, c.serviceEnd)}</Descriptions.Item>
+          <Descriptions.Item label={t("contracts.serviceStart")}>{c.serviceStart}</Descriptions.Item>
+          <Descriptions.Item label={t("contracts.serviceEnd")}>{c.serviceEnd}</Descriptions.Item>
           <Descriptions.Item label={t("contracts.dueDate")}>{c.dueDate}</Descriptions.Item>
           <Descriptions.Item label={t("contracts.amount")}>
             <Typography.Text strong>{yuan(c.amountFen)}</Typography.Text>
