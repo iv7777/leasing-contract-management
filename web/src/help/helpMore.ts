@@ -38,7 +38,8 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
     },
     "parties.list": {
       steps: [
-        "**Add party**: choose Company or Individual and enter contact details.",
+        "**Add tenant** / **Add landlord**: choose Company or Individual and enter contact details. Someone can be a tenant on one contract and a landlord on another; they appear under each role they hold.",
+        "A party that is on no contract yet shows under both Tenants and Landlords, tagged \"No contract yet\".",
         "Admin: record ID / licence numbers in the party's protected section.",
         "A party used on a contract can't be deleted — archive it instead.",
         "Click a contract number in the list to open that contract.",
@@ -182,7 +183,8 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
     },
     "parties.list": {
       steps: [
-        "**新增当事人**：选择公司或个人，并填写联系方式。",
+        "**添加租户** / **添加业主**：选择公司或个人，并填写联系方式。同一个人可以在一份合同中是租户、在另一份中是业主，会出现在各自角色的列表中。",
+        "尚未出现在任何合同上的当事人会同时显示在租户和业主两个列表中，并带有「尚无合同」标签。",
         "管理员：在当事人的受保护区域记录证件号/执照号。",
         "已用于合同的当事人不能删除——请归档。",
         "点击列表中的合同编号可直接打开该合同。",

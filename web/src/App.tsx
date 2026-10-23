@@ -55,7 +55,9 @@ export default function App() {
                 <Route path="/properties/:id" element={<PropertyDetailPage />} />
                 <Route path="/contracts" element={<ContractsPage />} />
                 <Route path="/contracts/:id" element={<ContractDetailPage />} />
-                <Route path="/parties" element={<PartiesPage />} />
+                <Route path="/tenants" element={<PartiesPage role="tenant" />} />
+                <Route path="/landlords" element={<PartiesPage role="landlord" />} />
+                <Route path="/parties" element={<Navigate to="/tenants" replace />} />
                 <Route path="/reminders" element={<RemindersPage />} />
                 <Route path="/occupancy" element={<OccupancyPage />} />
                 <Route

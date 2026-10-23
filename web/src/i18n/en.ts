@@ -8,6 +8,8 @@ const en = {
     guide: "Guide",
     properties: "Properties",
     parties: "Tenants & Landlords",
+    tenants: "Tenants",
+    landlords: "Landlords",
     contracts: "Contracts",
     reminders: "Reminders",
     occupancy: "Occupancy",
@@ -85,6 +87,11 @@ const en = {
   },
   parties: {
     title: "Tenants & Landlords",
+    tenantsTitle: "Tenants",
+    landlordsTitle: "Landlords",
+    addTenant: "Add tenant",
+    addLandlord: "Add landlord",
+    noContractYet: "No contract yet",
     addParty: "Add party",
     editParty: "Edit party",
     type: "Type",
@@ -824,7 +831,7 @@ const en = {
         heading: "Setting up a new lease, start to finish",
         intro: "This is the normal path for bringing a brand-new lease into the system.",
         steps:
-          "Add the property (if it isn't already listed) and the specific unit(s) being leased, under Properties.\nAdd the landlord and tenant as parties, if they aren't already on file, under Tenants & Landlords.\nCreate a draft contract under Contracts, linking the tenant and landlord parties and setting the term dates.\nOn the contract, add its unit(s), pricing streams (rent, management fee, etc.) and deposit terms.\nUpload the signed lease document on the contract's Documents tab.\nActivate the contract — this is only possible once a signed lease is attached.\nGenerate charges for the current period, and record receipts as payments come in.\nFrom here on, any change to the contract (a rate change, an added unit, a term change) goes through Propose amendment rather than direct edits.",
+          "Add the property (if it isn't already listed) and the specific unit(s) being leased, under Properties.\nAdd the landlord and tenant as parties, if they aren't already on file, under Landlords and Tenants.\nCreate a draft contract under Contracts, linking the tenant and landlord parties and setting the term dates.\nOn the contract, add its unit(s), pricing streams (rent, management fee, etc.) and deposit terms.\nUpload the signed lease document on the contract's Documents tab.\nActivate the contract — this is only possible once a signed lease is attached.\nGenerate charges for the current period, and record receipts as payments come in.\nFrom here on, any change to the contract (a rate change, an added unit, a term change) goes through Propose amendment rather than direct edits.",
       },
       commonTasks: {
         heading: "Common day-to-day tasks",
@@ -896,7 +903,7 @@ const en = {
     parties: {
       list: {
         title: "Tenants & Landlords",
-        body: "Every company or individual who appears on a contract, either as landlord or tenant. The same party can be the landlord on one contract and a completely unrelated role on another — this list isn't scoped per-property.",
+        body: "Tenants and Landlords are two lists of the same companies and individuals. A party is a tenant on the contracts that name it as tenant and a landlord on those that name it as landlord, so it appears under each role it holds; one on no contract yet shows under both until it is used. These lists aren't scoped per-property.",
         tips: "A party can only be deleted if no contract references it; if it's in use, archive it instead — archived parties stay visible on their existing contracts.\nClick a contract tag in the \"Related contracts\" column to jump straight to that contract.\nTwo tenants or landlords can't share the same name.",
       },
     },

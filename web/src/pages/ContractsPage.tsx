@@ -82,8 +82,8 @@ export default function ContractsPage() {
   }, [modalOpen]);
 
   const partyName = (id: number) => parties.find((p) => p.id === id)?.name ?? id;
-  const partyLink = (id: number) => (
-    <Link to={`/parties?highlight=${id}`} onClick={(e) => e.stopPropagation()}>
+  const partyLink = (id: number, role: "tenants" | "landlords" = "tenants") => (
+    <Link to={`/${role}?highlight=${id}`} onClick={(e) => e.stopPropagation()}>
       {partyName(id)}
     </Link>
   );

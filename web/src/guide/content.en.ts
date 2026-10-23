@@ -45,7 +45,7 @@ export const guideEn: GuideContent = {
               intro: "You set the system up, approve changes and keep the money straight.",
               steps: [
                 "**Users** → create an account for each team member, choose a role, assign their properties, and decide who may download or print.",
-                "**Properties** and **Tenants & Landlords** → add the buildings, units and parties (chapter “Prepare”).",
+                "**Properties**, **Tenants** and **Landlords** → add the buildings, units and parties (chapter “Prepare”).",
                 "Create your first contract and **Activate** it (chapter “Create a contract”). For a lease that started before this system, run **Catch up billing** on its Charges tab, then enter the payments already collected.",
                 "Open the **Dashboard** every day. Under **Admin**, check **Billing runs** now and then to confirm the nightly job is healthy, and **Backups** to confirm backups are running.",
               ],
@@ -97,7 +97,7 @@ export const guideEn: GuideContent = {
           type: "cards",
           items: [
             { icon: "P", title: "Property & unit", text: "A property is a building or plot of land. Units are the individual spaces you rent out — a floor, a workshop, a piece of open land. Vacant units stay on file.", where: "Properties" },
-            { icon: "T", title: "Party", text: "Any company or individual — a landlord on one contract, a tenant on another. ID and licence numbers are stored separately and only Admins can see them.", where: "Tenants & Landlords" },
+            { icon: "T", title: "Party", text: "Any company or individual — a landlord on one contract, a tenant on another. ID and licence numbers are stored separately and only Admins can see them.", where: "Tenants / Landlords" },
             { icon: "C", title: "Contract & term", text: "The lease itself: who rents which units, from which date to which date. A contract is a **Draft** until an Admin activates it; only an **Active** contract is billed.", where: "Contracts" },
             { icon: "$", title: "Pricing stream", text: "One recurring fee — rent, management fee, electricity — with its own rate and rule. A contract has one stream per fee.", where: "Contract → Pricing" },
             { icon: "↗", title: "Rate steps & escalation", text: "A stream can hold several rates over time (for example rent that rises each year), or a rate that grows by a percentage at fixed intervals.", where: "Contract → Pricing" },
@@ -179,7 +179,7 @@ export const guideEn: GuideContent = {
           type: "table",
           head: ["On…", "How you get around"],
           rows: [
-            ["A phone held upright", "The **bottom bar** has Dashboard, Contracts, Properties and Reminders. **More** opens the full menu (Guide, Occupancy, Tenants & Landlords, and the Admin pages). The **☰** button at the top left opens the same menu."],
+            ["A phone held upright", "The **bottom bar** has Dashboard, Contracts, Properties and Reminders. **More** opens the full menu (Guide, Occupancy, Tenants, Landlords, and the Admin pages). The **☰** button at the top left opens the same menu."],
             ["A computer, tablet, or phone held sideways", "The **menu on the left** lists every page. The page you're on is highlighted. On a short sideways phone screen the menu is narrower and scrolls."],
           ],
         },
@@ -194,7 +194,7 @@ export const guideEn: GuideContent = {
           ],
         },
         { type: "callout", kind: "tip", title: "Lost? Press ?", text: "The Help button is on every page and explains that page in plain words. The handbook (this guide) covers the whole story from start to finish." },
-        { type: "h", text: "Lists: Properties, Contracts, Tenants & Landlords" },
+        { type: "h", text: "Lists: Properties, Contracts, Tenants, Landlords" },
         {
           type: "list",
           items: [
@@ -279,7 +279,7 @@ export const guideEn: GuideContent = {
             },
             {
               title: "Add the landlord and the tenant",
-              body: ["Open **Tenants & Landlords** and add each party as a **Company** or an **Individual**, with contact details.", "An Admin can record ID / licence numbers in the party's protected section — other roles never see them."],
+              body: ["Open **Tenants** (or **Landlords**) and add each party as a **Company** or an **Individual**, with contact details.", "An Admin can record ID / licence numbers in the party's protected section — other roles never see them."],
             },
             {
               title: "Set up your team (Admin)",

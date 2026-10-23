@@ -1,5 +1,6 @@
 import { Button, Card, Col, Form, Input, Modal, Row, Statistic, Typography, message } from "antd";
-import { HomeOutlined, TeamOutlined, BellOutlined, EditOutlined } from "@ant-design/icons";
+import { HomeOutlined, TeamOutlined, BankOutlined, BellOutlined, EditOutlined } from "@ant-design/icons";
+import { partiesForRole } from "../api/partyRoles";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -20,7 +21,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [propertyCount, setPropertyCount] = useState<number | null>(null);
-  const [partyCount, setPartyCount] = useState<number | null>(null);
+  const [partyCounts, setPartyCounts] = useState<{ tenants: number; landlords: number } | null>(null);
   const [reminderCount, setReminderCount] = useState<number | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -32,7 +33,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void api.get<{ properties: PropertyDto[] }>("/properties").then((r) => setPropertyCount(r.properties.length));
-    void api.get<{ parties: PartyDto[] }>("/parties").then((r) => setPartyCount(r.parties.length));
+    void Promise.all([api.get<{ parties: PartyDto[] }>("/parties"), api.get<{ contracts: { landlordPartyId: number; tenantPartyId: number }[] }>("/contracts")]).then(([p, c]) => {
+      const live = p.parties.filter((x) => !x.archived);
+      setPartyCounts({ tenants: partiesForRole(live, c.contracts, "tenant").length, landlords: partiesForRole(live, c.contracts, "landlord").length });
+    });
     void api.get<{ reminders: unknown[] }>("/reminders").then((r) => setReminderCount(r.reminders.length));
     loadSystemInfo();
   }, []);
@@ -53,17 +57,22 @@ export default function DashboardPage() {
       </Typography.Paragraph>
       <BillingOverview />
       <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} md={8}>
+        <Col xs={24} sm={12} md={6}>
           <Card hoverable onClick={() => navigate("/properties")}>
             <Statistic title={t("nav.properties")} value={propertyCount ?? undefined} prefix={<HomeOutlined />} loading={propertyCount === null} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8}>
-          <Card hoverable onClick={() => navigate("/parties")}>
-            <Statistic title={t("nav.parties")} value={partyCount ?? undefined} prefix={<TeamOutlined />} loading={partyCount === null} />
+        <Col xs={24} sm={12} md={6}>
+          <Card hoverable onClick={() => navigate("/tenants")}>
+            <Statistic title={t("nav.tenants")} value={partyCounts?.tenants} prefix={<TeamOutlined />} loading={partyCounts === null} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={8}>
+        <Col xs={24} sm={12} md={6}>
+          <Card hoverable onClick={() => navigate("/landlords")}>
+            <Statistic title={t("nav.landlords")} value={partyCounts?.landlords} prefix={<BankOutlined />} loading={partyCounts === null} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
           <Card hoverable onClick={() => navigate("/reminders")}>
             <Statistic title={t("dashboard.openReminders")} value={reminderCount ?? undefined} prefix={<BellOutlined />} loading={reminderCount === null} />
           </Card>

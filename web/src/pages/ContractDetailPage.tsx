@@ -1279,10 +1279,10 @@ export default function ContractDetailPage() {
 
       <Descriptions size="small" column={2} style={{ marginBottom: 16 }}>
         <Descriptions.Item label={t("contracts.landlord")}>
-          <Link to={`/parties?highlight=${contract.landlordPartyId}`}>{partyName(contract.landlordPartyId)}</Link>
+          <Link to={`/landlords?highlight=${contract.landlordPartyId}`}>{partyName(contract.landlordPartyId)}</Link>
         </Descriptions.Item>
         <Descriptions.Item label={t("contracts.tenant")}>
-          <Link to={`/parties?highlight=${contract.tenantPartyId}`}>{partyName(contract.tenantPartyId)}</Link>
+          <Link to={`/tenants?highlight=${contract.tenantPartyId}`}>{partyName(contract.tenantPartyId)}</Link>
         </Descriptions.Item>
         <Descriptions.Item label={t("contracts.termStart")}>{contract.termStart}</Descriptions.Item>
         <Descriptions.Item label={t("contracts.termEnd")}>{contract.termEnd}</Descriptions.Item>

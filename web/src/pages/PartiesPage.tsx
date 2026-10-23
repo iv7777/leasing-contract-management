@@ -7,6 +7,7 @@ import type { PartyDto } from "@lcm/shared";
 import { api, ApiError } from "../api/client";
 import { apiErrorMessage } from "../api/errorMessage";
 import { useAuth } from "../auth/AuthContext";
+import { onNoContract, partiesForRole, type PartyRole } from "../api/partyRoles";
 
 const { useBreakpoint } = Grid;
 
@@ -18,7 +19,7 @@ interface ContractSummaryDto {
   status: "draft" | "active" | "expired" | "terminated";
 }
 
-export default function PartiesPage() {
+export default function PartiesPage({ role }: { role: PartyRole }) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const screens = useBreakpoint();
@@ -74,7 +75,9 @@ export default function PartiesPage() {
   };
 
   const displayName = (p: PartyDto) => (i18n.language.startsWith("zh") || !p.nameEn ? p.name : p.nameEn);
-  const visibleParties = showArchived ? parties : parties.filter((p) => !p.archived);
+  const rolePrefix = role === "tenant" ? "tenants" : "landlords";
+  const ofRole = partiesForRole(parties, contracts, role, highlightId);
+  const visibleParties = showArchived ? ofRole : ofRole.filter((p) => !p.archived);
 
   const onCreate = async () => {
     const values = await form.validateFields();
@@ -139,7 +142,7 @@ export default function PartiesPage() {
     <div>
       <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 16 }}>
         <Typography.Title level={4} style={{ margin: 0 }}>
-          {t("parties.title")}
+          {t(`parties.${rolePrefix}Title`)}
         </Typography.Title>
         <Space>
           <Space size={4}>
@@ -148,7 +151,7 @@ export default function PartiesPage() {
           </Space>
           {canCreate && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-              {t("parties.addParty")}
+              {t(`parties.add${role === "tenant" ? "Tenant" : "Landlord"}`)}
             </Button>
           )}
         </Space>
@@ -168,6 +171,7 @@ export default function PartiesPage() {
                 <div>
                   <Typography.Text strong>{displayName(p)}</Typography.Text> <Tag>{t(`parties.${p.type}`)}</Tag>
                   {p.archived && <Tag>{t("common.archived")}</Tag>}
+                  {onNoContract(p.id, contracts) && <Tag color="blue">{t("parties.noContractYet")}</Tag>}
                   <br />
                   <Typography.Text type="secondary">{p.contactDetails}</Typography.Text>
                   <br />
@@ -203,7 +207,11 @@ export default function PartiesPage() {
               title: t("common.name"),
               dataIndex: "name",
               ellipsis: false,
-              render: (_, p) => <div style={{ minWidth: 90, wordBreak: "break-all" }}>{displayName(p)}</div>,
+              render: (_, p) => (
+                <div style={{ minWidth: 90, wordBreak: "break-all" }}>
+                  {displayName(p)} {onNoContract(p.id, contracts) && <Tag color="blue">{t("parties.noContractYet")}</Tag>}
+                </div>
+              ),
             },
             { title: t("parties.type"), dataIndex: "type", width: 90, render: (v: string) => t(`parties.${v}`) },
             {
@@ -260,7 +268,7 @@ export default function PartiesPage() {
       )}
 
       <Modal
-        title={t("parties.addParty")}
+        title={t(`parties.add${role === "tenant" ? "Tenant" : "Landlord"}`)}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         onOk={onCreate}

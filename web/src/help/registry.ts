@@ -10,7 +10,7 @@ const routeTopics: RouteTopic[] = [
   { pattern: /^\/properties$/, topic: "properties.list" },
   { pattern: /^\/contracts\/\d+$/, topic: "contracts.detail" },
   { pattern: /^\/contracts$/, topic: "contracts.list" },
-  { pattern: /^\/parties$/, topic: "parties.list" },
+  { pattern: /^\/(parties|tenants|landlords)$/, topic: "parties.list" },
   { pattern: /^\/reminders$/, topic: "reminders" },
   { pattern: /^\/occupancy$/, topic: "occupancy" },
   { pattern: /^\/users$/, topic: "users" },

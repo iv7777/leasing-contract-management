@@ -4,6 +4,7 @@ import {
   DashboardOutlined,
   HomeOutlined,
   TeamOutlined,
+  BankOutlined,
   UserOutlined,
   MenuOutlined,
   GlobalOutlined,
@@ -82,7 +83,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
     { key: "/contracts", icon: <FileTextOutlined />, label: t("nav.contracts") },
     { key: "/reminders", icon: <BellOutlined />, label: t("nav.reminders") },
     { key: "/occupancy", icon: <PieChartOutlined />, label: t("nav.occupancy") },
-    { key: "/parties", icon: <TeamOutlined />, label: t("nav.parties") },
+    { key: "/tenants", icon: <TeamOutlined />, label: t("nav.tenants") },
+    { key: "/landlords", icon: <BankOutlined />, label: t("nav.landlords") },
     ...(user?.role === "admin"
       ? [
           {
