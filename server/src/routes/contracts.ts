@@ -858,12 +858,16 @@ contractsRouter.patch("/:id/late-penalty-rules", requireRole("admin", "manager")
 // Activation (locks direct edits; further changes must go through amendments)
 // ---------------------------------------------------------------------------
 
-contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
-  const id = Number(req.params.id);
+type ActivationOutcome =
+  | { ok: true; contract: typeof contracts.$inferSelect }
+  | { ok: false; status: number; code: string; message: string; details?: unknown };
+
+/** Activates one draft contract if it passes every check; shared by the single and the "activate all" routes. */
+function activateContract(userId: number, id: number): ActivationOutcome {
   const contract = db.select().from(contracts).where(eq(contracts.id, id)).get();
-  if (!contract) return res.status(404).json({ error: { code: "not_found", message: "Contract not found." } });
+  if (!contract) return { ok: false, status: 404, code: "not_found", message: "Contract not found." };
   if (contract.status !== "draft") {
-    return res.status(409).json({ error: { code: "not_draft", message: "Only a draft contract can be activated." } });
+    return { ok: false, status: 409, code: "not_draft", message: "Only a draft contract can be activated." };
   }
 
   const signedLease = db
@@ -873,14 +877,12 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
     .all()
     .find((d) => d.docType === "signed_lease" && !d.voided);
   if (!signedLease) {
-    return res.status(409).json({ error: { code: "missing_signed_lease", message: "A signed main lease document is required before activation." } });
+    return { ok: false, status: 409, code: "missing_signed_lease", message: "A signed main lease document is required before activation." };
   }
 
   const problems = activationProblems(id);
   if (problems.length > 0) {
-    return res.status(409).json({
-      error: { code: "activation_blocked", message: "This contract can't be activated yet. Fix the items listed and try again.", details: { problems } },
-    });
+    return { ok: false, status: 409, code: "activation_blocked", message: "This contract can't be activated yet. Fix the items listed and try again.", details: { problems } };
   }
 
   // All-or-nothing: a failure part-way must not leave an activated contract
@@ -888,7 +890,7 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
   const updated = db.transaction(() => {
     const row = db.update(contracts).set({ status: "active", updatedAt: new Date().toISOString() }).where(eq(contracts.id, id)).returning().get();
     recordContractVersion(id, row.versionNumber, row.termStart, null);
-    recordAudit({ actorUserId: req.user!.id, action: "contract_activated", entityType: "contract", entityId: id, details: { contract: row.referenceNumber, termStart: row.termStart, termEnd: row.termEnd } });
+    recordAudit({ actorUserId: userId, action: "contract_activated", entityType: "contract", entityId: id, details: { contract: row.referenceNumber, termStart: row.termStart, termEnd: row.termEnd } });
 
     // A lease that hasn't started yet has no history to review, so it joins
     // the nightly billing straight away. One that started earlier stays off
@@ -896,11 +898,40 @@ contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
     const rules = db.select().from(billingRules).where(eq(billingRules.contractId, id)).get();
     if (rules?.billingFrequency === "monthly" && row.termStart.slice(0, 7) >= todayInChina().slice(0, 7)) {
       db.update(billingRules).set({ autoBilling: true }).where(eq(billingRules.contractId, id)).run();
-      recordAudit({ actorUserId: req.user!.id, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { contract: row.referenceNumber, reason: "activated before term start" } });
+      recordAudit({ actorUserId: userId, action: "auto_billing_enabled", entityType: "contract", entityId: id, details: { contract: row.referenceNumber, reason: "activated before term start" } });
     }
     return row;
   });
-  res.json({ contract: updated });
+  return { ok: true, contract: updated };
+}
+
+contractsRouter.post("/:id/activate", requireRole("admin"), (req, res) => {
+  const outcome = activateContract(req.user!.id, Number(req.params.id));
+  if (!outcome.ok) return res.status(outcome.status).json({ error: { code: outcome.code, message: outcome.message, ...(outcome.details ? { details: outcome.details } : {}) } });
+  res.json({ contract: outcome.contract });
+});
+
+// Activates every draft that passes the checks in one go; the ones that don't stay drafts and are reported with why.
+contractsRouter.post("/activate-all", requireRole("admin"), (req, res) => {
+  const parsed = z.object({ contractIds: z.array(z.number().int()).max(500).optional() }).safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid request." } });
+  const wanted = parsed.data.contractIds ? new Set(parsed.data.contractIds) : null;
+  const drafts = db
+    .select()
+    .from(contracts)
+    .where(eq(contracts.status, "draft"))
+    .all()
+    .filter((c) => !wanted || wanted.has(c.id))
+    .sort((a, b) => a.referenceNumber.localeCompare(b.referenceNumber));
+
+  const results = drafts.map((c) => {
+    const outcome = activateContract(req.user!.id, c.id);
+    return outcome.ok
+      ? { id: c.id, referenceNumber: c.referenceNumber, ok: true as const }
+      : { id: c.id, referenceNumber: c.referenceNumber, ok: false as const, error: { code: outcome.code, message: outcome.message, ...(outcome.details ? { details: outcome.details } : {}) } };
+  });
+  recordAudit({ actorUserId: req.user!.id, action: "contracts_activate_all", entityType: "contract", details: { count: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length } });
+  res.json({ results });
 });
 
 // ---------------------------------------------------------------------------

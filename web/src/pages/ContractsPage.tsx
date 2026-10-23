@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, Card } from "antd";
-import { PlusOutlined, DownloadOutlined } from "@ant-design/icons";
+import { PlusOutlined, DownloadOutlined, CheckCircleOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { PartyDto } from "@lcm/shared";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
+import { apiErrorMessage } from "../api/errorMessage";
 import { useAuth } from "../auth/AuthContext";
 import { HelpIcon } from "../help/HelpIcon";
 import DateField from "../components/DateField";
@@ -102,6 +103,38 @@ export default function ContractsPage() {
 
   const canCreate = user?.role === "admin" || user?.role === "manager";
 
+  // Admin: every draft on the list that passes the activation checks goes live; the rest stay drafts, with the reason.
+  const drafts = visibleContracts.filter((c) => c.status === "draft");
+  const [activating, setActivating] = useState(false);
+  const [activationResult, setActivationResult] = useState<{ id: number; referenceNumber: string; ok: boolean; error?: { code: string; message: string; details?: unknown } }[] | null>(null);
+  const failedActivations = (activationResult ?? []).filter((x) => !x.ok);
+  const activateAll = () => {
+    Modal.confirm({
+      title: t("contracts.activateAllTitle", { count: drafts.length }),
+      width: 520,
+      content: (
+        <div>
+          <Typography.Paragraph>{t("contracts.activateAllBody")}</Typography.Paragraph>
+          <Typography.Text type="secondary">{drafts.map((c) => c.referenceNumber).join(", ")}</Typography.Text>
+        </div>
+      ),
+      okText: t("contracts.activateAllConfirm", { count: drafts.length }),
+      cancelText: t("common.cancel"),
+      onOk: async () => {
+        setActivating(true);
+        try {
+          const r = await api.post<{
+            results: { id: number; referenceNumber: string; ok: boolean; error?: { code: string; message: string; details?: unknown } }[];
+          }>("/contracts/activate-all", { contractIds: drafts.map((c) => c.id) });
+          setActivationResult(r.results);
+        } finally {
+          setActivating(false);
+          load();
+        }
+      },
+    });
+  };
+
   return (
     <div>
       <Space style={{ width: "100%", justifyContent: "space-between", marginBottom: 16 }}>
@@ -116,6 +149,11 @@ export default function ContractsPage() {
           <Button icon={<DownloadOutlined />} onClick={() => window.open(`/api/contracts.csv?lang=${exportLang}`, "_blank")}>
             {t("contracts.exportCsv")}
           </Button>
+          {user?.role === "admin" && (
+            <Button icon={<CheckCircleOutlined />} disabled={drafts.length === 0} loading={activating} onClick={activateAll}>
+              {t("contracts.activateAll", { count: drafts.length })}
+            </Button>
+          )}
           {canCreate && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
               {t("contracts.addContract")}
@@ -230,6 +268,28 @@ export default function ContractsPage() {
           ]}
         />
       )}
+
+      <Modal
+        open={activationResult !== null}
+        title={t("contracts.activateAllDone", { ok: (activationResult?.length ?? 0) - failedActivations.length, failed: failedActivations.length })}
+        onCancel={() => setActivationResult(null)}
+        footer={<Button onClick={() => setActivationResult(null)}>{t("common.close")}</Button>}
+        width={560}
+      >
+        {failedActivations.length > 0 && (
+          <div style={{ maxHeight: 360, overflow: "auto" }}>
+            <Typography.Paragraph type="secondary">{t("contracts.activateAllStayDraft")}</Typography.Paragraph>
+            {failedActivations.map((f) => (
+              <div key={f.id} style={{ marginBottom: 8 }}>
+                <Typography.Text strong>
+                  <Link to={`/contracts/${f.id}`}>{f.referenceNumber}</Link>
+                </Typography.Text>
+                <div style={{ whiteSpace: "pre-line" }}>{apiErrorMessage(new ApiError(f.error!.code, f.error!.message, 409, f.error!.details), t)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         title={t("contracts.addContract")}
