@@ -110,6 +110,7 @@ interface UsageEntryDto {
   source: string | null;
   billed?: boolean;
   canEdit?: boolean;
+  lockReason?: "paid" | "expired" | "not_yours" | null;
   editableUntil?: string | null;
   photoDocumentId?: number | null;
   photoMissing?: boolean;
@@ -472,7 +473,9 @@ export default function ContractDetailPage() {
                                     editReceiptForm.setFieldsValue({ receivedDate: r.receivedDate, amount: r.amountFen / 100, paymentMethod: r.paymentMethod, externalReference: r.externalReference ?? undefined });
                                     setEditReceiptModal(r);
                                   }}
-                                />
+                                >
+                                  {timeLeft(r.editableUntil)}
+                                </Button>
                               </Tooltip>
                             )}
                             {user?.role === "admin" && (
@@ -1540,8 +1543,8 @@ export default function ContractDetailPage() {
               const actionsOf = (u: UsageEntryDto) => (
                 <Space>
                                   {u.canEdit === false ? (
-                                    <Tooltip title={t("contracts.usageLocked")}>
-                                      <Button size="small" icon={<LockOutlined />} disabled />
+                                    <Tooltip title={t(`contracts.usageLocked.${u.lockReason ?? "paid"}`)}>
+                                      <Button size="small" icon={<LockOutlined />} onClick={() => message.info(t(`contracts.usageLocked.${u.lockReason ?? "paid"}`))} />
                                     </Tooltip>
                                   ) : (
                                     <Tooltip title={u.billed ? t("contracts.editableFor", { time: timeLeft(u.editableUntil) }) : undefined}>
@@ -1552,7 +1555,9 @@ export default function ContractDetailPage() {
                                           editUsageEntryForm.setFieldsValue({ ...u, amount: u.amountFen != null ? u.amountFen / 100 : undefined });
                                           setEditUsageEntryModal(u);
                                         }}
-                                      />
+                                      >
+                                        {u.billed ? timeLeft(u.editableUntil) : ""}
+                                      </Button>
                                     </Tooltip>
                                   )}
                                   {!u.billed && (
@@ -1854,7 +1859,9 @@ export default function ContractDetailPage() {
                                     editDepositTxnForm.setFieldsValue({ transactionDate: txn.transactionDate, amount: Math.abs(txn.amountFen) / 100, reason: txn.reason });
                                     setEditDepositTxnModal(txn);
                                   }}
-                                />
+                                >
+                                  {timeLeft(txn.editableUntil)}
+                                </Button>
                               </Tooltip>
                             )}
                             {user?.role === "admin" && (
@@ -2803,7 +2810,7 @@ export default function ContractDetailPage() {
         destroyOnClose
       >
         <Form form={editUsageEntryForm} layout="vertical">
-          {editUsageEntryModal?.billed && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("contracts.usageBilledEditHint")} />}
+          {editUsageEntryModal?.billed && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("contracts.usageBilledEditHint", { time: timeLeft(editUsageEntryModal.editableUntil) })} />}
           {!editUsageEntryModal?.billed && <MonthShortcuts form={editUsageEntryForm} />}
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
             <DateField disabled={!!editUsageEntryModal?.billed} />

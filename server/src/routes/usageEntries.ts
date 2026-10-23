@@ -16,7 +16,7 @@ import { changesBetween, chargeFacts, contractRef, streamName } from "../lib/aud
 import { Decimal, daysInMonth } from "@lcm/shared";
 
 import { isoDate, decimalString } from "../lib/validate.js";
-import { canEditEntry, editWindowEnd } from "../lib/editWindow.js";
+import { canEditEntry, editWindowEnd, withinEditWindow } from "../lib/editWindow.js";
 import { rebillStreams } from "../billing/generate.js";
 
 const WHOLE_MONTH = "A meter reading covers one whole calendar month, from its first day to its last.";
@@ -124,13 +124,17 @@ usageEntriesRouter.get("/contracts/:contractId/usage-entries", (req, res) => {
     usageEntries: rows.map((r) => {
       const billed = chargeAlreadyPosted(contractId, r.pricingStreamId, r.serviceStart, r.serviceEnd);
       const photo = photos.get(r.id);
+      const paid = billed && billedChargesFor(r).some((c) => hasMoneyOn(c.id));
+      // Why a billed reading can't be corrected any more (null while it can).
+      const lockReason = !billed ? null : paid ? "paid" : !withinEditWindow(r.createdAt) ? "expired" : !canEditEntry(req.user!, r.enteredBy, r.createdAt) ? "not_yours" : null;
       return {
         ...r,
         photoDocumentId: photo?.id ?? null,
         photoMissing: photo ? !fs.existsSync(photo.filePath) : false,
         billed,
         // Unbilled readings can always be edited. A billed one can be corrected for 24 hours if no payment is on its bill.
-        canEdit: !billed || (canEditEntry(req.user!, r.enteredBy, r.createdAt) && billedChargesFor(r).every((c) => !hasMoneyOn(c.id))),
+        canEdit: lockReason === null,
+        lockReason,
         editableUntil: billed ? editWindowEnd(r.createdAt) : null,
       };
     }),
