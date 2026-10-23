@@ -42,6 +42,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
+import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
 import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP } from "../components/billing/format";
@@ -334,6 +335,7 @@ export default function ContractDetailPage() {
   const [rateModal, setRateModal] = useState<{ streamId: number; rate?: RateScheduleDto } | null>(null);
   const [usageEntryModal, setUsageEntryModal] = useState(false);
   const [editUsageEntryModal, setEditUsageEntryModal] = useState<UsageEntryDto | null>(null);
+  const [detailChargeId, setDetailChargeId] = useState<number | null>(null);
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [editConcessionModal, setEditConcessionModal] = useState<ConcessionDto | null>(null);
@@ -452,6 +454,8 @@ export default function ContractDetailPage() {
   const termStart = contract?.termStart;
   const areaOfUnit = (unitId?: number) => availableUnits.find((u) => u.id === unitId)?.rentableAreaSqm;
   const feeName = (feeType: string) => t(`contracts.${camel(feeType)}`);
+  // A bill is shown by the name of its item (two electricity items would otherwise look the same).
+  const itemNameOf = (streamId: number, feeType: string) => streams.find((s) => s.id === streamId)?.label ?? feeName(feeType);
   // A usage service fee follows one of this contract's metered (usage-based) items.
   const meteredStreamOptions = streams
     .filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)))
@@ -1855,6 +1859,32 @@ export default function ContractDetailPage() {
                     <Descriptions.Item label={t("contracts.depositBalance")}>{yuan(statement.depositBalanceFen)}</Descriptions.Item>
                   </Descriptions>
                 )}
+                {statement && (
+                  <div style={{ marginTop: 16 }}>
+                    <Typography.Title level={5}>{t("chargeDetail.statementBills")}</Typography.Title>
+                    <Table
+                      size="small"
+                      rowKey="id"
+                      pagination={false}
+                      scroll={{ x: true }}
+                      dataSource={charges.filter((c) => c.status === "posted" && c.serviceStart >= statement.periodStart && c.serviceStart <= statement.periodEnd)}
+                      onRow={(c: ChargeDto) => ({ onClick: () => setDetailChargeId(c.id), style: { cursor: "pointer" } })}
+                      columns={[
+                        { title: t("contracts.fee"), render: (_: unknown, c: ChargeDto) => itemNameOf(c.pricingStreamId, c.feeType) },
+                        { title: t("contracts.dueDate"), dataIndex: "dueDate" },
+                        { title: t("contracts.amount"), dataIndex: "amountFen", align: "right" as const, render: yuan },
+                        {
+                          title: t("contracts.balance"),
+                          align: "right" as const,
+                          render: (_: unknown, c: ChargeDto) => {
+                            const b = chargeBalances.find((x) => x.chargeId === c.id);
+                            return b ? yuan(b.balanceFen) : "";
+                          },
+                        },
+                      ]}
+                    />
+                  </div>
+                )}
               </>
               ),
           },
@@ -1984,12 +2014,13 @@ export default function ContractDetailPage() {
                   rowKey="id"
                   size="small"
                   dataSource={charges}
+                  onRow={(c: ChargeDto) => ({ onClick: () => setDetailChargeId(c.id), style: { cursor: "pointer" } })}
                   columns={[
                     {
-                      title: t("contracts.feeType"),
+                      title: t("contracts.fee"),
                       render: (_: unknown, c: ChargeDto) => (
                         <Space size={4} wrap>
-                          {t(`contracts.${camel(c.feeType)}`)}
+                          {itemNameOf(c.pricingStreamId, c.feeType)}
                           {c.calculationSnapshotJson?.includes('"opening_balance"') && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}
                         </Space>
                       ),
@@ -2017,24 +2048,28 @@ export default function ContractDetailPage() {
                         );
                       },
                     },
-                    ...(user?.role === "admin"
-                      ? [
-                          {
-                            title: "",
-                            key: "void",
-                            render: (_: unknown, c: ChargeDto) => {
+                    {
+                      title: "",
+                      key: "details",
+                      render: (_: unknown, c: ChargeDto) => (
+                        <Space size={0}>
+                          <Button size="small" type="link" onClick={(e) => { e.stopPropagation(); setDetailChargeId(c.id); }}>
+                            {t("chargeDetail.title")}
+                          </Button>
+                          {user?.role === "admin" &&
+                            (() => {
                               const b = chargeBalances.find((x) => x.chargeId === c.id);
                               // Charges with payments or amendment adjustments can't be voided.
                               if (c.status !== "posted" || !b || b.allocatedFen !== 0 || b.adjustedFen !== 0) return null;
                               return (
-                                <Button size="small" danger type="text" onClick={() => setVoidModal({ chargeId: c.id })}>
+                                <Button size="small" danger type="text" onClick={(e) => { e.stopPropagation(); setVoidModal({ chargeId: c.id }); }}>
                                   {t("billing.void.button")}
                                 </Button>
                               );
-                            },
-                          },
-                        ]
-                      : []),
+                            })()}
+                        </Space>
+                      ),
+                    },
                   ]}
                 />
               </>
@@ -3358,6 +3393,11 @@ export default function ContractDetailPage() {
         charges={charges}
         onClose={() => setReadingsGridOpen(false)}
         onDone={load}
+      />
+      <ChargeDetailDrawer
+        chargeId={detailChargeId}
+        onClose={() => setDetailChargeId(null)}
+        onVoid={user?.role === "admin" ? (cid) => { setDetailChargeId(null); setVoidModal({ chargeId: cid }); } : undefined}
       />
       <Modal
         title={t("billing.void.title")}

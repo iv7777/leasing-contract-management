@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { camel, yuan } from "./format";
+import ChargeDetailDrawer from "./ChargeDetailDrawer";
 
 type ItemStatus = "overdue" | "due" | "upcoming" | "projected";
 
@@ -46,6 +47,7 @@ export default function BillingOverview() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [data, setData] = useState<Overview | null>(null);
+  const [detailChargeId, setDetailChargeId] = useState<number | null>(null);
 
   useEffect(() => {
     void api.get<Overview>("/billing/overview").then(setData);
@@ -175,8 +177,10 @@ export default function BillingOverview() {
               rowKey={(i: Item) => `${i.chargeId ?? "p"}-${i.feeType}-${i.serviceStart}`}
               dataSource={row.items}
               pagination={false}
+              // A bill that exists (not a projected one) opens its details.
+              onRow={(i: Item) => (i.chargeId === null ? {} : { onClick: () => setDetailChargeId(i.chargeId), style: { cursor: "pointer" } })}
               columns={[
-                { title: t("contracts.feeType"), dataIndex: "feeType", render: (v: string) => t(`contracts.${camel(v)}`) },
+                { title: t("contracts.fee"), dataIndex: "feeType", render: (v: string) => t(`contracts.${camel(v)}`) },
                 { title: t("billing.month"), dataIndex: "serviceStart", render: (v: string) => v.slice(0, 7) },
                 { title: t("contracts.dueDate"), dataIndex: "dueDate" },
                 { title: t("contracts.amount"), dataIndex: "amountFen", align: "right" as const, render: yuan },
@@ -205,6 +209,7 @@ export default function BillingOverview() {
           },
         ]}
       />
+      <ChargeDetailDrawer chargeId={detailChargeId} onClose={() => setDetailChargeId(null)} />
     </div>
   );
 }
