@@ -27,7 +27,7 @@ import {
   Upload,
   message,
 } from "antd";
-import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined, InfoCircleOutlined } from "@ant-design/icons";
+import { PlusOutlined, ThunderboltOutlined, DownloadOutlined, FilePdfOutlined, UploadOutlined, LockOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { FormInstance } from "antd";
 import { useTranslation } from "react-i18next";
@@ -2133,9 +2133,6 @@ export default function ContractDetailPage() {
                       width: 90,
                       render: (_: unknown, c: ChargeDto) => (
                         <Space size={0}>
-                          <Tooltip title={t("chargeDetail.title")}>
-                            <Button size="small" type="text" icon={<InfoCircleOutlined />} onClick={(e) => { e.stopPropagation(); setDetailChargeId(c.id); }} />
-                          </Tooltip>
                           {user?.role === "admin" &&
                             (() => {
                               const b = chargeBalances.find((x) => x.chargeId === c.id);
