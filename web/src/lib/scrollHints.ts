@@ -1,4 +1,4 @@
-/** Anything that scrolls sideways (wide tables, the summary chips) shows a ‹ or › with a fade on the side that still has
+/** Anything that scrolls sideways (wide tables, the summary chips, tab bars) shows a ‹ or › with a fade on the side that still has
  * hidden content, and tapping the arrow slides along. The arrows are drawn by the stylesheet from two attributes this
  * sets on the container: data-hint-left / data-hint-right. */
 
@@ -84,6 +84,19 @@ export function installScrollHints(): () => void {
   // Tapping an arrow slides most of the way along.
   const onClick = (e: MouseEvent) => {
     const el = e.target as HTMLElement | null;
+    // Tab bars scroll by an offset of their own, not by scrollLeft: nudge them the way a sideways wheel does.
+    const wrap = el?.closest<HTMLElement>(".ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap");
+    if (wrap) {
+      const r = wrap.getBoundingClientRect();
+      const toLeft = wrap.classList.contains("ant-tabs-nav-wrap-ping-left") && e.clientX - r.left <= ARROW_W;
+      const toRight = wrap.classList.contains("ant-tabs-nav-wrap-ping-right") && r.right - e.clientX <= ARROW_W;
+      if (toLeft || toRight) {
+        e.preventDefault();
+        e.stopPropagation();
+        wrap.dispatchEvent(new WheelEvent("wheel", { deltaX: (toLeft ? -1 : 1) * r.width * 0.8, bubbles: true, cancelable: true }));
+        return;
+      }
+    }
     const host = el?.closest<HTMLElement>("[data-hint-left], [data-hint-right]");
     const t = host ? tracked.get(host) : undefined;
     if (!host || !t) return;
