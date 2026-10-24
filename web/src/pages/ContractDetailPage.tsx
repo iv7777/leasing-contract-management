@@ -307,6 +307,8 @@ export default function ContractDetailPage() {
   const [concessionModal, setConcessionModal] = useState(false);
   const [depositModal, setDepositModal] = useState(false);
   const [generateModal, setGenerateModal] = useState(false);
+  const [oneOffModal, setOneOffModal] = useState(false);
+  const [oneOffForm] = Form.useForm();
   const [catchUpOpen, setCatchUpOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
@@ -956,6 +958,33 @@ export default function ContractDetailPage() {
       load();
     } catch (err) {
       handleError(err);
+    }
+  };
+
+  // An Admin adds a bill the system would not make itself; a confirm repeats what is about to be billed.
+  const onAddOneOff = async () => {
+    try {
+      const v = await oneOffForm.validateFields();
+      const amountFen = Math.round(v.amount * 100);
+      Modal.confirm({
+        title: t("contracts.oneOffConfirmTitle"),
+        content: t("contracts.oneOffConfirm", { amount: yuan(amountFen), tenant: partyName(contract!.tenantPartyId), item: itemNameOf(v.pricingStreamId, streams.find((s) => s.id === v.pricingStreamId)?.feeType ?? ""), period: periodLabel(v.serviceStart, v.serviceEnd) }),
+        okText: t("contracts.oneOffAdd"),
+        cancelText: t("common.cancel"),
+        onOk: async () => {
+          try {
+            await api.post(`/contracts/${id}/charges/one-off`, { pricingStreamId: v.pricingStreamId, serviceStart: v.serviceStart, serviceEnd: v.serviceEnd, dueDate: v.dueDate, amountFen, reason: v.reason });
+            message.success(t("contracts.oneOffDone"));
+            setOneOffModal(false);
+            oneOffForm.resetFields();
+            load();
+          } catch (err) {
+            handleError(err);
+          }
+        },
+      });
+    } catch {
+      // The form shows what is missing.
     }
   };
 
@@ -2069,6 +2098,11 @@ export default function ContractDetailPage() {
                     {t("contracts.generateCharges")}
                   </Button>
                 )}
+                {user?.role === "admin" && contract.status !== "draft" && (
+                  <Button icon={<PlusOutlined />} onClick={() => setOneOffModal(true)} style={{ marginBottom: 12, marginLeft: 8 }}>
+                    {t("contracts.oneOffAdd")}
+                  </Button>
+                )}
                 {charges.length > 0 && (
                   <Space size={[4, 8]} wrap style={{ marginBottom: 12 }}>
                     {(["all", "unpaid", "overdue", "due", "later", "paid"] as ChargeFilter[]).map((f) => {
@@ -2098,6 +2132,11 @@ export default function ContractDetailPage() {
                                 {t("openingBalance.broughtForward")}
                               </Tag>
                             )}
+                            {c.calculationSnapshotJson?.includes('"kind":"one_off"') && (
+                              <Tag color="purple" style={{ marginLeft: 6 }}>
+                                {t("contracts.oneOff")}
+                              </Tag>
+                            )}
                           </>
                         ),
                         period: periodLabel(c.serviceStart, c.serviceEnd),
@@ -2121,6 +2160,7 @@ export default function ContractDetailPage() {
                         <Space size={4} wrap>
                           {itemNameOf(c.pricingStreamId, c.feeType)}
                           {c.calculationSnapshotJson?.includes('"opening_balance"') && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}
+                          {c.calculationSnapshotJson?.includes('"kind":"one_off"') && <Tag color="purple">{t("contracts.oneOff")}</Tag>}
                         </Space>
                       ),
                     },
@@ -3004,6 +3044,32 @@ export default function ContractDetailPage() {
           </Form.Item>
           <Form.Item name="formulaBasis" label={t("contracts.formulaBasis")}>
             <Input placeholder={t("contracts.formulaBasisPlaceholder")} />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal title={t("contracts.oneOffAdd")} open={oneOffModal} onCancel={() => setOneOffModal(false)} onOk={onAddOneOff} okText={t("contracts.oneOffReview")} cancelText={t("common.cancel")} destroyOnClose>
+        <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.oneOffHint")} />
+        <Form form={oneOffForm} layout="vertical" preserve={false}>
+          <Form.Item name="pricingStreamId" label={t("contracts.fee")} rules={[{ required: true }]}>
+            <Select options={streams.map((s) => ({ value: s.id, label: itemNameOf(s.id, s.feeType) }))} />
+          </Form.Item>
+          <Space size={12} wrap style={{ width: "100%" }}>
+            <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
+              <DateField />
+            </Form.Item>
+            <Form.Item name="serviceEnd" label={t("contracts.serviceEnd")} rules={[{ required: true }]}>
+              <DateField />
+            </Form.Item>
+          </Space>
+          <Form.Item name="dueDate" label={t("contracts.dueDate")} rules={[{ required: true }]}>
+            <DateField />
+          </Form.Item>
+          <Form.Item name="amount" label={t("contracts.amountYuan")} rules={[{ required: true }]}>
+            <InputNumber style={{ width: "100%" }} min={0.01} precision={2} />
+          </Form.Item>
+          <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true, min: 3, message: t("contracts.oneOffReasonHint") }]}>
+            <Input.TextArea rows={2} maxLength={300} />
           </Form.Item>
         </Form>
       </Modal>

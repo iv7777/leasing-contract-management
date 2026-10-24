@@ -47,7 +47,7 @@ interface Detail {
     voidReason: string | null;
     broughtForward: boolean;
   };
-  snapshot: { subperiods?: Subperiod[]; totalBeforeRounding?: string } | null;
+  snapshot: { subperiods?: Subperiod[]; totalBeforeRounding?: string; kind?: string; reason?: string } | null;
   balance: null | { balanceFen: number; allocatedFen: number; adjustedFen: number; isOverdue: boolean; daysOverdue: number; latePenaltyFen: number };
   payments: { id: number; receiptId: number; amountFen: number; reversal: boolean; receivedDate: string | null; paymentMethod: string | null }[];
   adjustments: { id: number; amountFen: number; reason: string; createdAt: string; by: string | null }[];
@@ -149,6 +149,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
         {c.status === "voided" && (
           <Alert type="warning" showIcon message={t("chargeDetail.voidedBy", { who: c.voidedBy ?? "—", when: (c.voidedAt ?? "").slice(0, 10) })} description={systemReasonLabel(t, c.voidReason) || undefined} />
         )}
+        {data.snapshot?.kind === "one_off" && <Alert type="info" showIcon message={t("contracts.oneOff")} description={data.snapshot.reason} />}
         {c.status === "projected" && <Alert type="info" showIcon message={t("chargeDetail.notBilledTitle")} description={t("chargeDetail.notBilledNote")} />}
         {c.broughtForward && <Alert type="info" showIcon message={t("chargeDetail.broughtForwardNote", { date: c.serviceStart })} />}
         <Descriptions bordered size="small" column={1}>

@@ -23,6 +23,7 @@ interface Line {
   serviceStart?: string;
   serviceEnd?: string;
   broughtForward?: boolean;
+  oneOff?: boolean;
   paymentMethod?: string;
   reference?: string | null;
   reason?: string;
@@ -310,7 +311,7 @@ ${streamId === null ? `<p>${esc(t("statement.depositHeld"))}: ${esc(yuan(data.de
                   title: t("statement.description"),
                   render: (_: unknown, l: Line) => (
                     <span style={style(l)}>
-                      {describe(l)} {l.broughtForward && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}
+                      {describe(l)} {l.broughtForward && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}{l.oneOff && <Tag color="purple">{t("contracts.oneOff")}</Tag>}
                       {mutedTag(l)}
                     </span>
                   ),

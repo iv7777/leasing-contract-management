@@ -12,6 +12,7 @@ export interface StatementCharge {
   amountFen: number;
   status: "posted" | "voided";
   broughtForward: boolean;
+  oneOff?: boolean;
 }
 export interface StatementAdjustment {
   id: number;
@@ -50,6 +51,7 @@ export interface StatementLine {
   serviceStart?: string;
   serviceEnd?: string;
   broughtForward?: boolean;
+  oneOff?: boolean;
   /** Payments. */
   receiptId?: number;
   paymentMethod?: string;
@@ -104,7 +106,7 @@ export function buildAccountStatement(
     const effect = muted ? 0 : c.amountFen;
     all.push({
       key: `c${c.id}`, date: c.dueDate, kind: "charge", chargeId: c.id, pricingStreamId: c.pricingStreamId, feeType: c.feeType,
-      serviceStart: c.serviceStart, serviceEnd: c.serviceEnd, broughtForward: c.broughtForward,
+      serviceStart: c.serviceStart, serviceEnd: c.serviceEnd, broughtForward: c.broughtForward, oneOff: c.oneOff,
       effectFen: effect, debitFen: c.amountFen, creditFen: 0, muted,
     });
   }

@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { billingRules, billingRuns, charges, chargeAdjustments, contracts, parties, pricingStreams, receiptAllocations } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
+import { isoDate, positiveFen } from "../lib/validate.js";
+import { pricingStreamBelongsToContract } from "../lib/ownership.js";
+import { generateChargeLines } from "../billing/chargeEngine.js";
 import { recordAudit } from "../lib/audit.js";
 import { contractRef, chargeFacts } from "../lib/auditDetail.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
@@ -112,6 +115,82 @@ billingRouter.post("/contracts/:id/billing/pause", requireRole("admin"), (req, r
 // ---------------------------------------------------------------------------
 
 const voidSchema = z.object({ reason: z.string().trim().min(3) });
+
+const oneOffSchema = z.object({
+  pricingStreamId: z.number().int(),
+  serviceStart: isoDate,
+  serviceEnd: isoDate,
+  dueDate: isoDate,
+  amountFen: positiveFen,
+  reason: z.string().trim().min(3).max(300),
+});
+
+/** An Admin adds a bill the system would never make by itself (a forgotten month, a repair the tenant owes). It is an
+ * ordinary bill in every way — shown, paid, voided like the others — marked one-off with its reason. */
+billingRouter.post("/contracts/:id/charges/one-off", requireRole("admin"), (req, res) => {
+  const contractId = Number(req.params.id);
+  if (!canAccessContract(req.user!, contractId)) return res.status(403).json(forbidden);
+  if (rejectIfDraft(res, contractId)) return;
+  const parsed = oneOffSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Give the item, the period, the due date, a positive amount and a reason (at least 3 characters)." } });
+  const d = parsed.data;
+  if (d.serviceStart > d.serviceEnd) return res.status(400).json({ error: { code: "invalid_period", message: "The service start can't be after the service end." } });
+  if (!pricingStreamBelongsToContract(d.pricingStreamId, contractId)) {
+    return res.status(400).json({ error: { code: "invalid_reference", message: "That item does not belong to this contract." } });
+  }
+  if (d.serviceStart > todayInChina()) {
+    return res.status(400).json({ error: { code: "future_period", message: "A one-off bill is for a period that has already started. Future months are billed by the system." } });
+  }
+  const contract = db.select().from(contracts).where(eq(contracts.id, contractId)).get()!;
+  const stream = db.select().from(pricingStreams).where(eq(pricingStreams.id, d.pricingStreamId)).get()!;
+
+  const same = db
+    .select()
+    .from(charges)
+    .where(and(eq(charges.contractId, contractId), eq(charges.pricingStreamId, d.pricingStreamId), eq(charges.serviceStart, d.serviceStart), eq(charges.serviceEnd, d.serviceEnd), eq(charges.status, "posted")))
+    .get();
+  if (same) {
+    return res.status(409).json({ error: { code: "duplicate_charge", message: "This item already has a bill for that period. Void it first, or choose a different period." } });
+  }
+  // A month the system bills by itself must not be taken over: it would stop the regular bill being made.
+  try {
+    const ctx = loadChargeContext(contractId);
+    const result = generateChargeLines(ctx.input, d.serviceStart, d.serviceEnd);
+    const wouldBill = result.lines.some((l) => l.pricingStreamId === d.pricingStreamId && l.serviceStart === d.serviceStart && l.serviceEnd === d.serviceEnd);
+    // A metered month still waiting for its reading will be billed from it: enter the reading instead.
+    const waitingForReading = result.missingUsage.some((m) => m.pricingStreamId === d.pricingStreamId);
+    if (wouldBill || waitingForReading) {
+      return res.status(409).json({ error: { code: "billed_automatically", message: "The system bills this item for that period itself (for a metered item: from its reading). Use Generate charges, enter the reading, or wait for the nightly run instead." } });
+    }
+  } catch {
+    // If the plan can't be worked out, the duplicate check above still protects the period.
+  }
+
+  const created = db
+    .insert(charges)
+    .values({
+      contractId,
+      pricingStreamId: d.pricingStreamId,
+      feeType: stream.feeType,
+      serviceStart: d.serviceStart,
+      serviceEnd: d.serviceEnd,
+      dueDate: d.dueDate,
+      amountFen: d.amountFen,
+      calculationSnapshotJson: JSON.stringify({ kind: "one_off", reason: d.reason, addedBy: req.user!.id }),
+      sourceContractVersion: contract.versionNumber,
+    })
+    .returning()
+    .get();
+  recordAudit({
+    actorUserId: req.user!.id,
+    action: "charge_added_one_off",
+    entityType: "charge",
+    entityId: created.id,
+    reason: d.reason,
+    details: { ...chargeFacts(created.id), dueDate: d.dueDate },
+  });
+  res.status(201).json({ charge: created });
+});
 
 billingRouter.post("/charges/:id/void", requireRole("admin"), (req, res) => {
   const id = Number(req.params.id);

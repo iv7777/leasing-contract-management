@@ -44,7 +44,7 @@ accountStatementRouter.get("/contracts/:id/account-statement", (req, res) => {
     {
       charges: ledger.chargesRaw.map((c) => ({
         id: c.id, pricingStreamId: c.pricingStreamId, feeType: c.feeType, serviceStart: c.serviceStart, serviceEnd: c.serviceEnd,
-        dueDate: c.dueDate, amountFen: c.amountFen, status: c.status, broughtForward: broughtForwardId(c.calculationSnapshotJson) !== null,
+        dueDate: c.dueDate, amountFen: c.amountFen, status: c.status, broughtForward: broughtForwardId(c.calculationSnapshotJson) !== null, oneOff: c.calculationSnapshotJson.includes('"kind":"one_off"'),
       })),
       adjustments: ledger.adjustmentsRaw.map((a) => ({ id: a.id, chargeId: a.chargeId, amountFen: a.amountFen, reason: a.reason, date: chinaDay(a.createdAt) })),
       receipts: ledger.receiptsRaw.map((r) => ({
