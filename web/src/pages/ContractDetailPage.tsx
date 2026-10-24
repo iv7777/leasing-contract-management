@@ -264,7 +264,10 @@ export default function ContractDetailPage() {
   const { t, i18n } = useTranslation();
   const exportLang = i18n.language.startsWith("zh") ? "zh" : "en";
   const { user } = useAuth();
-  const isPhone = !Grid.useBreakpoint().md;
+  const breakpoints = Grid.useBreakpoint();
+  const isPhone = !breakpoints.md;
+  // Wide enough for the start and end dates to sit in their own columns.
+  const isWide = !!breakpoints.lg;
 
   const [contract, setContract] = useState<ContractDto | null>(null);
   const [billingRulesInfo, setBillingRulesInfo] = useState<BillingRulesDto | null>(null);
@@ -486,6 +489,40 @@ export default function ContractDetailPage() {
                 },
         ]
       : [];
+  // What can be done to a deposit entry: correct or remove it in its window, reverse it (Admin), or see how it ended.
+  const depositActions = (txn: DepositTransactionDto) => {
+    const reversal = depositTxns.find((t) => t.reversalOfId === txn.id);
+    if (reversal) return reversal.removedAt ? <Tag>{t("contracts.removed")}</Tag> : <Tag color="red">{t("contracts.reversed")}</Tag>;
+    if (txn.transactionType === "reversal") return txn.removedAt ? <Tag>{t("contracts.removed")}</Tag> : null;
+    return (
+      <Space>
+        {txn.canEdit && (
+          <Tooltip title={t("contracts.editableFor", { time: timeLeft(txn.editableUntil) })}>
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                editDepositTxnForm.setFieldsValue({ transactionDate: txn.transactionDate, amount: Math.abs(txn.amountFen) / 100, reason: txn.reason });
+                setEditDepositTxnModal(txn);
+              }}
+            >
+              {timeLeft(txn.editableUntil)}
+            </Button>
+          </Tooltip>
+        )}
+        {txn.canEdit && (
+          <Popconfirm title={t("contracts.confirmRemoveDeposit")} okText={t("contracts.removeEntry")} cancelText={t("common.cancel")} onConfirm={() => onRemoveEntry(`/deposit-transactions/${txn.id}/remove`)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        )}
+        {user?.role === "admin" && (
+          <Button size="small" danger onClick={() => setReverseDepositTxnModal({ depositTxnId: txn.id })}>
+            {t("contracts.reverse")}
+          </Button>
+        )}
+      </Space>
+    );
+  };
   // Entries taken back during their correction window are out of the way unless asked for.
   const removedDepositIds = new Set(depositTxns.filter((x) => x.removedAt && x.reversalOfId !== null).map((x) => x.reversalOfId));
   const shownReceipts = showRemoved ? receipts : receipts.filter((r) => !r.removedAt);
@@ -1932,54 +1969,49 @@ export default function ContractDetailPage() {
                     <Typography.Text type="secondary">{t("contracts.showRemoved")}</Typography.Text>
                   </Space>
                 )}
+                {isPhone ? (
+                  <List
+                    bordered
+                    size="small"
+                    dataSource={shownDepositTxns}
+                    locale={{ emptyText: t("common.noneYet") }}
+                    renderItem={(txn: DepositTransactionDto) => (
+                      <List.Item style={{ display: "block" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <Typography.Text strong>
+                            {txn.transactionDate} · {t(`contracts.depositTxnTypes.${txn.transactionType}`, { defaultValue: txn.transactionType })}
+                          </Typography.Text>
+                          <Typography.Text style={{ whiteSpace: "nowrap" }}>{yuan(txn.amountFen)}</Typography.Text>
+                        </div>
+                        <Typography.Paragraph type="secondary" style={{ margin: "4px 0", fontSize: 13 }}>
+                          {systemReasonLabel(t, txn.reason)}
+                        </Typography.Paragraph>
+                        {depositActions(txn)}
+                      </List.Item>
+                    )}
+                  />
+                ) : (
                 <Table
                   rowKey="id"
                   size="small"
                   dataSource={shownDepositTxns}
+                  // Even, readable columns on a phone: each gets a fair width and the table scrolls inside its own box.
+                  tableLayout="fixed"
+                  scroll={{ x: 640 }}
                   columns={[
-                    { title: t("contracts.transactionDate"), dataIndex: "transactionDate" },
-                    { title: t("contracts.transactionType"), dataIndex: "transactionType", render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
-                    { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
-                    { title: t("contracts.reason"), dataIndex: "reason", render: (v: string) => systemReasonLabel(t, v) },
+                    { title: t("contracts.transactionDate"), dataIndex: "transactionDate", width: 110 },
+                    { title: t("contracts.transactionType"), dataIndex: "transactionType", width: 110, render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
+                    { title: t("contracts.amount"), dataIndex: "amountFen", width: 110, render: yuan },
+                    { title: t("contracts.reason"), dataIndex: "reason", width: 160, render: (v: string) => systemReasonLabel(t, v) },
                     {
                       title: t("common.actions"),
                       key: "actions",
-                      render: (_: unknown, txn: DepositTransactionDto) => {
-                        const reversal = depositTxns.find((t) => t.reversalOfId === txn.id);
-                        if (reversal) return reversal.removedAt ? <Tag>{t("contracts.removed")}</Tag> : <Tag color="red">{t("contracts.reversed")}</Tag>;
-                        if (txn.transactionType === "reversal") return txn.removedAt ? <Tag>{t("contracts.removed")}</Tag> : null;
-                        return (
-                          <Space>
-                            {txn.canEdit && (
-                              <Tooltip title={t("contracts.editableFor", { time: timeLeft(txn.editableUntil) })}>
-                                <Button
-                                  size="small"
-                                  icon={<EditOutlined />}
-                                  onClick={() => {
-                                    editDepositTxnForm.setFieldsValue({ transactionDate: txn.transactionDate, amount: Math.abs(txn.amountFen) / 100, reason: txn.reason });
-                                    setEditDepositTxnModal(txn);
-                                  }}
-                                >
-                                  {timeLeft(txn.editableUntil)}
-                                </Button>
-                              </Tooltip>
-                            )}
-                            {txn.canEdit && (
-                              <Popconfirm title={t("contracts.confirmRemoveDeposit")} okText={t("contracts.removeEntry")} cancelText={t("common.cancel")} onConfirm={() => onRemoveEntry(`/deposit-transactions/${txn.id}/remove`)}>
-                                <Button size="small" danger icon={<DeleteOutlined />} />
-                              </Popconfirm>
-                            )}
-                            {user?.role === "admin" && (
-                              <Button size="small" danger onClick={() => setReverseDepositTxnModal({ depositTxnId: txn.id })}>
-                                {t("contracts.reverse")}
-                              </Button>
-                            )}
-                          </Space>
-                        );
-                      },
+                      width: 150,
+                      render: (_: unknown, txn: DepositTransactionDto) => depositActions(txn),
                     },
                   ]}
                 />
+                )}
               </>
             ),
           },
@@ -2152,6 +2184,8 @@ export default function ContractDetailPage() {
                   rowKey="id"
                   size="small"
                   dataSource={shownCharges}
+                  // Dates and amounts never break across lines; if the screen is too narrow the table scrolls inside its own box.
+                  scroll={{ x: "max-content" }}
                   onRow={(c: ChargeDto) => ({ onClick: () => setDetailChargeId(c.id), style: { cursor: "pointer" } })}
                   columns={[
                     {
@@ -2164,7 +2198,23 @@ export default function ContractDetailPage() {
                         </Space>
                       ),
                     },
-                    { title: t("chargeDetail.servicePeriod"), render: (_: unknown, c: ChargeDto) => periodLabel(c.serviceStart, c.serviceEnd) },
+                    ...(isWide
+                      ? [
+                          { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
+                          { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
+                        ]
+                      : [
+                          {
+                            // Not enough width for two columns: start above end.
+                            title: t("contracts.serviceDates"),
+                            render: (_: unknown, c: ChargeDto) => (
+                              <div style={{ lineHeight: 1.4 }}>
+                                <div>{c.serviceStart}</div>
+                                <div style={{ color: "rgba(0,0,0,.45)" }}>{c.serviceEnd}</div>
+                              </div>
+                            ),
+                          },
+                        ]),
                     { title: t("contracts.dueDate"), dataIndex: "dueDate" },
                     { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
                     {

@@ -328,6 +328,26 @@ ${streamId === null ? `<p>${esc(t("statement.depositHeld"))}: ${esc(yuan(data.de
               <Typography.Title level={5} style={{ margin: 0 }}>
                 {t("statement.depositTitle")}
               </Typography.Title>
+              {isPhone ? (
+                <List
+                  bordered
+                  size="small"
+                  dataSource={data.deposit.lines}
+                  renderItem={(d: Dto["deposit"]["lines"][number]) => (
+                    <List.Item style={{ display: "block" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <Typography.Text strong>
+                          {d.date} · {t(`contracts.depositTxnTypes.${d.type}`, { defaultValue: d.type })}
+                        </Typography.Text>
+                        <Typography.Text style={{ whiteSpace: "nowrap" }}>{yuan(d.amountFen)}</Typography.Text>
+                      </div>
+                      <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+                        {systemReasonLabel(t, d.reason)}
+                      </Typography.Text>
+                    </List.Item>
+                  )}
+                />
+              ) : (
               <Table
                 size="small"
                 rowKey="id"
@@ -335,11 +355,12 @@ ${streamId === null ? `<p>${esc(t("statement.depositHeld"))}: ${esc(yuan(data.de
                 dataSource={data.deposit.lines}
                 columns={[
                   { title: t("statement.date"), dataIndex: "date", width: 110 },
-                  { title: t("contracts.transactionType"), dataIndex: "type", render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
-                  { title: t("contracts.reason"), dataIndex: "reason", render: (v: string) => systemReasonLabel(t, v) },
-                  { title: t("contracts.amount"), dataIndex: "amountFen", align: "right" as const, render: (v: number) => yuan(v) },
+                  { title: t("contracts.transactionType"), dataIndex: "type", width: 100, render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
+                  { title: t("contracts.reason"), dataIndex: "reason", width: 150, render: (v: string) => systemReasonLabel(t, v) },
+                  { title: t("contracts.amount"), dataIndex: "amountFen", width: 100, align: "right" as const, render: (v: number) => yuan(v) },
                 ]}
               />
+              )}
             </>
           )}
         </>

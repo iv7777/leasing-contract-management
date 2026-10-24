@@ -260,6 +260,7 @@ const en = {
     oneOffConfirmTitle: "Add this bill?",
     oneOffConfirm: "{{amount}} to {{tenant}} for {{item}} ({{period}}). An Admin can void it later, with a reason, while nothing has been paid on it.",
     oneOffDone: "Bill added.",
+    serviceDates: "Service start / end",
     meteredFromNote: "Metered billing starts on {{date}}. Readings for earlier months are not billed: those months were brought forward when the contract was brought up to date.",
     meteredBeforeWarning: "This month is before {{date}}, when metered billing starts. A reading saved for it is kept but never billed (it was brought forward at go-live).",
     usageBilledEditHint: "This reading has already been billed. Saving cancels that bill and makes it again with the new quantity. You can correct it for {{time}} more.",

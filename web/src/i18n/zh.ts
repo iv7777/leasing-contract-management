@@ -262,6 +262,7 @@ const zh: Translations = {
     oneOffConfirmTitle: "添加这笔账单？",
     oneOffConfirm: "向 {{tenant}} 收取 {{amount}}，项目 {{item}}（{{period}}）。在尚无收款时，管理员之后可填写原因将其作废。",
     oneOffDone: "账单已添加。",
+    serviceDates: "服务起止",
     meteredFromNote: "计量费用自 {{date}} 起按读数出账。更早月份的读数不会出账：这些月份已在补齐上线余额时结转。",
     meteredBeforeWarning: "该月份早于 {{date}}（计量出账的起始日）。为它保存的读数会保留，但不会出账（已在上线时结转）。",
     usageBilledEditHint: "该读数已经出账。保存后会作废原账单，并按新的用量重新出账。还可更正 {{time}}。",
