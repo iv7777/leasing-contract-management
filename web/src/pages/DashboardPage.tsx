@@ -57,22 +57,22 @@ export default function DashboardPage() {
       </Typography.Paragraph>
       <BillingOverview />
       <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} md={6}>
+        <Col xs={12} md={6}>
           <Card hoverable onClick={() => navigate("/properties")}>
             <Statistic title={t("nav.properties")} value={propertyCount ?? undefined} prefix={<HomeOutlined />} loading={propertyCount === null} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
+        <Col xs={12} md={6}>
           <Card hoverable onClick={() => navigate("/tenants")}>
             <Statistic title={t("nav.tenants")} value={partyCounts?.tenants} prefix={<TeamOutlined />} loading={partyCounts === null} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
+        <Col xs={12} md={6}>
           <Card hoverable onClick={() => navigate("/landlords")}>
             <Statistic title={t("nav.landlords")} value={partyCounts?.landlords} prefix={<BankOutlined />} loading={partyCounts === null} />
           </Card>
         </Col>
-        <Col xs={24} sm={12} md={6}>
+        <Col xs={12} md={6}>
           <Card hoverable onClick={() => navigate("/reminders")}>
             <Statistic title={t("dashboard.openReminders")} value={reminderCount ?? undefined} prefix={<BellOutlined />} loading={reminderCount === null} />
           </Card>
