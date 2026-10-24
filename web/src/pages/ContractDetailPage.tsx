@@ -293,7 +293,8 @@ export default function ContractDetailPage() {
   const [allDocuments, setDocuments] = useState<DocumentDto[]>([]);
   const [showVoidedDocs, setShowVoidedDocs] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
-  const [chargeFilter, setChargeFilter] = useState<ChargeFilter>("all");
+  // null = not chosen yet: the Charges tab opens on the unpaid bills (or on all of them when nothing is unpaid).
+  const [pickedFilter, setChargeFilter] = useState<ChargeFilter | null>(null);
   // Voided documents (withdrawn by an approved amendment) are kept on record but are never offered for new work.
   const documents = allDocuments.filter((d) => !d.voided);
   const [activeTab, setActiveTab] = useState("units");
@@ -414,6 +415,8 @@ export default function ContractDetailPage() {
   };
 
   useEffect(load, [id]);
+  // Another contract opens on its own default view of the bills.
+  useEffect(() => setChargeFilter(null), [id]);
 
 
   // Items whose readings carry their own amount (¥) beside the quantity.
@@ -583,6 +586,7 @@ export default function ContractDetailPage() {
     if (g === "overdue" || g === "due" || g === "later") acc.unpaid = (acc.unpaid ?? 0) + 1;
     return acc;
   }, {});
+  const chargeFilter: ChargeFilter = pickedFilter ?? ((chargeFilterCounts.unpaid ?? 0) > 0 ? "unpaid" : "all");
   const shownCharges =
     chargeFilter === "all" ? charges : charges.filter((c) => (chargeFilter === "unpaid" ? ["overdue", "due", "later"].includes(chargeGroup(c)) : chargeGroup(c) === chargeFilter));
   const showCharges = (f: ChargeFilter) => {
