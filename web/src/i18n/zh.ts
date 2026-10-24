@@ -60,6 +60,7 @@ const zh: Translations = {
     relatedContractsCount_one: "{{count}} 份合同",
     relatedContractsCount_other: "{{count}} 份合同",
     noneYet: "暂无",
+    backToTop: "回到顶部",
   },
   properties: {
     title: "物业",
@@ -849,7 +850,7 @@ const zh: Translations = {
       locked: "该读数已生成账单，无法修改。",
     },
     overdueColumn: "逾期",
-    summary: { clear: "没有逾期或即将到期的账单。", all: "全部", unpaid: "未付清", paid: "已付清", showing: "当前筛选：{{filter}}", showAll: "显示全部", dueNow: "现在到期", dueLater: "稍后到期" },
+    summary: { noneUnpaid: "没有未付清的账单——全部已结清。", clear: "没有逾期或即将到期的账单。", all: "全部", unpaid: "未付清", paid: "已付清", showing: "当前筛选：{{filter}}", showAll: "显示全部", dueNow: "现在到期", dueLater: "稍后到期" },
     overdueTag: "逾期 {{amount}} · {{days}} 天",
     overdueTip: "已超过宽限期：{{count}} 笔账单，合计 {{amount}}；最早的一笔已逾期 {{days}} 天。",
     propertyOverdue: "{{count}} 份逾期",

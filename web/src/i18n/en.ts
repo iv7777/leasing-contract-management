@@ -58,6 +58,7 @@ const en = {
     relatedContractsCount_one: "{{count}} contract",
     relatedContractsCount_other: "{{count}} contracts",
     noneYet: "None yet",
+    backToTop: "Back to top",
   },
   properties: {
     title: "Properties",
@@ -847,7 +848,7 @@ const en = {
       locked: "A charge has already been generated from this reading.",
     },
     overdueColumn: "Overdue",
-    summary: { clear: "Nothing is overdue or coming due.", all: "All", unpaid: "Unpaid", paid: "Paid", showing: "Showing: {{filter}}", showAll: "Show all", dueNow: "Due now", dueLater: "Due later" },
+    summary: { noneUnpaid: "No unpaid bills — everything is paid up.", clear: "Nothing is overdue or coming due.", all: "All", unpaid: "Unpaid", paid: "Paid", showing: "Showing: {{filter}}", showAll: "Show all", dueNow: "Due now", dueLater: "Due later" },
     overdueTag: "Overdue {{amount}} · {{days}} d",
     overdueTip: "Past the grace period: {{count}} bill(s) totalling {{amount}}; the oldest is {{days}} days overdue.",
     propertyOverdue: "{{count}} overdue",

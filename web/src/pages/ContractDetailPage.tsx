@@ -586,7 +586,9 @@ export default function ContractDetailPage() {
     if (g === "overdue" || g === "due" || g === "later") acc.unpaid = (acc.unpaid ?? 0) + 1;
     return acc;
   }, {});
-  const chargeFilter: ChargeFilter = pickedFilter ?? ((chargeFilterCounts.unpaid ?? 0) > 0 ? "unpaid" : "all");
+  // Opens on the unpaid bills, even when there are none (the list then says so); a contract with no bills at all shows "all".
+  const chargeFilter: ChargeFilter = pickedFilter ?? (charges.length > 0 ? "unpaid" : "all");
+  const noChargesText = charges.length > 0 && chargeFilter === "unpaid" ? t("billing.summary.noneUnpaid") : t("common.noneYet");
   const shownCharges =
     chargeFilter === "all" ? charges : charges.filter((c) => (chargeFilter === "unpaid" ? ["overdue", "due", "later"].includes(chargeGroup(c)) : chargeGroup(c) === chargeFilter));
   const showCharges = (f: ChargeFilter) => {
@@ -2155,7 +2157,7 @@ export default function ContractDetailPage() {
                 )}
                 {isPhone ? (
                   <BillRows
-                    empty={t("common.noneYet")}
+                    empty={noChargesText}
                     rows={shownCharges.map((c) => {
                       const b = chargeBalances.find((x) => x.chargeId === c.id);
                       return {
@@ -2188,6 +2190,7 @@ export default function ContractDetailPage() {
                   rowKey="id"
                   size="small"
                   dataSource={shownCharges}
+                  locale={{ emptyText: noChargesText }}
                   // Dates and amounts never break across lines; if the screen is too narrow the table scrolls inside its own box.
                   scroll={{ x: "max-content" }}
                   onRow={(c: ChargeDto) => ({ onClick: () => setDetailChargeId(c.id), style: { cursor: "pointer" } })}

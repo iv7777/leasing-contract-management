@@ -324,3 +324,26 @@ body {
 .dev-land .ant-table-wrapper .ant-table-content {
   overflow-x: auto;
 }
+
+/* "Back to top": only on a phone (upright or on its side), above the bottom bar, and clear of the screen edge. */
+.back-top.ant-float-btn {
+  display: none;
+}
+.dev-phone .back-top.ant-float-btn,
+.dev-land .back-top.ant-float-btn {
+  display: block;
+  right: 14px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  width: 40px;
+  height: 40px;
+  z-index: 90;
+}
+.dev-land .back-top.ant-float-btn {
+  bottom: 16px;
+}
+.back-top.ant-float-btn .ant-float-btn-body {
+  background: #1f5f4a;
+}
+.back-top.ant-float-btn .ant-float-btn-icon {
+  color: #fff;
+}

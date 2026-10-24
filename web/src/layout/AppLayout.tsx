@@ -1,6 +1,6 @@
 import { installScrollHints } from "../lib/scrollHints";
 import { useEffect, useState, type ReactNode } from "react";
-import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
+import { FloatButton, Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
 import {
   DashboardOutlined,
   HomeOutlined,
@@ -177,6 +177,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
 
         <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 76 : 24 }}>{children}</Content>
+
+        {/* A long list on a phone: one tap back to the top. Shown only on phones (see .back-top in index.css). */}
+        <FloatButton.BackTop className="back-top" visibilityHeight={400} tooltip={t("common.backToTop")} />
 
         {isMobile && (
           <nav className="bottom-nav">
