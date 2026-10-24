@@ -29,6 +29,27 @@ function update(t: Tracked) {
   else host.removeAttribute("data-hint-right");
 }
 
+/** Slides a tab bar smoothly. The tabs move by an offset of their own, which only a sideways wheel changes, so the
+ * distance is fed in as many small wheel steps along an ease-out curve (with the bar's own animation off meanwhile). */
+function slideTabs(wrap: HTMLElement, distance: number) {
+  const list = wrap.querySelector<HTMLElement>(".ant-tabs-nav-list");
+  if (list) list.style.transition = "none";
+  const start = performance.now();
+  const duration = 380;
+  let done = 0;
+  const ease = (x: number) => 1 - Math.pow(1 - x, 3);
+  const frame = (now: number) => {
+    const x = Math.min((now - start) / duration, 1);
+    const target = distance * ease(x);
+    const step = target - done;
+    done = target;
+    if (step !== 0) wrap.dispatchEvent(new WheelEvent("wheel", { deltaX: step, bubbles: true, cancelable: true }));
+    if (x < 1) requestAnimationFrame(frame);
+    else if (list) list.style.transition = "";
+  };
+  requestAnimationFrame(frame);
+}
+
 export function installScrollHints(): () => void {
   const tracked = new Map<HTMLElement, Tracked>();
   const resizer = new ResizeObserver((entries) => {
@@ -93,7 +114,7 @@ export function installScrollHints(): () => void {
       if (toLeft || toRight) {
         e.preventDefault();
         e.stopPropagation();
-        wrap.dispatchEvent(new WheelEvent("wheel", { deltaX: (toLeft ? -1 : 1) * r.width * 0.8, bubbles: true, cancelable: true }));
+        slideTabs(wrap, (toLeft ? -1 : 1) * r.width * 0.8);
         return;
       }
     }
