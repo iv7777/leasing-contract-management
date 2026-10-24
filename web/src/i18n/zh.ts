@@ -581,6 +581,15 @@ const zh: Translations = {
       notes: "备注",
     },
   },
+  systemReasons: {
+    depositHeld: "期初余额：会计确认的押金",
+    adjusted: "期初余额已调整",
+    undone: "期初余额已撤销",
+    reversed: "期初余额已冲销",
+    removed: "已删除",
+    readingCorrected: "读数已更正",
+    readingRemoved: "读数已删除",
+  },
   statement: {
     mode: { month: "按月", year: "按年", custom: "自选日期", all: "全部" },
     allItems: "全部项目",

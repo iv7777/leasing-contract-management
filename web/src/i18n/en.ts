@@ -579,6 +579,15 @@ const en = {
       notes: "Notes",
     },
   },
+  systemReasons: {
+    depositHeld: "Opening balance: deposit held per accountant",
+    adjusted: "Opening balance adjusted",
+    undone: "Opening balance undone",
+    reversed: "Opening balance reversed",
+    removed: "Removed",
+    readingCorrected: "Meter reading corrected",
+    readingRemoved: "Meter reading removed",
+  },
   statement: {
     mode: { month: "Month", year: "Year", custom: "Custom dates", all: "All time" },
     allItems: "All items",

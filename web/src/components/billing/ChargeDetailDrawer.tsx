@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import type { TFunction } from "i18next";
 import { api } from "../../api/client";
 import { apiErrorMessage } from "../../api/errorMessage";
-import { camel, paymentMethodLabel, periodLabel, streamName, yuan } from "./format";
+import { camel, paymentMethodLabel, periodLabel, streamName, systemReasonLabel, yuan } from "./format";
 import { MeterPhotoCell } from "./MeterPhoto";
 import { esc, printHtml } from "./print";
 
@@ -147,7 +147,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
           {c.broughtForward && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}
         </Space>
         {c.status === "voided" && (
-          <Alert type="warning" showIcon message={t("chargeDetail.voidedBy", { who: c.voidedBy ?? "—", when: (c.voidedAt ?? "").slice(0, 10) })} description={c.voidReason ?? undefined} />
+          <Alert type="warning" showIcon message={t("chargeDetail.voidedBy", { who: c.voidedBy ?? "—", when: (c.voidedAt ?? "").slice(0, 10) })} description={systemReasonLabel(t, c.voidReason) || undefined} />
         )}
         {c.status === "projected" && <Alert type="info" showIcon message={t("chargeDetail.notBilledTitle")} description={t("chargeDetail.notBilledNote")} />}
         {c.broughtForward && <Alert type="info" showIcon message={t("chargeDetail.broughtForwardNote", { date: c.serviceStart })} />}

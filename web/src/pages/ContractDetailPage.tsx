@@ -49,7 +49,7 @@ import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import BillRows from "../components/billing/BillRows";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -518,7 +518,7 @@ export default function ContractDetailPage() {
   );
   // One status tag for a bill: voided, paid, overdue (with days), or what is still owed.
   const chargeStatusTag = (c: ChargeDto, b: { balanceFen: number; isOverdue: boolean; daysOverdue: number } | undefined) => {
-    if (c.status === "voided") return <Tag title={c.voidReason ?? undefined}>{t("billing.void.voided")}</Tag>;
+    if (c.status === "voided") return <Tag title={systemReasonLabel(t, c.voidReason) || undefined}>{t("billing.void.voided")}</Tag>;
     if (!b) return null;
     if (b.balanceFen === 0) return <Tag color="green">{t("chargeDetail.paid")}</Tag>;
     if (b.isOverdue) return <Tag color="red">{t("contracts.overdueDays", { days: b.daysOverdue })} · {yuan(b.balanceFen)}</Tag>;
@@ -1904,7 +1904,7 @@ export default function ContractDetailPage() {
                     { title: t("contracts.transactionDate"), dataIndex: "transactionDate" },
                     { title: t("contracts.transactionType"), dataIndex: "transactionType", render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
                     { title: t("contracts.amount"), dataIndex: "amountFen", render: yuan },
-                    { title: t("contracts.reason"), dataIndex: "reason" },
+                    { title: t("contracts.reason"), dataIndex: "reason", render: (v: string) => systemReasonLabel(t, v) },
                     {
                       title: t("common.actions"),
                       key: "actions",

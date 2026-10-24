@@ -8,7 +8,7 @@ import { apiErrorMessage } from "../../api/errorMessage";
 import { todayInChina } from "@lcm/shared";
 import MonthField from "../MonthField";
 import ChargeDetailDrawer from "./ChargeDetailDrawer";
-import { paymentMethodLabel, periodLabel, streamName, yuan } from "./format";
+import { paymentMethodLabel, periodLabel, streamName, systemReasonLabel, yuan } from "./format";
 import { esc, printHtml } from "./print";
 
 type Mode = "month" | "year" | "custom" | "all";
@@ -130,7 +130,7 @@ export default function StatementTab({ contractId, reloadKey, canExport }: { con
       )
       .join("");
     const depositRows = data.deposit.lines
-      .map((d) => `<tr><td>${esc(d.date)}</td><td>${esc(t(`contracts.depositTxnTypes.${d.type}`, { defaultValue: d.type }))}</td><td>${esc(d.reason)}</td><td class="r">${esc(money(d.amountFen))}</td></tr>`)
+      .map((d) => `<tr><td>${esc(d.date)}</td><td>${esc(t(`contracts.depositTxnTypes.${d.type}`, { defaultValue: d.type }))}</td><td>${esc(systemReasonLabel(t, d.reason))}</td><td class="r">${esc(money(d.amountFen))}</td></tr>`)
       .join("");
     printHtml(
       `${h.contractRef} ${t("statement.printTitle")}`,
@@ -335,7 +335,7 @@ ${streamId === null ? `<p>${esc(t("statement.depositHeld"))}: ${esc(yuan(data.de
                 columns={[
                   { title: t("statement.date"), dataIndex: "date", width: 110 },
                   { title: t("contracts.transactionType"), dataIndex: "type", render: (v: string) => t(`contracts.depositTxnTypes.${v}`, { defaultValue: v }) },
-                  { title: t("contracts.reason"), dataIndex: "reason" },
+                  { title: t("contracts.reason"), dataIndex: "reason", render: (v: string) => systemReasonLabel(t, v) },
                   { title: t("contracts.amount"), dataIndex: "amountFen", align: "right" as const, render: (v: number) => yuan(v) },
                 ]}
               />

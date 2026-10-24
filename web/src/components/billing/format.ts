@@ -7,6 +7,23 @@ export function streamName(t: (key: string) => string, label: string, feeType: s
   return label === feeType ? t(`contracts.${camel(feeType)}`) : label;
 }
 
+/** Reasons the system writes itself are stored in English; show them in the viewer's language. Anything a person
+ * typed is shown as it is. */
+const SYSTEM_REASONS: Record<string, string> = {
+  "Opening balance: deposit held per accountant": "depositHeld",
+  "Opening balance adjusted": "adjusted",
+  "Opening balance undone": "undone",
+  "Opening balance reversed": "reversed",
+  Removed: "removed",
+  "Meter reading corrected": "readingCorrected",
+  "Meter reading removed": "readingRemoved",
+};
+export function systemReasonLabel(t: (key: string) => string, reason: string | null | undefined): string {
+  if (!reason) return "";
+  const key = SYSTEM_REASONS[reason];
+  return key ? t(`systemReasons.${key}`) : reason;
+}
+
 /** Payment methods are stored as the English names above; show them in the
  * viewer's language. Anything else (older or free-typed values) is shown as is. */
 export function paymentMethodLabel(t: (key: string) => string, method: string): string {

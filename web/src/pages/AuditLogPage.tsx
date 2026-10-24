@@ -85,7 +85,7 @@ function detailRows(t: TFunction, event: AuditEventDto): DetailRow[] {
     rows.push({ key: `c-${k}`, label: fieldLabel(t, k), from: formatValue(t, k, c.from), to: formatValue(t, k, c.to) });
   }
   for (const [k, v] of factsOf(event.details)) rows.push({ key: `f-${k}`, label: fieldLabel(t, k), value: formatValue(t, k, v) });
-  if (event.reason) rows.push({ key: "reason", label: t("contracts.reason"), value: event.reason });
+  if (event.reason) rows.push({ key: "reason", label: t("contracts.reason"), value: systemReasonLabel(t, event.reason) });
   return rows;
 }
 
