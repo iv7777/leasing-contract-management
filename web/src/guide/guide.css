@@ -77,8 +77,6 @@
 .hb-empty { padding: 28px; text-align: center; color: var(--hb-muted); background: #fff; border: 1px dashed var(--hb-line); border-radius: 12px; }
 @media (max-width: 900px) { .hb-layout { grid-template-columns: 1fr; } .hb-toc { display: none; } .hb-jump { display: block; } .hb-hero { padding: 24px 20px 50px; } .hb-hero h1 { font-size: 26px; } .hb-life { margin: -30px 8px 0; } }
 
-.hb-top.ant-float-btn { bottom: 28px; inset-inline-end: 28px; }
-@media (max-width: 900px) { .hb-top.ant-float-btn { bottom: 76px; inset-inline-end: 16px; } }
 @media (max-width: 767px) {
   .hb-hero h1 { font-size: 22px; }
   .hb-hero p { font-size: 14px; }

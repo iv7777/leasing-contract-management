@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
-import { FloatButton, Input, Segmented, Select } from "antd";
-import { VerticalAlignTopOutlined } from "@ant-design/icons";
+import { Input, Segmented, Select } from "antd";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { useHelpTopic } from "../help/HelpContext";
@@ -283,7 +282,6 @@ export default function GuidePage() {
   const [q, setQ] = useState("");
   const [role, setRole] = useState<RoleId>("admin");
   const [cur, setCur] = useState(g.chapters[0].id);
-  const [showTop, setShowTop] = useState(false);
   const query = q.trim();
 
   const visible = useMemo(() => (query ? g.chapters.filter((c) => chapterText(c).includes(query.toLowerCase())) : g.chapters), [g, query]);
@@ -305,21 +303,17 @@ export default function GuidePage() {
         if (el && el.getBoundingClientRect().top < 140) id = c.id;
       }
       if (id) setCur(id);
-      // Offer "back to top" once the hero has scrolled well out of view.
-      setShowTop((document.querySelector(".hb-hero")?.getBoundingClientRect().bottom ?? 0) < -400);
     };
     onScroll();
     window.addEventListener("scroll", onScroll, true);
     return () => window.removeEventListener("scroll", onScroll, true);
   }, [visible]);
 
-  const toTop = () => document.querySelector(".hb-hero")?.scrollIntoView({ behavior: "smooth", block: "start" });
   const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   const groups = Object.keys(g.groups);
 
   return (
     <div className="hb">
-      {showTop && <FloatButton className="hb-top" icon={<VerticalAlignTopOutlined />} tooltip={g.backToTop} onClick={toTop} />}
       <header className="hb-hero">
         <div className="hb-eyebrow">{g.eyebrow}</div>
         <h1>{g.title}</h1>
