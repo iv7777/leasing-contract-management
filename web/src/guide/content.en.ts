@@ -602,7 +602,7 @@ export const guideEn: GuideContent = {
             { title: "Enter this month's meter readings", text: "The Dashboard lists what is missing." },
             { title: "Follow up every overdue balance", text: "Record anything received since." },
             { title: "Check deposit shortfalls and renewal windows", text: "Reminders page." },
-            { title: "Review the Monthly statement for each contract", text: "Opening + new bills − payments = closing balance." },
+            { title: "Review the Statement for each contract", text: "Opening + new bills − payments = closing balance." },
             { title: "Admin: confirm Billing runs and Backups are green", text: "Both pages list every run and any failure." },
           ],
         },
