@@ -8,6 +8,7 @@ import { api } from "../../api/client";
 import { apiErrorMessage } from "../../api/errorMessage";
 import { camel, paymentMethodLabel, periodLabel, streamName, yuan } from "./format";
 import { MeterPhotoCell } from "./MeterPhoto";
+import { esc, printHtml } from "./print";
 
 interface Subperiod {
   start: string;
@@ -77,21 +78,6 @@ function rateLine(t: TFunction, s: Subperiod): string {
       return `${money(s.baseRate)} ${basis}`;
   }
 }
-
-function printHtml(title: string, body: string) {
-  const frame = document.createElement("iframe");
-  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument!;
-  doc.open();
-  doc.write(`<!doctype html><meta charset="utf-8"><title>${title}</title><style>body{font:14px/1.5 sans-serif;margin:24px;color:#222}h1{font-size:18px}h2{font-size:15px;margin-top:18px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left}td.r{text-align:right}</style>${body}`);
-  doc.close();
-  frame.contentWindow!.focus();
-  frame.contentWindow!.print();
-  setTimeout(() => frame.remove(), 2000);
-}
-
-const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** Side panel with everything about one bill: how it was worked out, what was paid on it, the reading behind it. */
 export default function ChargeDetailDrawer({

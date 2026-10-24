@@ -78,7 +78,7 @@ export const guideEn: GuideContent = {
               intro: "You have read-only access to your assigned properties.",
               steps: [
                 "The **Dashboard** and **Contracts** show everything you're allowed to see.",
-                "Open a contract's **Monthly statement** tab to see what was billed and paid in any month.",
+                "Open a contract's **Statement** tab to see what was billed and paid in any month.",
                 "Downloads and printing are only available if your Admin switched them on for your account.",
               ],
             },
@@ -218,7 +218,7 @@ export const guideEn: GuideContent = {
             ["Usage entries", "Meter readings for electricity and water"],
             ["Concessions", "Free rent and discounts"],
             ["Deposit", "How much deposit is required, held, and any movements"],
-            ["Monthly statement", "What was billed and paid in any month"],
+            ["Statement", "What was billed and paid in any month, year or period — printable"],
             ["Receipts", "Money received, and the buttons to record it"],
             ["Charges", "The bills themselves, and automatic billing"],
             ["Not billed yet", "Bills the system will create soon, with amounts and due dates"],
@@ -422,7 +422,7 @@ export const guideEn: GuideContent = {
             { title: "Confirm", body: ["The bills are created and automatic billing is switched on. Missing meter readings are listed; enter them and they bill automatically."] },
             { title: "Or bring the balance up to date in one step (Admin)", body: ["If you only know what the tenant still owes today (from your accountant), use Contract → **Charges** → **Bring up to date**. Enter the date and the balance owed. Every bill due by then is paid by one **Opening balance** payment except that balance; the newest bills stay unpaid by default, and you can change the amounts to choose which bills stay unpaid or part-paid (they must add up to the balance). You can **Adjust** or **Undo** it for 7 days, until another payment is recorded, or until you press **Finalize**. After that, correct it only by reversing the Opening balance receipt."] },
             { title: "Enter the payments already received", body: ["Contract → **Receipts** → **Bulk payments**. Add one row per payment (date, amount, method); **Add next month** copies the last row forward. They are applied in date order, oldest bill first."] },
-            { title: "Check the result", body: ["Look at the **Monthly statement** and the **Dashboard**: the tenant's balance should now equal your own."] },
+            { title: "Check the result", body: ["Look at the **Statement** and the **Dashboard**: the tenant's balance should now equal your own."] },
           ],
         },
         { type: "h", text: "Quarterly and yearly contracts" },
@@ -454,7 +454,7 @@ export const guideEn: GuideContent = {
             {
               title: "Check how it is applied",
               body: ["The system proposes to pay the **oldest unpaid bills first** and shows each one. If the tenant said which bill the money is for, change the amounts. Then press **Record payment**."],
-              see: "the balances drop; the Dashboard, Reminders and the Monthly statement update straight away.",
+              see: "the balances drop; the Dashboard, Reminders and the Statement update straight away.",
             },
           ],
         },
@@ -610,7 +610,7 @@ export const guideEn: GuideContent = {
         {
           type: "list",
           items: [
-            "**Monthly statement** (contract page): opening balance, new bills, adjustments, payments applied, closing balance, unallocated credit — and the deposit shown separately.",
+            "**Statement** (contract page): opening balance, new bills, adjustments, payments applied, closing balance, unallocated credit — and the deposit shown separately.",
             "**Occupancy**: how much space is leased on any date; buildings and open land are reported separately.",
             "**Export PDF summary / Export CSV**: terms, ledger and amendment history. Available to Admins, Managers and anyone whose account allows it.",
             "**Admin menu** (Admin only): Users, Audit Log, Billing runs, Backups, Go-live and System health are grouped under **Admin** in the sidebar. **Go-live** downloads the accountant sheet (one row per contract), imports the balances the accountant returns (rent and fixed fees, plus electricity and water, which become one unpaid \"balance brought forward\" bill each), brings every ready contract up to date in one step (missing bills are created, then one Opening balance payment each), and lists each contract for review and **Finalize**. **System health** runs read-only checks: document files missing from the server or left over without a record, file fingerprints, the database's own consistency checks, the last backup and free disk space.",

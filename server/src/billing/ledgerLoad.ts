@@ -8,6 +8,8 @@ import type { MonthlyStatementInput } from "./ledger.js";
 export function loadLedgerInputs(contractId: number): MonthlyStatementInput & {
   chargesRaw: typeof charges.$inferSelect[];
   receiptsRaw: typeof receipts.$inferSelect[];
+  adjustmentsRaw: typeof chargeAdjustments.$inferSelect[];
+  depositTransactionsRaw: typeof depositTransactions.$inferSelect[];
   overdueGraceDays: number;
 } {
   const chargesRaw = db.select().from(charges).where(eq(charges.contractId, contractId)).all();
@@ -27,6 +29,8 @@ export function loadLedgerInputs(contractId: number): MonthlyStatementInput & {
   return {
     chargesRaw,
     receiptsRaw,
+    adjustmentsRaw,
+    depositTransactionsRaw,
     overdueGraceDays: rules?.g ?? 0,
     charges: chargesRaw.map((c) => ({
       id: c.id,

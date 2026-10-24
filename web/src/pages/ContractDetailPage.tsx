@@ -42,6 +42,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import StatusStrip, { type StripItem } from "../components/billing/StatusStrip";
+import StatementTab from "../components/billing/StatementTab";
 import ContractSummaryStrip, { type ChargeFilter } from "../components/billing/ContractSummaryStrip";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
@@ -209,17 +210,6 @@ interface DocumentDto {
   voided: boolean;
   fileMissing?: boolean;
 }
-interface StatementDto {
-  periodStart: string;
-  periodEnd: string;
-  openingReceivableFen: number;
-  newChargesFen: number;
-  adjustmentsFen: number;
-  receiptsAppliedFen: number;
-  closingReceivableFen: number;
-  unallocatedReceiptsFen: number;
-  depositBalanceFen: number;
-}
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
 /** Usual unit for a metered fee, prefilled on a new usage entry or metered rate:
@@ -292,8 +282,6 @@ export default function ContractDetailPage() {
   const [depositTxns, setDepositTxns] = useState<DepositTransactionDto[]>([]);
   const [depositBalanceFen, setDepositBalanceFen] = useState(0);
   const [depositStatus, setDepositStatus] = useState<DepositStatusDto | null>(null);
-  const [statement, setStatement] = useState<StatementDto | null>(null);
-  const [statementPeriod, setStatementPeriod] = useState(todayInChina().slice(0, 7));
   const [amendments, setAmendments] = useState<AmendmentDto[]>([]);
   const [parties, setParties] = useState<PartyDto[]>([]);
   const [availableUnits, setAvailableUnits] = useState<{ id: number; unitLabel: string; propertyId: number; rentableAreaSqm?: string }[]>([]);
@@ -417,14 +405,6 @@ export default function ContractDetailPage() {
 
   useEffect(load, [id]);
 
-  // The statement follows the chosen month and refreshes after payments or new charges.
-  useEffect(() => {
-    if (!statementPeriod) return;
-    api
-      .get<{ statement: StatementDto }>(`/contracts/${id}/statement?period=${statementPeriod}`)
-      .then((r) => setStatement(r.statement))
-      .catch((err) => message.error(apiErrorMessage(err, t)));
-  }, [id, statementPeriod, receipts.length, charges.length]);
 
   // Items whose readings carry their own amount (¥) beside the quantity.
   const amountStreamIds = new Set(streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered_amount")).map((s) => s.id));
@@ -1974,64 +1954,7 @@ export default function ContractDetailPage() {
               contract.status === "draft" ? (
                 <Alert type="info" showIcon message={t("contracts.statementDraftNote")} />
               ) : (
-              <>
-                <Space style={{ marginBottom: 16 }}>
-                  <MonthField value={statementPeriod} onChange={(v) => v && setStatementPeriod(v)} style={{ width: 160 }} />
-                </Space>
-                {statement && (
-                  <Descriptions bordered column={1} size="small">
-                    <Descriptions.Item label={t("contracts.openingReceivable")}>{yuan(statement.openingReceivableFen)}</Descriptions.Item>
-                    <Descriptions.Item label={t("contracts.newCharges")}>{yuan(statement.newChargesFen)}</Descriptions.Item>
-                    <Descriptions.Item label={t("contracts.adjustments")}>{yuan(statement.adjustmentsFen)}</Descriptions.Item>
-                    <Descriptions.Item label={t("contracts.receiptsApplied")}>{yuan(statement.receiptsAppliedFen)}</Descriptions.Item>
-                    <Descriptions.Item label={t("contracts.closingReceivable")}>
-                      <Typography.Text strong>{yuan(statement.closingReceivableFen)}</Typography.Text>
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("contracts.unallocatedReceipts")}>{yuan(statement.unallocatedReceiptsFen)}</Descriptions.Item>
-                    <Descriptions.Item label={t("contracts.depositBalance")}>{yuan(statement.depositBalanceFen)}</Descriptions.Item>
-                  </Descriptions>
-                )}
-                {statement && (
-                  <div style={{ marginTop: 16 }}>
-                    <Typography.Title level={5}>{t("chargeDetail.statementBills")}</Typography.Title>
-                    {isPhone ? (
-                      <BillRows
-                        empty={t("common.noneYet")}
-                        rows={charges.filter((c) => c.status === "posted" && c.serviceStart >= statement.periodStart && c.serviceStart <= statement.periodEnd).map((c) => ({
-                          key: c.id,
-                          name: itemNameOf(c.pricingStreamId, c.feeType),
-                          detail: `${t("contracts.dueDate")} ${c.dueDate}`,
-                          amountFen: c.amountFen,
-                          status: chargeStatusTag(c, chargeBalances.find((x) => x.chargeId === c.id)),
-                          onClick: () => setDetailChargeId(c.id),
-                        }))}
-                      />
-                    ) : (
-                    <Table
-                      size="small"
-                      rowKey="id"
-                      pagination={false}
-                      scroll={{ x: true }}
-                      dataSource={charges.filter((c) => c.status === "posted" && c.serviceStart >= statement.periodStart && c.serviceStart <= statement.periodEnd)}
-                      onRow={(c: ChargeDto) => ({ onClick: () => setDetailChargeId(c.id), style: { cursor: "pointer" } })}
-                      columns={[
-                        { title: t("contracts.fee"), render: (_: unknown, c: ChargeDto) => itemNameOf(c.pricingStreamId, c.feeType) },
-                        { title: t("contracts.dueDate"), dataIndex: "dueDate" },
-                        { title: t("contracts.amount"), dataIndex: "amountFen", align: "right" as const, render: yuan },
-                        {
-                          title: t("contracts.balance"),
-                          align: "right" as const,
-                          render: (_: unknown, c: ChargeDto) => {
-                            const b = chargeBalances.find((x) => x.chargeId === c.id);
-                            return b ? yuan(b.balanceFen) : "";
-                          },
-                        },
-                      ]}
-                    />
-                    )}
-                  </div>
-                )}
-              </>
+              <StatementTab contractId={contract.id} reloadKey={receipts.length + ":" + charges.length + ":" + chargeBalances.length} canExport={!!(user?.canPrint || user?.role === "admin" || user?.role === "manager")} />
               ),
           },
           {
