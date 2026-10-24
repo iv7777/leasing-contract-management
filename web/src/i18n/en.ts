@@ -513,6 +513,8 @@ const en = {
     undoConfirm: "Undo the opening balance? Every bill goes back to what it owed.",
   },
   goLive: {
+    selectAll: "Select all",
+    selectNone: "Select none",
     intro: "Bring contracts that already existed up to date. Send the accountant the sheet, import the balances they return (or use Bring up to date on a contract's Charges tab), then review each contract and finalize. Only Admins see this page.",
     finalizeAll: "Finalize all adjustable ({{count}})",
     finalizeAllTitle: "Finalize {{count}} contracts?",

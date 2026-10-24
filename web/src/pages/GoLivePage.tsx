@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Input, Modal, Space, Statistic, Table, Tag, Typography, Upload, message } from "antd";
+import { Alert, Button, Card, Checkbox, Grid, Input, Modal, Space, Statistic, Table, Tag, Typography, Upload, message } from "antd";
 import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
@@ -52,8 +52,27 @@ interface ApplyResult {
   paymentFen?: number;
 }
 
+/** The table columns keep these proportions as the window narrows (the pixel widths are a column's share of the total). */
+const PLAN_W = 1480;
+const REVIEW_W = 990;
+const share = (px: number, total: number) => `${((px / total) * 100).toFixed(2)}%`;
+
+/** One labelled value on a phone card. */
+function KV({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "2px 0" }}>
+      <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+        {label}
+      </Typography.Text>
+      <div style={{ textAlign: "right" }}>{children}</div>
+    </div>
+  );
+}
+
 export default function GoLivePage() {
   const { t } = useTranslation();
+  // Ten columns need room: below a wide window each contract is a card; above it the table's columns shrink in proportion.
+  const isPhone = !Grid.useBreakpoint().xl;
   const [rows, setRows] = useState<GoLiveRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [asOf, setAsOf] = useState<string | undefined>(todayInChina());
@@ -264,20 +283,60 @@ export default function GoLivePage() {
                 {t("goLive.import.apply", { count: ready.length })}
               </Button>
             </Space>
+            {isPhone ? (
+              <Space direction="vertical" size={8} style={{ width: "100%" }}>
+                {plan.map((r) => (
+                  <Card key={`${r.reference}-${r.state}-${r.reason ?? ""}`} size="small">
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                      <Typography.Text strong>
+                        {r.reference} · {r.tenantName}
+                      </Typography.Text>
+                      {r.state === "ready" ? (
+                        <Space size={4} wrap style={{ justifyContent: "flex-end" }}>
+                          <Tag color="green" style={{ marginInlineEnd: 0 }}>{t("goLive.import.ready")}</Tag>
+                          {r.partialBills ? <Tag color="orange" style={{ marginInlineEnd: 0 }}>{t("goLive.import.partial")}</Tag> : null}
+                        </Space>
+                      ) : (
+                        <Tag color="red" style={{ marginInlineEnd: 0, whiteSpace: "normal" }}>{t(`goLive.reason.${r.reason}`, { defaultValue: r.reason ?? "" })}</Tag>
+                      )}
+                    </div>
+                    {r.balanceOwedFen !== undefined && <KV label={t("openingBalance.balanceOwed")}>{yuan(r.balanceOwedFen)}</KV>}
+                    {(r.extras ?? []).length > 0 && (
+                      <KV label={t("goLive.import.broughtForward")}>
+                        {(r.extras ?? []).map((e) => (
+                          <div key={e.feeType}>
+                            {t(`contracts.${e.feeType === "water" ? "water" : "electricityBase"}`)} {yuan(e.amountFen)}
+                          </div>
+                        ))}
+                      </KV>
+                    )}
+                    {r.deposit && r.deposit.confirmedFen !== null && (
+                      <KV label={t("goLive.import.deposit")}>
+                        <div>{t("goLive.import.depositLine", { held: yuan(r.deposit.confirmedFen), system: yuan(r.deposit.systemFen) })}</div>
+                        {r.deposit.receiveFen > 0 && <Tag color="green" style={{ marginInlineEnd: 0 }}>{t("goLive.import.depositRecord", { total: yuan(r.deposit.receiveFen) })}</Tag>}
+                        {r.deposit.lower && <Tag color="orange" style={{ marginInlineEnd: 0 }}>{t("goLive.import.depositLower")}</Tag>}
+                      </KV>
+                    )}
+                    {r.billedFen !== undefined && <KV label={t("goLive.import.billed")}>{yuan(r.billedFen)}</KV>}
+                    {r.paymentFen !== undefined && <KV label={t("goLive.import.openingPayment")}>{yuan(r.paymentFen)}</KV>}
+                    {r.unpaidBills !== undefined && <KV label={t("goLive.import.unpaidBills")}>{r.unpaidBills}</KV>}
+                    {r.catchUp && <KV label={t("goLive.import.catchUp")}>{t("goLive.import.catchUpBills", { count: r.catchUp.count, total: yuan(r.catchUp.totalFen) })}</KV>}
+                  </Card>
+                ))}
+              </Space>
+            ) : (
             <Table
               size="small"
               rowKey={(r: PlanResult) => `${r.reference}-${r.state}-${r.reason ?? ""}`}
               dataSource={plan}
               pagination={plan.length > 25 ? { pageSize: 25 } : false}
-              // Every column keeps a readable width; the table scrolls sideways inside its box when the screen is narrow.
               tableLayout="fixed"
-              scroll={{ x: 1380 }}
               columns={[
-                { title: t("goLive.col.contract"), dataIndex: "reference", width: 110 },
-                { title: t("goLive.col.tenant"), dataIndex: "tenantName", width: 150 },
+                { title: t("goLive.col.contract"), dataIndex: "reference", width: share(110, PLAN_W) },
+                { title: t("goLive.col.tenant"), dataIndex: "tenantName", width: share(150, PLAN_W) },
                 {
                   title: t("goLive.import.result"),
-                  width: 140,
+                  width: share(140, PLAN_W),
                   render: (_: unknown, r: PlanResult) =>
                     r.state === "ready" ? (
                       <Space direction="vertical" size={0}>
@@ -288,10 +347,10 @@ export default function GoLivePage() {
                       <Tag color="red">{t(`goLive.reason.${r.reason}`, { defaultValue: r.reason ?? "" })}</Tag>
                     ),
                 },
-                { title: t("openingBalance.balanceOwed"), align: "right" as const, width: 120, render: (_: unknown, r: PlanResult) => (r.balanceOwedFen === undefined ? "" : yuan(r.balanceOwedFen)) },
+                { title: t("openingBalance.balanceOwed"), align: "right" as const, width: share(150, PLAN_W), render: (_: unknown, r: PlanResult) => (r.balanceOwedFen === undefined ? "" : <span style={{ whiteSpace: "nowrap" }}>{yuan(r.balanceOwedFen)}</span>) },
                 {
                   title: t("goLive.import.broughtForward"),
-                  width: 150,
+                  width: share(150, PLAN_W),
                   render: (_: unknown, r: PlanResult) =>
                     (r.extras ?? []).length === 0 ? (
                       ""
@@ -307,7 +366,7 @@ export default function GoLivePage() {
                 },
                 {
                   title: t("goLive.import.deposit"),
-                  width: 210,
+                  width: share(210, PLAN_W),
                   render: (_: unknown, r: PlanResult) =>
                     !r.deposit || r.deposit.confirmedFen === null ? (
                       ""
@@ -319,16 +378,17 @@ export default function GoLivePage() {
                       </Space>
                     ),
                 },
-                { title: t("goLive.import.billed"), align: "right" as const, width: 110, render: (_: unknown, r: PlanResult) => (r.billedFen === undefined ? "" : yuan(r.billedFen)) },
-                { title: t("goLive.import.openingPayment"), align: "right" as const, width: 120, render: (_: unknown, r: PlanResult) => (r.paymentFen === undefined ? "" : yuan(r.paymentFen)) },
-                { title: t("goLive.import.unpaidBills"), align: "right" as const, width: 110, render: (_: unknown, r: PlanResult) => r.unpaidBills ?? "" },
+                { title: t("goLive.import.billed"), align: "right" as const, width: share(130, PLAN_W), render: (_: unknown, r: PlanResult) => (r.billedFen === undefined ? "" : <span style={{ whiteSpace: "nowrap" }}>{yuan(r.billedFen)}</span>) },
+                { title: t("goLive.import.openingPayment"), align: "right" as const, width: share(140, PLAN_W), render: (_: unknown, r: PlanResult) => (r.paymentFen === undefined ? "" : <span style={{ whiteSpace: "nowrap" }}>{yuan(r.paymentFen)}</span>) },
+                { title: t("goLive.import.unpaidBills"), align: "right" as const, width: share(110, PLAN_W), render: (_: unknown, r: PlanResult) => r.unpaidBills ?? "" },
                 {
                   title: t("goLive.import.catchUp"),
-                  width: 190,
+                  width: share(190, PLAN_W),
                   render: (_: unknown, r: PlanResult) => (r.catchUp ? t("goLive.import.catchUpBills", { count: r.catchUp.count, total: yuan(r.catchUp.totalFen) }) : ""),
                 },
               ]}
             />
+            )}
           </div>
         )}
       </Card>
@@ -338,6 +398,50 @@ export default function GoLivePage() {
         <Button disabled={adjustable.length === 0} onClick={finalizeAll} style={{ marginBottom: 8 }}>
           {t("goLive.finalizeAll", { count: adjustable.length })}
         </Button>
+        {isPhone ? (
+          <Space direction="vertical" size={8} style={{ width: "100%" }}>
+            <Space size="middle">
+              <Button size="small" onClick={() => setSelected(rows.map((r) => r.id))}>{t("goLive.selectAll")}</Button>
+              <Button size="small" onClick={() => setSelected([])}>{t("goLive.selectNone")}</Button>
+            </Space>
+            {rows.map((r) => (
+              <Card key={r.id} size="small">
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <Checkbox
+                    checked={chosen.includes(r.id)}
+                    onChange={(e) => setSelected(e.target.checked ? [...chosen, r.id] : chosen.filter((id) => id !== r.id))}
+                  />
+                  <Typography.Text strong style={{ flex: 1 }}>
+                    <Link to={`/contracts/${r.id}`}>{r.referenceNumber}</Link> · {r.tenantName}
+                  </Typography.Text>
+                  {r.chargeCount > 0 ? <Tag color="green" style={{ marginInlineEnd: 0 }}>{t("goLive.billed", { count: r.chargeCount })}</Tag> : <Tag style={{ marginInlineEnd: 0 }}>{t("goLive.notBilled")}</Tag>}
+                </div>
+                <KV label={t("goLive.col.place")}>{r.place}</KV>
+                <KV label={t("goLive.col.unpaid")}>{yuan(r.unpaidFen)}</KV>
+                <KV label={t("goLive.col.deposit")}>{yuan(r.depositHeldFen)}</KV>
+                <KV label={t("goLive.col.opening")}>
+                  {r.opening ? (
+                    <>
+                      <Tag color={r.opening.status === "provisional" ? "orange" : "green"} style={{ marginInlineEnd: 0 }}>{t(`goLive.openingStatus.${r.opening.status}`)}</Tag>
+                      <div>
+                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                          {t("goLive.openingLine", { date: r.opening.asOfDate, balance: yuan(r.opening.balanceOwedFen) })}
+                        </Typography.Text>
+                      </div>
+                    </>
+                  ) : r.hasOtherPayments ? (
+                    <Tag style={{ marginInlineEnd: 0 }}>{t("goLive.hasPayments")}</Tag>
+                  ) : (
+                    <Tag color="blue" style={{ marginInlineEnd: 0 }}>{t("goLive.pending")}</Tag>
+                  )}
+                </KV>
+                <div style={{ textAlign: "right", marginTop: 4 }}>
+                  <Link to={`/contracts/${r.id}`}>{t("goLive.open")}</Link>
+                </div>
+              </Card>
+            ))}
+          </Space>
+        ) : (
         <Table
           size="small"
           rowKey="id"
@@ -345,15 +449,14 @@ export default function GoLivePage() {
           dataSource={rows}
           pagination={rows.length > 25 ? { pageSize: 25 } : false}
           tableLayout="fixed"
-          scroll={{ x: 1100 }}
           rowSelection={{ selectedRowKeys: chosen, onChange: (keys) => setSelected(keys as number[]) }}
           columns={[
-            { title: t("goLive.col.contract"), width: 110, render: (_: unknown, r: GoLiveRow) => <Link to={`/contracts/${r.id}`}>{r.referenceNumber}</Link> },
-            { title: t("goLive.col.tenant"), dataIndex: "tenantName", width: 150 },
-            { title: t("goLive.col.place"), dataIndex: "place", width: 130 },
+            { title: t("goLive.col.contract"), width: share(110, REVIEW_W), render: (_: unknown, r: GoLiveRow) => <Link to={`/contracts/${r.id}`}>{r.referenceNumber}</Link> },
+            { title: t("goLive.col.tenant"), dataIndex: "tenantName", width: share(150, REVIEW_W) },
+            { title: t("goLive.col.place"), dataIndex: "place", width: share(130, REVIEW_W) },
             {
               title: t("goLive.col.billing"),
-              width: 120,
+              width: share(120, REVIEW_W),
               render: (_: unknown, r: GoLiveRow) =>
                 r.chargeCount > 0 ? (
                   <Tag color="green">{t("goLive.billed", { count: r.chargeCount })}</Tag>
@@ -361,11 +464,11 @@ export default function GoLivePage() {
                   <Tag>{t("goLive.notBilled")}</Tag>
                 ),
             },
-            { title: t("goLive.col.unpaid"), dataIndex: "unpaidFen", width: 110, align: "right" as const, render: (v: number) => yuan(v) },
-            { title: t("goLive.col.deposit"), dataIndex: "depositHeldFen", width: 110, align: "right" as const, render: (v: number) => yuan(v) },
+            { title: t("goLive.col.unpaid"), dataIndex: "unpaidFen", width: share(110, REVIEW_W), align: "right" as const, render: (v: number) => <span style={{ whiteSpace: "nowrap" }}>{yuan(v)}</span> },
+            { title: t("goLive.col.deposit"), dataIndex: "depositHeldFen", width: share(110, REVIEW_W), align: "right" as const, render: (v: number) => <span style={{ whiteSpace: "nowrap" }}>{yuan(v)}</span> },
             {
               title: t("goLive.col.opening"),
-              width: 190,
+              width: share(190, REVIEW_W),
               render: (_: unknown, r: GoLiveRow) =>
                 r.opening ? (
                   <Space direction="vertical" size={0}>
@@ -382,11 +485,12 @@ export default function GoLivePage() {
             },
             {
               title: "",
-              width: 70,
+              width: share(70, REVIEW_W),
               render: (_: unknown, r: GoLiveRow) => <Link to={`/contracts/${r.id}`}>{t("goLive.open")}</Link>,
             },
           ]}
         />
+        )}
       </Card>
     </Space>
   );

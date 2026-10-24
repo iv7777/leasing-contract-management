@@ -515,6 +515,8 @@ const zh: Translations = {
     undoConfirm: "撤销期初余额？所有账单将恢复为原来的应收金额。",
   },
   goLive: {
+    selectAll: "全选",
+    selectNone: "全不选",
     intro: "把已经存在的合同补齐至当前。把表格发给会计，导入他们返回的余额（或在合同「账单」页签用「补齐至当前」逐份录入），再逐份核对并定稿。仅管理员可见此页面。",
     finalizeAll: "全部定稿（{{count}}）",
     finalizeAllTitle: "确认定稿 {{count}} 份合同？",
