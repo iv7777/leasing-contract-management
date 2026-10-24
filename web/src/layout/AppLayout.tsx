@@ -1,3 +1,4 @@
+import { installScrollHints } from "../lib/scrollHints";
 import { useEffect, useState, type ReactNode } from "react";
 import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
 import {
@@ -66,6 +67,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   useDeviceClasses();
+  useEffect(() => installScrollHints(), []);
 
   const adminItems = [
     { key: "/users", icon: <UserOutlined />, label: t("nav.users") },

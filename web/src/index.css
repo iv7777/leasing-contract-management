@@ -268,6 +268,48 @@ body {
   }
 }
 
+/* Anything that scrolls sideways shows a ‹ or › with a fade where more is hidden (see lib/scrollHints.ts). */
+.ant-table-container,
+[data-scroll-host] {
+  position: relative;
+}
+.ant-table-container::before,
+.ant-table-container::after,
+[data-scroll-host]::before,
+[data-scroll-host]::after {
+  display: none;
+  position: absolute !important;
+  top: 0 !important;
+  bottom: auto !important;
+  width: 30px !important;
+  height: 44px;
+  z-index: 4;
+  pointer-events: none;
+  align-items: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f5f4a;
+  box-shadow: none !important;
+}
+[data-hint-left]::before,
+[data-hint-right]::after {
+  display: flex;
+}
+[data-hint-left]::before {
+  content: "‹" !important;
+  left: 0;
+  justify-content: flex-start;
+  padding-left: 4px;
+  background: linear-gradient(to right, var(--hint-bg, #fff) 55%, rgba(255, 255, 255, 0));
+}
+[data-hint-right]::after {
+  content: "›" !important;
+  right: 0;
+  justify-content: flex-end;
+  padding-right: 4px;
+  background: linear-gradient(to left, var(--hint-bg, #fff) 55%, rgba(255, 255, 255, 0));
+}
+
 /* A wide table scrolls inside its own box instead of pushing the whole page past the screen edge. */
 .dev-phone .ant-layout,
 .dev-land .ant-layout {

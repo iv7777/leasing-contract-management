@@ -78,7 +78,8 @@ export default function ContractSummaryStrip({
 
   return (
     <>
-      <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0", marginBottom: 8 }}>
+      <div data-scroll-host style={{ position: "relative", marginBottom: 8, ["--hint-bg" as string]: "#f6f7f5" }}>
+      <div data-scroll-body style={{ display: "flex", gap: 8, overflowX: "auto", padding: "4px 0" }}>
         {chips.map((c) => (
           <div
             key={c.key}
@@ -107,6 +108,7 @@ export default function ContractSummaryStrip({
             <div style={{ fontWeight: 600, whiteSpace: "nowrap", color: c.amount > 0 && c.color ? c.color : undefined }}>{c.amount > 0 || c.key === "next" ? c.value : "—"}</div>
           </div>
         ))}
+      </div>
       </div>
       <ChargeDetailDrawer chargeId={detail.chargeId} projected={detail.projected} onClose={() => setDetail({ chargeId: null, projected: null })} />
     </>
