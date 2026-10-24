@@ -209,6 +209,60 @@ body {
   }
 }
 
+/* On a touch screen the tab bar is one row you swipe sideways. Make that obvious: a tinted band, the open tab as a
+ * raised pill, and a fade with an arrow on whichever side still has tabs hidden. */
+@media (hover: none), (pointer: coarse) {
+  .ant-tabs-top > .ant-tabs-nav {
+    background: #e3ece6;
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 12px;
+  }
+  .ant-tabs-top > .ant-tabs-nav::before {
+    border-bottom: none;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-ink-bar,
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-operations {
+    display: none !important;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-tab {
+    padding: 6px 12px !important;
+    margin: 0 2px !important;
+    border-radius: 8px;
+    color: #4a5a50;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active {
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+    color: #1f5f4a;
+    font-weight: 600;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap::before,
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap::after {
+    width: 30px;
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1f5f4a;
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap::before {
+    content: "‹";
+    justify-content: flex-start;
+    padding-left: 4px;
+    background: linear-gradient(to right, #e3ece6 55%, rgba(227, 236, 230, 0));
+  }
+  .ant-tabs-top > .ant-tabs-nav .ant-tabs-nav-wrap::after {
+    content: "›";
+    justify-content: flex-end;
+    padding-right: 4px;
+    background: linear-gradient(to left, #e3ece6 55%, rgba(227, 236, 230, 0));
+  }
+}
+
 /* A wide table scrolls inside its own box instead of pushing the whole page past the screen edge. */
 .dev-phone .ant-layout,
 .dev-land .ant-layout {
