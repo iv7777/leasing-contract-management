@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Button, Card, Checkbox, Grid, Input, Modal, Space, Statistic, Table, Tag, Typography, Upload, message } from "antd";
-import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ExclamationCircleFilled, UploadOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { todayInChina } from "@lcm/shared";
@@ -55,6 +55,8 @@ interface ApplyResult {
 /** The table columns keep these proportions as the window narrows (the pixel widths are a column's share of the total). */
 const PLAN_W = 1480;
 const REVIEW_W = 990;
+/** A tag whose text wraps onto the next line inside its column instead of running into the next one. */
+const WRAP_TAG: React.CSSProperties = { whiteSpace: "normal", height: "auto", lineHeight: 1.5, paddingBlock: 1, wordBreak: "break-word" };
 const share = (px: number, total: number) => `${((px / total) * 100).toFixed(2)}%`;
 
 /** One labelled value on a phone card. */
@@ -71,8 +73,8 @@ function KV({ label, children }: { label: string; children: React.ReactNode }) {
 
 export default function GoLivePage() {
   const { t } = useTranslation();
-  // Ten columns need room: below a wide window each contract is a card; above it the table's columns shrink in proportion.
-  const isPhone = !Grid.useBreakpoint().xl;
+  // A phone held upright gets cards; wider screens (a phone on its side too) get the tables, whose columns shrink in proportion.
+  const isPhone = !Grid.useBreakpoint().md;
   const [rows, setRows] = useState<GoLiveRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [asOf, setAsOf] = useState<string | undefined>(todayInChina());
@@ -294,10 +296,10 @@ export default function GoLivePage() {
                       {r.state === "ready" ? (
                         <Space size={4} wrap style={{ justifyContent: "flex-end" }}>
                           <Tag color="green" style={{ marginInlineEnd: 0 }}>{t("goLive.import.ready")}</Tag>
-                          {r.partialBills ? <Tag color="orange" style={{ marginInlineEnd: 0 }}>{t("goLive.import.partial")}</Tag> : null}
+                          {r.partialBills ? <Tag color="orange" style={{ marginInlineEnd: 0, ...WRAP_TAG }}>{t("goLive.import.partial")}</Tag> : null}
                         </Space>
                       ) : (
-                        <Tag color="red" style={{ marginInlineEnd: 0, whiteSpace: "normal" }}>{t(`goLive.reason.${r.reason}`, { defaultValue: r.reason ?? "" })}</Tag>
+                        <Tag color="red" style={{ marginInlineEnd: 0, ...WRAP_TAG }}>{t(`goLive.reason.${r.reason}`, { defaultValue: r.reason ?? "" })}</Tag>
                       )}
                     </div>
                     {r.balanceOwedFen !== undefined && <KV label={t("openingBalance.balanceOwed")}>{yuan(r.balanceOwedFen)}</KV>}
@@ -330,7 +332,16 @@ export default function GoLivePage() {
               rowKey={(r: PlanResult) => `${r.reference}-${r.state}-${r.reason ?? ""}`}
               dataSource={plan}
               pagination={plan.length > 25 ? { pageSize: 25 } : false}
+              // A row that needs checking gets its warning on a line of its own, across the whole width.
+              expandable={{
+                showExpandColumn: false,
+                expandedRowKeys: plan.filter((r) => r.state === "ready" && r.partialBills).map((r) => `${r.reference}-${r.state}-${r.reason ?? ""}`),
+                rowExpandable: (r: PlanResult) => r.state === "ready" && !!r.partialBills,
+                expandedRowRender: () => <Alert type="warning" showIcon banner message={t("goLive.import.partial")} />,
+              }}
               tableLayout="fixed"
+              // Columns shrink with the window, down to a width where the text is still readable; below that it scrolls.
+              scroll={{ x: 760 }}
               columns={[
                 { title: t("goLive.col.contract"), dataIndex: "reference", width: share(110, PLAN_W) },
                 { title: t("goLive.col.tenant"), dataIndex: "tenantName", width: share(150, PLAN_W) },
@@ -339,12 +350,12 @@ export default function GoLivePage() {
                   width: share(140, PLAN_W),
                   render: (_: unknown, r: PlanResult) =>
                     r.state === "ready" ? (
-                      <Space direction="vertical" size={0}>
-                        <Tag color="green">{t("goLive.import.ready")}</Tag>
-                        {r.partialBills ? <Tag color="orange">{t("goLive.import.partial")}</Tag> : null}
+                      <Space size={4}>
+                        <Tag color="green" style={{ marginInlineEnd: 0 }}>{t("goLive.import.ready")}</Tag>
+                        {r.partialBills ? <ExclamationCircleFilled style={{ color: "#fa8c16" }} title={t("goLive.import.partial")} /> : null}
                       </Space>
                     ) : (
-                      <Tag color="red">{t(`goLive.reason.${r.reason}`, { defaultValue: r.reason ?? "" })}</Tag>
+                      <Tag color="red" style={WRAP_TAG}>{t(`goLive.reason.${r.reason}`, { defaultValue: r.reason ?? "" })}</Tag>
                     ),
                 },
                 { title: t("openingBalance.balanceOwed"), align: "right" as const, width: share(150, PLAN_W), render: (_: unknown, r: PlanResult) => (r.balanceOwedFen === undefined ? "" : <span style={{ whiteSpace: "nowrap" }}>{yuan(r.balanceOwedFen)}</span>) },
@@ -373,8 +384,8 @@ export default function GoLivePage() {
                     ) : (
                       <Space direction="vertical" size={0}>
                         <span>{t("goLive.import.depositLine", { held: yuan(r.deposit.confirmedFen), system: yuan(r.deposit.systemFen) })}</span>
-                        {r.deposit.receiveFen > 0 && <Tag color="green">{t("goLive.import.depositRecord", { total: yuan(r.deposit.receiveFen) })}</Tag>}
-                        {r.deposit.lower && <Tag color="orange">{t("goLive.import.depositLower")}</Tag>}
+                        {r.deposit.receiveFen > 0 && <Tag color="green" style={WRAP_TAG}>{t("goLive.import.depositRecord", { total: yuan(r.deposit.receiveFen) })}</Tag>}
+                        {r.deposit.lower && <Tag color="orange" style={WRAP_TAG}>{t("goLive.import.depositLower")}</Tag>}
                       </Space>
                     ),
                 },
@@ -449,6 +460,7 @@ export default function GoLivePage() {
           dataSource={rows}
           pagination={rows.length > 25 ? { pageSize: 25 } : false}
           tableLayout="fixed"
+          scroll={{ x: 700 }}
           rowSelection={{ selectedRowKeys: chosen, onChange: (keys) => setSelected(keys as number[]) }}
           columns={[
             { title: t("goLive.col.contract"), width: share(110, REVIEW_W), render: (_: unknown, r: GoLiveRow) => <Link to={`/contracts/${r.id}`}>{r.referenceNumber}</Link> },
