@@ -42,6 +42,7 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import StatusStrip, { type StripItem } from "../components/billing/StatusStrip";
+import ContractSummaryStrip, { type ChargeFilter } from "../components/billing/ContractSummaryStrip";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import BillRows from "../components/billing/BillRows";
@@ -299,6 +300,7 @@ export default function ContractDetailPage() {
   const [allDocuments, setDocuments] = useState<DocumentDto[]>([]);
   const [showVoidedDocs, setShowVoidedDocs] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
+  const [chargeFilter, setChargeFilter] = useState<ChargeFilter>("all");
   // Voided documents (withdrawn by an approved amendment) are kept on record but are never offered for new work.
   const documents = allDocuments.filter((d) => !d.voided);
   const [activeTab, setActiveTab] = useState("units");
@@ -540,7 +542,27 @@ export default function ContractDetailPage() {
     if (!b) return null;
     if (b.balanceFen === 0) return <Tag color="green">{t("chargeDetail.paid")}</Tag>;
     if (b.isOverdue) return <Tag color="red">{t("contracts.overdueDays", { days: b.daysOverdue })} · {yuan(b.balanceFen)}</Tag>;
-    return <Tag color="orange">{yuan(b.balanceFen)}</Tag>;
+    // The Dashboard's own words: due already, or due later.
+    return <Tag color={c.dueDate <= todayInChina() ? "orange" : "blue"}>{t(c.dueDate <= todayInChina() ? "billing.summary.dueNow" : "billing.summary.dueLater")} · {yuan(b.balanceFen)}</Tag>;
+  };
+  // Which of the Dashboard's groups a bill falls in, so the Charges tab can show just one.
+  const chargeGroup = (c: ChargeDto): ChargeFilter | "voided" => {
+    if (c.status === "voided") return "voided";
+    const b = chargeBalances.find((x) => x.chargeId === c.id);
+    if (!b || b.balanceFen <= 0) return "paid";
+    return b.isOverdue ? "overdue" : c.dueDate <= todayInChina() ? "due" : "later";
+  };
+  const chargeFilterCounts = charges.reduce<Record<string, number>>((acc, c) => {
+    const g = chargeGroup(c);
+    acc[g] = (acc[g] ?? 0) + 1;
+    if (g === "overdue" || g === "due" || g === "later") acc.unpaid = (acc.unpaid ?? 0) + 1;
+    return acc;
+  }, {});
+  const shownCharges =
+    chargeFilter === "all" ? charges : charges.filter((c) => (chargeFilter === "unpaid" ? ["overdue", "due", "later"].includes(chargeGroup(c)) : chargeGroup(c) === chargeFilter));
+  const showCharges = (f: ChargeFilter) => {
+    setChargeFilter(f);
+    setActiveTab("charges");
   };
   // A bill is shown by the name of its item (two electricity items would otherwise look the same).
   const itemNameOf = (streamId: number, feeType: string) => streams.find((s) => s.id === streamId)?.label ?? feeName(feeType);
@@ -1326,13 +1348,6 @@ export default function ContractDetailPage() {
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           {contract.archived && <Tag>{t("common.archived")}</Tag>}
           <Tag>v{contract.versionNumber}</Tag>
-          {overdue && (
-            <Tooltip title={t("billing.overdueTip", { count: overdue.count, amount: yuan(overdue.fen), days: overdue.days })}>
-              <Tag color="red" style={{ cursor: "pointer" }} onClick={() => setActiveTab("charges")}>
-                {t("billing.overdueTag", { amount: yuan(overdue.fen), days: overdue.days })}
-              </Tag>
-            </Tooltip>
-          )}
           {contract.status === "active" && depositStatus?.state === "short" && (
             <Tag color="orange" style={{ cursor: "pointer" }} onClick={() => setActiveTab("deposit")}>
               {t("billing.deposit.shortTag", { amount: yuan(depositStatus.shortfallFen) })}
@@ -1405,6 +1420,9 @@ export default function ContractDetailPage() {
           )}
         </Space>
       </Space>
+      {contract.status === "active" && (
+        <ContractSummaryStrip contractId={contract.id} reloadKey={charges.length + ":" + chargeBalances.map((b) => b.balanceFen).join(",")} onFilter={showCharges} onTab={setActiveTab} />
+      )}
       {contract.archived && <Alert type="info" showIcon message={t("contracts.archivedBanner")} style={{ marginBottom: 12 }} />}
       {isDraft &&
         (documents.some((d) => d.docType === "signed_lease") ? (
@@ -2121,10 +2139,24 @@ export default function ContractDetailPage() {
                     {t("contracts.generateCharges")}
                   </Button>
                 )}
+                {charges.length > 0 && (
+                  <Space size={[4, 8]} wrap style={{ marginBottom: 12 }}>
+                    {(["all", "unpaid", "overdue", "due", "later", "paid"] as ChargeFilter[]).map((f) => {
+                      const n = f === "all" ? charges.length : chargeFilterCounts[f] ?? 0;
+                      if (f !== "all" && f !== chargeFilter && n === 0) return null;
+                      const label = f === "all" ? t("billing.summary.all") : f === "unpaid" ? t("billing.summary.unpaid") : f === "overdue" ? t("billing.overview.overdue") : f === "due" ? t("billing.overview.dueNow") : f === "later" ? t("billing.summary.dueLater") : t("billing.summary.paid");
+                      return (
+                        <Tag.CheckableTag key={f} checked={chargeFilter === f} onChange={() => setChargeFilter(f)}>
+                          {label} {n}
+                        </Tag.CheckableTag>
+                      );
+                    })}
+                  </Space>
+                )}
                 {isPhone ? (
                   <BillRows
                     empty={t("common.noneYet")}
-                    rows={charges.map((c) => {
+                    rows={shownCharges.map((c) => {
                       const b = chargeBalances.find((x) => x.chargeId === c.id);
                       return {
                         key: c.id,
@@ -2150,7 +2182,7 @@ export default function ContractDetailPage() {
                 <Table
                   rowKey="id"
                   size="small"
-                  dataSource={charges}
+                  dataSource={shownCharges}
                   onRow={(c: ChargeDto) => ({ onClick: () => setDetailChargeId(c.id), style: { cursor: "pointer" } })}
                   columns={[
                     {

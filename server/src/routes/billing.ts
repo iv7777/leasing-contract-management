@@ -297,7 +297,9 @@ billingRouter.get("/billing/overview", (req, res) => {
     .from(contracts)
     .where(eq(contracts.status, "active"))
     .all()
-    .filter((c) => canAccessContract(req.user!, c.id));
+    .filter((c) => canAccessContract(req.user!, c.id))
+    // One contract's own summary (its page) uses the same numbers as the Dashboard.
+    .filter((c) => !req.query.contractId || c.id === Number(req.query.contractId));
 
   const inputs: OverviewContractInput[] = [];
   const missingReadings: { contractId: number; referenceNumber: string; tenantName: string; stream: string; feeType: string; month: string }[] = [];
