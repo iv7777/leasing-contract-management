@@ -486,6 +486,9 @@ const zh: Translations = {
     confirmAdjust: "保存调整",
     applied: "期初余额已录入。",
     adjusted: "期初余额已调整。",
+    stripFinal: "已补齐 · {{date}} · 已定稿",
+    stripProvisional: "已补齐 · {{date}} · 可调整",
+    stripUntil: "{{until}} 前可调整",
     provisional: "已补齐至 {{date}}：欠款余额 {{balance}}（期初收款 {{payment}}）。",
     final: "已补齐至 {{date}}：欠款余额 {{balance}}（期初收款 {{payment}}）——已定稿。",
     provisionalNote: "在 {{until}} 之前，或该合同录入其他收款之前，您都可以调整或撤销。核对完未付账单后请点「定稿」。",
@@ -715,6 +718,7 @@ const zh: Translations = {
     auto: {
       manualOnly: "该合同按季度或按年收费，账单需手动生成（每晚的自动任务只处理按月收费的合同）。",
       on: "自动出账已开启",
+      manualTitle: "按季/年手动出账",
       onBody: "系统每晚自动生成所有已到期以及本月将到期的账单（逾期宽限 {{days}} 天）。计量类费用在录入读数后自动生成。",
       pause: "暂停",
       pauseConfirm: "确定暂停该合同的自动出账吗？不会删除任何数据；在重新补账之前不会再自动生成新账单。",

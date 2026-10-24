@@ -484,6 +484,9 @@ const en = {
     confirmAdjust: "Save adjustment",
     applied: "Opening balance applied.",
     adjusted: "Opening balance adjusted.",
+    stripFinal: "Brought up to date · {{date}} · final",
+    stripProvisional: "Brought up to date · {{date}} · provisional",
+    stripUntil: "adjust until {{until}}",
     provisional: "Brought up to date as of {{date}}: balance owed {{balance}} (opening payment {{payment}}).",
     final: "Brought up to date as of {{date}}: balance owed {{balance}} (opening payment {{payment}}) — final.",
     provisionalNote: "You can adjust or undo this until {{until}}, or until another payment is recorded on this contract. Finalize it once you have checked the unpaid bills.",
@@ -713,6 +716,7 @@ const en = {
     auto: {
       manualOnly: "This contract is billed quarterly or yearly, so its charges are generated manually (the nightly job covers monthly contracts only).",
       on: "Automatic billing is on",
+      manualTitle: "Billed manually (quarterly/yearly)",
       onBody: "Every night the system creates all charges that are already due or fall due this month (overdue after {{days}} days). Metered fees are created once their reading is entered.",
       pause: "Pause",
       pauseConfirm: "Pause automatic billing for this contract? Nothing is deleted; no new charges are created until you catch up billing again.",

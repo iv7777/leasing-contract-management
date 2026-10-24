@@ -41,6 +41,7 @@ import DateField from "../components/DateField";
 import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
+import StatusStrip, { type StripItem } from "../components/billing/StatusStrip";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import BillRows from "../components/billing/BillRows";
@@ -459,6 +460,42 @@ export default function ContractDetailPage() {
   const termStart = contract?.termStart;
   const areaOfUnit = (unitId?: number) => availableUnits.find((u) => u.id === unitId)?.rentableAreaSqm;
   const feeName = (feeType: string) => t(`contracts.${camel(feeType)}`);
+  // The billing notice on the Charges tab: one line, with the full text and its buttons folded in.
+  const billingStripItems: StripItem[] =
+    contract?.status === "active" && billingRulesInfo
+      ? [
+          billingRulesInfo.billingFrequency !== "monthly"
+            ? { key: "billing", tone: "info", title: t("billing.auto.manualTitle"), body: <Typography.Text>{t("billing.auto.manualOnly")}</Typography.Text> }
+            : billingRulesInfo.autoBilling
+              ? {
+                  key: "billing",
+                  tone: "success",
+                  title: t("billing.auto.on"),
+                  body: (
+                    <Space direction="vertical" size={8}>
+                      <Typography.Text>{t("billing.auto.onBody", { days: billingRulesInfo.overdueGraceDays })}</Typography.Text>
+                      {user?.role === "admin" && (
+                        <Popconfirm title={t("billing.auto.pauseConfirm")} onConfirm={() => onPauseAutoBilling()} okText={t("billing.auto.pause")} cancelText={t("common.cancel")}>
+                          <Button size="small">{t("billing.auto.pause")}</Button>
+                        </Popconfirm>
+                      )}
+                    </Space>
+                  ),
+                }
+              : {
+                  key: "billing",
+                  tone: "warning",
+                  title: t("billing.auto.off"),
+                  quick:
+                    user?.role === "admin" ? (
+                      <Button size="small" type="primary" onClick={() => setCatchUpOpen(true)}>
+                        {t("billing.catchUp.button")}
+                      </Button>
+                    ) : undefined,
+                  body: <Typography.Text>{t(user?.role === "admin" ? "billing.auto.offBodyAdmin" : "billing.auto.offBody")}</Typography.Text>,
+                },
+        ]
+      : [];
   // Entries taken back during their correction window are out of the way unless asked for.
   const removedDepositIds = new Set(depositTxns.filter((x) => x.removedAt && x.reversalOfId !== null).map((x) => x.reversalOfId));
   const shownReceipts = showRemoved ? receipts : receipts.filter((r) => !r.removedAt);
@@ -2073,43 +2110,12 @@ export default function ContractDetailPage() {
             ),
             children: (
               <>
-                {contract.status === "active" && billingRulesInfo && (
-                  billingRulesInfo.billingFrequency !== "monthly" ? (
-                    <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("billing.auto.manualOnly")} />
-                  ) : billingRulesInfo.autoBilling ? (
-                    <Alert
-                      type="success"
-                      showIcon
-                      style={{ marginBottom: 12 }}
-                      message={t("billing.auto.on")}
-                      description={t("billing.auto.onBody", { days: billingRulesInfo.overdueGraceDays })}
-                      action={
-                        user?.role === "admin" && (
-                          <Popconfirm title={t("billing.auto.pauseConfirm")} onConfirm={onPauseAutoBilling} okText={t("billing.auto.pause")} cancelText={t("common.cancel")}>
-                            <Button size="small">{t("billing.auto.pause")}</Button>
-                          </Popconfirm>
-                        )
-                      }
-                    />
-                  ) : (
-                    <Alert
-                      type="warning"
-                      showIcon
-                      style={{ marginBottom: 12 }}
-                      message={t("billing.auto.off")}
-                      description={t(user?.role === "admin" ? "billing.auto.offBodyAdmin" : "billing.auto.offBody")}
-                      action={
-                        user?.role === "admin" && (
-                          <Button size="small" type="primary" onClick={() => setCatchUpOpen(true)}>
-                            {t("billing.catchUp.button")}
-                          </Button>
-                        )
-                      }
-                    />
-                  )
-                )}
                 {(user?.role === "admin" || user?.role === "manager") && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
-                {user?.role === "admin" && contract.status !== "draft" && <OpeningBalancePanel contractId={contract.id} onChanged={load} />}
+                {user?.role === "admin" && contract.status !== "draft" ? (
+                  <OpeningBalancePanel contractId={contract.id} onChanged={load} extraItems={billingStripItems} />
+                ) : (
+                  <StatusStrip items={billingStripItems} />
+                )}
                 {(user?.role === "admin" || user?.role === "manager") && contract.status !== "draft" && (
                   <Button icon={<PlusOutlined />} onClick={() => setGenerateModal(true)} style={{ marginBottom: 12 }}>
                     {t("contracts.generateCharges")}
