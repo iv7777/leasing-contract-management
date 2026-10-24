@@ -325,25 +325,23 @@ body {
   overflow-x: auto;
 }
 
-/* "Back to top": only on a phone (upright or on its side), above the bottom bar, and clear of the screen edge. */
+/* "Back to top": the same white round button as the Guide's, shown only on a phone (upright or on its side), above
+ * the bottom bar. No tooltip (a touch screen has no hover) and no tap flash. */
 .back-top.ant-float-btn {
   display: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .dev-phone .back-top.ant-float-btn,
 .dev-land .back-top.ant-float-btn {
   display: block;
-  right: 14px;
   bottom: calc(76px + env(safe-area-inset-bottom));
-  width: 40px;
-  height: 40px;
-  z-index: 90;
+  inset-inline-end: 16px;
 }
 .dev-land .back-top.ant-float-btn {
   bottom: 16px;
 }
-.back-top.ant-float-btn .ant-float-btn-body {
-  background: #1f5f4a;
-}
-.back-top.ant-float-btn .ant-float-btn-icon {
-  color: #fff;
+.back-top.ant-float-btn:focus,
+.back-top.ant-float-btn:focus-visible,
+.back-top.ant-float-btn .ant-float-btn-body:focus {
+  outline: none;
 }

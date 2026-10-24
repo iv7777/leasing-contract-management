@@ -179,7 +179,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 76 : 24 }}>{children}</Content>
 
         {/* A long list on a phone: one tap back to the top. Shown only on phones (see .back-top in index.css). */}
-        <FloatButton.BackTop className="back-top" visibilityHeight={400} tooltip={t("common.backToTop")} />
+        {!location.pathname.startsWith("/guide") && <FloatButton.BackTop className="back-top" visibilityHeight={400} aria-label={t("common.backToTop")} />}
 
         {isMobile && (
           <nav className="bottom-nav">
