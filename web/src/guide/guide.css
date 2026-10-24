@@ -23,6 +23,7 @@
 .hb-legend { margin-top: 10px; font-size: 12px; color: var(--hb-muted); display: flex; gap: 16px; flex-wrap: wrap; }
 .hb-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; background: var(--hb-accent-soft); box-shadow: 0 0 0 1px var(--hb-accent); }
 .hb-legend i.s { background: var(--hb-accent); }
+.hb-layout > * { min-width: 0; }
 .hb-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 36px; margin-top: 32px; }
 .hb-toc { position: sticky; top: 76px; align-self: start; font-size: 14px; max-height: calc(100vh - 100px); overflow: auto; padding-right: 4px; }
 .hb-toc h4 { margin: 16px 0 6px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--hb-muted); font-weight: 600; }
@@ -75,7 +76,7 @@
 .hb-rolebox .seg { margin-bottom: 12px; }
 .hb mark { background: #fff1a8; padding: 0 2px; border-radius: 3px; }
 .hb-empty { padding: 28px; text-align: center; color: var(--hb-muted); background: #fff; border: 1px dashed var(--hb-line); border-radius: 12px; }
-@media (max-width: 900px) { .hb-layout { grid-template-columns: 1fr; } .hb-toc { display: none; } .hb-jump { display: block; } .hb-hero { padding: 24px 20px 50px; } .hb-hero h1 { font-size: 26px; } .hb-life { margin: -30px 8px 0; } }
+@media (max-width: 900px) { .hb-layout { grid-template-columns: minmax(0, 1fr); } .hb-toc { display: none; } .hb-jump { display: block; } .hb-hero { padding: 24px 20px 50px; } .hb-hero h1 { font-size: 26px; } .hb-life { margin: -30px 8px 0; } }
 
 @media (max-width: 767px) {
   .hb-hero h1 { font-size: 22px; }
