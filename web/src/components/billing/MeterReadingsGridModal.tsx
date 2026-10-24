@@ -37,6 +37,7 @@ export default function MeterReadingsGridModal({
   termEnd,
   streams,
   usageEntries,
+  meteredFrom = null,
   charges,
   onClose,
   onDone,
@@ -47,6 +48,8 @@ export default function MeterReadingsGridModal({
   termEnd: string;
   streams: MeteredStream[];
   usageEntries: UsageEntry[];
+  /** Readings for months before this are never billed (brought forward at go-live): those cells are closed. */
+  meteredFrom?: string | null;
   charges: PostedCharge[];
   onClose: () => void;
   onDone: () => void;
@@ -74,6 +77,7 @@ export default function MeterReadingsGridModal({
     for (const c of charges) if (c.status === "posted") s.add(cellKey(c.pricingStreamId, c.serviceStart.slice(0, 7)));
     return s;
   }, [charges]);
+  const beforeStart = (month: string) => !!meteredFrom && month < meteredFrom.slice(0, 7);
 
   // Newest month first, from the current month back to the lease's first month.
   const months = useMemo(() => {
@@ -147,6 +151,7 @@ export default function MeterReadingsGridModal({
       destroyOnClose
     >
       <Typography.Paragraph type="secondary">{t("billing.readings.intro")}</Typography.Paragraph>
+      {meteredFrom && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.meteredFromNote", { date: meteredFrom })} />}
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />}
       <Table
         size="small"
@@ -165,9 +170,9 @@ export default function MeterReadingsGridModal({
                 <InputNumber
                   style={{ width: "100%" }}
                   min={0}
-                  disabled={locked.has(k)}
-                  title={locked.has(k) ? t("billing.readings.locked") : undefined}
-                  autoFocus={m === lastMonth && s.id === streams[0]?.id && !locked.has(k)}
+                  disabled={locked.has(k) || beforeStart(m)}
+                  title={locked.has(k) ? t("billing.readings.locked") : beforeStart(m) ? t("billing.readings.notBilled") : undefined}
+                  autoFocus={m === lastMonth && s.id === streams[0]?.id && !locked.has(k) && !beforeStart(m)}
                   value={values[k] ?? null}
                   onChange={(v) => setValues((cur) => ({ ...cur, [k]: v as number | null }))}
                 />
@@ -185,7 +190,7 @@ export default function MeterReadingsGridModal({
                       min={0}
                       precision={2}
                       prefix="¥"
-                      disabled={locked.has(k)}
+                      disabled={locked.has(k) || beforeStart(m)}
                       value={amounts[k] ?? null}
                       onChange={(v) => setAmounts((cur) => ({ ...cur, [k]: v as number | null }))}
                     />

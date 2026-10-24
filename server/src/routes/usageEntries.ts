@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments, documents } from "../db/schema.js";
+import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments, documents, billingRules } from "../db/schema.js";
 import multer from "multer";
 import fs from "node:fs";
 import path from "node:path";
@@ -120,7 +120,10 @@ usageEntriesRouter.get("/contracts/:contractId/usage-entries", (req, res) => {
   if (!ensureContractAccess(req, res, contractId)) return;
   const rows = db.select().from(usageEntries).where(eq(usageEntries.contractId, contractId)).all();
   const photos = new Map(db.select().from(documents).all().filter((d) => d.ownerType === "usage_entry").map((d) => [d.ownerId, d]));
+  // Metered billing starts here after a go-live (earlier months were brought forward, never billed from readings).
+  const meteredFrom = db.select({ f: billingRules.meteredBillingFrom }).from(billingRules).where(eq(billingRules.contractId, contractId)).get()?.f ?? null;
   res.json({
+    meteredFrom,
     usageEntries: rows.map((r) => {
       const billed = chargeAlreadyPosted(contractId, r.pricingStreamId, r.serviceStart, r.serviceEnd);
       const photo = photos.get(r.id);

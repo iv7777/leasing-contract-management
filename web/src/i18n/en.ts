@@ -252,6 +252,8 @@ const en = {
       expired: "Locked: the 24 hours for correcting this reading have passed.",
       not_yours: "Locked: only the person who entered this reading, or an Admin, can correct it.",
     },
+    meteredFromNote: "Metered billing starts on {{date}}. Readings for earlier months are not billed: those months were brought forward when the contract was brought up to date.",
+    meteredBeforeWarning: "This month is before {{date}}, when metered billing starts. A reading saved for it is kept but never billed (it was brought forward at go-live).",
     usageBilledEditHint: "This reading has already been billed. Saving cancels that bill and makes it again with the new quantity. You can correct it for {{time}} more.",
     usageEntryNoMeteredStreams: "Add a pricing stream with a metered rate first.",
     concessions: "Concessions",
@@ -823,6 +825,7 @@ const en = {
       impliedPrice: "≈ ¥{{price}} per {{unit}}",
       priceJump: "{{pct}}% {{dir}} than the month before",
       priceJumpLong: "That works out {{pct}}% {{dir}} than the previous month (¥{{prev}} per {{unit}}). Check the amount and the quantity.",
+      notBilled: "Not billed: this month was brought forward at go-live",
       higher: "higher",
       lower: "lower",
       title: "Meter readings by month",
@@ -961,7 +964,7 @@ const en = {
         meterReadings: {
           heading: "Entering meter readings",
           steps:
-            "The Dashboard lists contracts with meter readings still needed.\nOpen the contract's Usage entries tab and click Meter readings grid.\nEnter each month's quantity for every metered fee (past months too, for a lease that started earlier) and save.\nThe charges are created automatically on the next nightly run — an Admin can also press Run billing now on the Billing runs page.",
+            "The Dashboard lists contracts with meter readings still needed.\nOpen the contract's Usage entries tab and click Meter readings grid.\nEnter each month's quantity for every metered fee (past months too for a lease billed from its start; after Bring up to date, only from the as-of month on) and save.\nThe charges are created automatically on the next nightly run — an Admin can also press Run billing now on the Billing runs page.",
         },
         rentIncrease: {
           heading: "Increasing rent on an active contract",
@@ -1063,7 +1066,7 @@ const en = {
         usage: {
           title: "Usage entries",
           body: "Meter readings for metered fees such as electricity and water. A metered charge can't be created until the month's quantity is entered here — the system then bills it automatically on its next nightly run. Use \"Meter readings grid\" to enter many months for every metered fee at once, or \"Record usage\" for a single reading.",
-          tips: "Once a bill has been made from a reading, the person who entered it (or an Admin) can still correct it for 24 hours if no payment is on the bill: saving cancels that bill and makes it again with the new quantity. After that the reading is locked; an Admin can void the bill, correct the reading, and the month is billed again.\nMetered fees are due on the contract's due day in the month after the usage month.\nMissing readings are listed on the Dashboard so none are forgotten.\nA reading covers one whole calendar month (the 1st to the last day).",
+          tips: "Once a bill has been made from a reading, the person who entered it (or an Admin) can still correct it for 24 hours if no payment is on the bill: saving cancels that bill and makes it again with the new quantity. After that the reading is locked; an Admin can void the bill, correct the reading, and the month is billed again.\nMetered fees are due on the contract's due day in the month after the usage month.\nMissing readings are listed on the Dashboard so none are forgotten.\nA reading covers one whole calendar month (the 1st to the last day).\nAfter a contract is brought up to date, metered billing starts on the first day of the as-of month. Readings for earlier months are never billed — those months were brought forward as one balance — so the readings grid closes them and saving one elsewhere shows a warning.",
         },
         charges: {
           title: "Charges",

@@ -273,6 +273,8 @@ export default function ContractDetailPage() {
   const [streamUnitLinks, setStreamUnitLinks] = useState<{ pricingStreamId: number; contractUnitId: number }[]>([]);
   const [rates, setRates] = useState<RateScheduleDto[]>([]);
   const [usageEntries, setUsageEntries] = useState<UsageEntryDto[]>([]);
+  // Where metered billing starts after a go-live; readings for earlier months are never billed.
+  const [meteredFrom, setMeteredFrom] = useState<string | null>(null);
   const [concessions, setConcessions] = useState<ConcessionDto[]>([]);
   const [depositTerms, setDepositTerms] = useState<DepositTermsDto[]>([]);
   const [charges, setCharges] = useState<ChargeDto[]>([]);
@@ -376,7 +378,10 @@ export default function ContractDetailPage() {
       setConcessions(r.concessions);
       setDepositTerms(r.depositTerms);
     });
-    void api.get<{ usageEntries: UsageEntryDto[] }>(`/contracts/${id}/usage-entries`).then((r) => setUsageEntries(r.usageEntries));
+    void api.get<{ usageEntries: UsageEntryDto[]; meteredFrom: string | null }>(`/contracts/${id}/usage-entries`).then((r) => {
+      setUsageEntries(r.usageEntries);
+      setMeteredFrom(r.meteredFrom ?? null);
+    });
     void api.get<{ charges: ChargeDto[] }>(`/contracts/${id}/charges`).then((r) => setCharges(r.charges));
     void api
       .get<{ chargeBalances: ChargeBalanceDto[]; receipts: ReceiptDto[]; receiptBalances: ReceiptBalanceDto[] }>(`/contracts/${id}/ledger`)
@@ -409,6 +414,7 @@ export default function ContractDetailPage() {
   // Items whose readings carry their own amount (¥) beside the quantity.
   const amountStreamIds = new Set(streams.filter((s) => rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered_amount")).map((s) => s.id));
   const newUsageStreamId = Form.useWatch("pricingStreamId", usageEntryForm) as number | undefined;
+  const newUsageStart = Form.useWatch("serviceStart", usageEntryForm) as string | undefined;
   const newUsageQuantity = Form.useWatch("quantity", usageEntryForm) as number | undefined;
   const newUsageAmount = Form.useWatch("amount", usageEntryForm) as number | undefined;
   const editUsageQuantity = Form.useWatch("quantity", editUsageEntryForm) as number | undefined;
@@ -1637,6 +1643,7 @@ export default function ContractDetailPage() {
               return (
                 <>
                   {canManageUsage && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                  {meteredFrom && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.meteredFromNote", { date: meteredFrom })} />}
                   {canManageUsage && contract.status !== "draft" && (
                     <Button
                       icon={<PlusOutlined />}
@@ -2749,6 +2756,7 @@ export default function ContractDetailPage() {
         cancelText={t("common.cancel")}
         destroyOnClose
       >
+        {meteredFrom && newUsageStart && newUsageStart < meteredFrom && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("contracts.meteredBeforeWarning", { date: meteredFrom })} />}
         <Form
           form={usageEntryForm}
           layout="vertical"
@@ -2811,6 +2819,7 @@ export default function ContractDetailPage() {
         destroyOnClose
       >
         <Form form={editUsageEntryForm} layout="vertical">
+          {meteredFrom && editUsageEntryModal && editUsageEntryModal.serviceStart < meteredFrom && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("contracts.meteredBeforeWarning", { date: meteredFrom })} />}
           {editUsageEntryModal?.billed && <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("contracts.usageBilledEditHint", { time: timeLeft(editUsageEntryModal.editableUntil) })} />}
           {!editUsageEntryModal?.billed && <MonthShortcuts form={editUsageEntryForm} />}
           <Form.Item name="serviceStart" label={t("contracts.serviceStart")} rules={[{ required: true }]}>
@@ -3476,6 +3485,7 @@ export default function ContractDetailPage() {
             amountMode: rates.some((r) => r.pricingStreamId === s.id && r.calculationMethod === "metered_amount"),
           }))}
         usageEntries={usageEntries}
+        meteredFrom={meteredFrom}
         charges={charges}
         onClose={() => setReadingsGridOpen(false)}
         onDone={load}
