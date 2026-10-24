@@ -331,6 +331,8 @@ body {
   bottom: 28px;
   inset-inline-end: 28px;
   -webkit-tap-highlight-color: transparent;
+  /* a tap is a tap: no double-tap-to-zoom wait on iPhone */
+  touch-action: manipulation;
 }
 @media (max-width: 767px) {
   .back-top.ant-float-btn {

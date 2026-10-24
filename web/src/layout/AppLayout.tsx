@@ -1,6 +1,7 @@
+import BackToTop from "../components/BackToTop";
 import { installScrollHints } from "../lib/scrollHints";
 import { useEffect, useState, type ReactNode } from "react";
-import { FloatButton, Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
+import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
 import {
   DashboardOutlined,
   HomeOutlined,
@@ -179,7 +180,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 76 : 24 }}>{children}</Content>
 
         {/* One "back to top" button for every long page, the Guide included (see .back-top in index.css). */}
-        <FloatButton.BackTop className="back-top" visibilityHeight={400} aria-label={t("common.backToTop")} />
+        <BackToTop />
 
         {isMobile && (
           <nav className="bottom-nav">
