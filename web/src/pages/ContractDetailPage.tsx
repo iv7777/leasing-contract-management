@@ -3125,6 +3125,7 @@ export default function ContractDetailPage() {
       </Modal>
 
       <Modal title={t("contracts.generateCharges")} open={generateModal} onCancel={() => setGenerateModal(false)} onOk={onGenerate} okText={t("contracts.generateCharges")} cancelText={t("common.cancel")}>
+        <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.generateHint")} />
         <Form form={generateForm} layout="vertical">
           <Form.Item name="period" label={t("contracts.period")} rules={[{ required: true }]} initialValue={todayInChina().slice(0, 7)}>
             <MonthField />

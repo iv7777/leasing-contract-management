@@ -252,6 +252,7 @@ const en = {
       expired: "Locked: the 24 hours for correcting this reading have passed.",
       not_yours: "Locked: only the person who entered this reading, or an Admin, can correct it.",
     },
+    generateHint: "Makes the bills for one month that do not exist yet; bills already made are skipped. A future month is billed now, at today's terms, and counts as owed once its due date passes. A missing past month is overdue straight away. Metered items need their reading, and months before the go-live metered start are never billed — use Add a one-off bill for those.",
     oneOff: "One-off",
     oneOffAdd: "Add a one-off bill",
     oneOffReview: "Review and add",
