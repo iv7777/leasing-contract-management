@@ -2145,7 +2145,8 @@ export default function ContractDetailPage() {
                   <Space size={[4, 8]} wrap style={{ marginBottom: 12 }}>
                     {(["all", "unpaid", "overdue", "due", "later", "paid"] as ChargeFilter[]).map((f) => {
                       const n = f === "all" ? charges.length : chargeFilterCounts[f] ?? 0;
-                      if (f !== "all" && f !== chargeFilter && n === 0) return null;
+                      // All and Unpaid always stay (Unpaid at 0 means "all paid up"); the other groups show only when they have bills.
+                      if (f !== "all" && f !== "unpaid" && f !== chargeFilter && n === 0) return null;
                       const label = f === "all" ? t("billing.summary.all") : f === "unpaid" ? t("billing.summary.unpaid") : f === "overdue" ? t("billing.overview.overdue") : f === "due" ? t("billing.overview.dueNow") : f === "later" ? t("billing.summary.dueLater") : t("billing.summary.paid");
                       return (
                         <Tag.CheckableTag key={f} checked={chargeFilter === f} onChange={() => setChargeFilter(f)}>
