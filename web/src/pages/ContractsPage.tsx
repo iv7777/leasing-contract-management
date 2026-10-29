@@ -1,3 +1,4 @@
+import { saveContractOrder } from "../lib/contractNav";
 import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import { Alert, Button, Form, Grid, Input, InputNumber, List, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography, Card, message } from "antd";
@@ -209,7 +210,7 @@ export default function ContractsPage() {
           loading={loading}
           dataSource={visibleContracts}
           renderItem={(c) => (
-            <Card style={{ marginBottom: 12 }} onClick={() => navigate(`/contracts/${c.id}`)}>
+            <Card style={{ marginBottom: 12 }} onClick={() => { saveContractOrder(visibleContracts.map((x) => x.id)); navigate(`/contracts/${c.id}`); }}>
               <Typography.Text strong>{c.referenceNumber}</Typography.Text> <Tag color={statusColor[c.status]}>{t(`contracts.${c.status}`)}</Tag>
               {c.archived && <Tag>{t("common.archived")}</Tag>}
               {overdueTag(c.id)}
@@ -231,7 +232,7 @@ export default function ContractsPage() {
           rowKey="id"
           loading={loading}
           dataSource={visibleContracts}
-          onRow={(c) => ({ onClick: () => navigate(`/contracts/${c.id}`), style: { cursor: "pointer" } })}
+          onRow={(c) => ({ onClick: () => { saveContractOrder(visibleContracts.map((x) => x.id)); navigate(`/contracts/${c.id}`); }, style: { cursor: "pointer" } })}
           // Like Tenants & Landlords: compact rows, text columns that wrap instead of
           // pushing the table wider, and a narrow-screen layout (a phone held sideways
           // still gets this table) that folds the two dates into one column and puts

@@ -136,6 +136,8 @@ const zh: Translations = {
     deleteUserConfirm: "确定删除此用户？仅当该用户没有任何操作记录时才能删除，否则请改用停用。",
   },
   contracts: {
+    previous: "上一份合同",
+    next: "下一份合同",
     title: "合同",
     addContract: "新增合同",
     activateAll: "草稿生效（{{count}}）",

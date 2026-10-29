@@ -134,6 +134,8 @@ const en = {
     deleteUserConfirm: "Delete this user? This only works if they have no recorded activity — otherwise deactivate them instead.",
   },
   contracts: {
+    previous: "Previous contract",
+    next: "Next contract",
     title: "Contracts",
     addContract: "Add contract",
     activateAll: "Activate drafts ({{count}})",

@@ -45,6 +45,7 @@ import StatusStrip, { type StripItem } from "../components/billing/StatusStrip";
 import AmendmentLines from "../components/amendment/AmendmentLines";
 import AmendmentDrawer from "../components/amendment/AmendmentDrawer";
 import type { AmendmentLine } from "../components/amendment/amendmentText";
+import ContractNav from "../components/ContractNav";
 import StatementTab from "../components/billing/StatementTab";
 import ContractSummaryStrip, { type ChargeFilter } from "../components/billing/ContractSummaryStrip";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
@@ -1404,9 +1405,12 @@ export default function ContractDetailPage() {
   return (
     <div>
       <Space wrap style={{ width: "100%", justifyContent: "space-between", marginBottom: 8 }}>
-        <Typography.Title level={4} style={{ margin: 0, flexShrink: 0 }}>
-          {contract.referenceNumber}
-        </Typography.Title>
+        <Space size={10} style={{ flexShrink: 0 }}>
+          <Typography.Title level={4} style={{ margin: 0 }}>
+            {contract.referenceNumber}
+          </Typography.Title>
+          <ContractNav currentId={contract.id} />
+        </Space>
         <Space wrap>
           <Tag>{t(`contracts.${contract.status}`)}</Tag>
           {contract.archived && <Tag>{t("common.archived")}</Tag>}
