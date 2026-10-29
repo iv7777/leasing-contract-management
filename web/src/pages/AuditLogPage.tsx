@@ -6,6 +6,9 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import { csvCell } from "../api/csv";
 import DateField from "../components/DateField";
+import AmendmentLines from "../components/amendment/AmendmentLines";
+import AmendmentDrawer from "../components/amendment/AmendmentDrawer";
+import { lineText, type AmendmentLine } from "../components/amendment/amendmentText";
 
 interface AuditEventDto {
   id: number;
@@ -26,7 +29,7 @@ type Details = Record<string, unknown>;
 /** Facts that say what the entry is about; shown first, as a one-line headline. */
 const IDENTITY_KEYS = ["contract", "item", "unit", "servicePeriod", "period", "name", "owner", "document", "property"];
 /** Keys already shown elsewhere, or only useful in the raw data. */
-const SKIP_KEYS = new Set(["changes", "before", "after", ...IDENTITY_KEYS]);
+const SKIP_KEYS = new Set(["changes", "before", "after", "amendmentLines", "amendmentId", ...IDENTITY_KEYS]);
 
 const isPlainObject = (v: unknown): v is Details => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -65,7 +68,9 @@ function changesOf(details: unknown): Record<string, Change> {
 /** The remaining facts of an entry (everything except identity and changes). */
 function factsOf(details: unknown): [string, unknown][] {
   if (!isPlainObject(details)) return [];
-  return Object.entries(details).filter(([k]) => !SKIP_KEYS.has(k));
+  // The old "applied: addRateSchedule 1" counts add nothing once the changes themselves are listed.
+  const hasLines = Array.isArray(details.amendmentLines) && details.amendmentLines.length > 0;
+  return Object.entries(details).filter(([k]) => !SKIP_KEYS.has(k) && !(hasLines && k === "applied"));
 }
 
 function identityOf(details: unknown): [string, unknown][] {
@@ -75,6 +80,11 @@ function identityOf(details: unknown): [string, unknown][] {
 
 function headlineOf(t: TFunction, details: unknown): string {
   return identityOf(details).map(([k, v]) => formatValue(t, k, v)).join(" · ");
+}
+
+/** What an amendment event says it changes (old → new), when the entry carries it. */
+function amendmentLinesOf(details: unknown): AmendmentLine[] {
+  return isPlainObject(details) && Array.isArray(details.amendmentLines) ? (details.amendmentLines as AmendmentLine[]) : [];
 }
 
 type DetailRow = { key: string; label: string; from?: string; to?: string; value?: string };
@@ -110,7 +120,7 @@ function auditCsv(t: TFunction, events: AuditEventDto[]): string {
   const header = [t("audit.timestamp"), t("audit.actor"), t("audit.action"), t("audit.entityType"), t("audit.entityId"), t("audit.target"), t("audit.details")];
   const lines = [header.join(",")];
   for (const e of events) {
-    const details = [headlineOf(t, e.details), ...detailRows(t, e).map(rowText)].filter(Boolean).join(" | ");
+    const details = [headlineOf(t, e.details), ...detailRows(t, e).map(rowText), ...amendmentLinesOf(e.details).map((l) => lineText(t, l))].filter(Boolean).join(" | ");
     lines.push(
       [
         e.createdAt,
@@ -129,9 +139,12 @@ function auditCsv(t: TFunction, events: AuditEventDto[]): string {
 }
 
 /** What an expanded record shows: the headline, every change / fact / reason, and the raw data. */
-function ExpandedDetail({ event }: { event: AuditEventDto }) {
+function ExpandedDetail({ event, onOpenAmendment }: { event: AuditEventDto; onOpenAmendment: (id: number) => void }) {
   const { t } = useTranslation();
   const headline = headlineOf(t, event.details);
+  const lines = amendmentLinesOf(event.details);
+  // Every event about an amendment can open it (older ones too: the panel works the changes out from what is stored).
+  const amendmentId = event.entityType === "amendment" ? event.entityId : null;
   return (
     <div style={{ fontSize: 13 }}>
       <div>
@@ -144,6 +157,17 @@ function ExpandedDetail({ event }: { event: AuditEventDto }) {
             </span>
           ))}
       </div>
+      {lines.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <Typography.Text strong>{t("amendLine.changesHeading")}</Typography.Text>
+          <AmendmentLines lines={lines} />
+        </div>
+      )}
+      {amendmentId !== null && (
+        <Button size="small" type="link" style={{ paddingLeft: 0 }} onClick={() => onOpenAmendment(amendmentId)}>
+          {t("amendLine.openAmendment")}
+        </Button>
+      )}
       {!!event.details && (
         <Collapse
           ghost
@@ -161,6 +185,7 @@ export default function AuditLogPage() {
   const { t } = useTranslation();
   const [exporting, setExporting] = useState(false);
   const [expanded, setExpanded] = useState<readonly React.Key[]>([]);
+  const [amendmentId, setAmendmentId] = useState<number | null>(null);
   const [events, setEvents] = useState<AuditEventDto[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [total, setTotal] = useState(0);
@@ -236,6 +261,7 @@ export default function AuditLogPage() {
   return (
     <div>
       <Typography.Title level={4}>{t("audit.title")}</Typography.Title>
+      <AmendmentDrawer amendmentId={amendmentId} onClose={() => setAmendmentId(null)} />
 
       <Space wrap style={{ marginBottom: 16 }}>
         <Select
@@ -276,7 +302,7 @@ export default function AuditLogPage() {
           rowExpandable: hasDetail,
           expandedRowKeys: expanded,
           onExpandedRowsChange: (keys) => setExpanded([...keys]),
-          expandedRowRender: (e) => <ExpandedDetail event={e} />,
+          expandedRowRender: (e) => <ExpandedDetail event={e} onOpenAmendment={setAmendmentId} />,
         }}
         columns={[
           { title: t("audit.timestamp"), dataIndex: "createdAt", width: 230, render: (v: string) => <span style={{ whiteSpace: "nowrap" }}>{v}</span> },

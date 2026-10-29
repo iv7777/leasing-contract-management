@@ -14,6 +14,8 @@ import {
   chargeAdjustments,
   documents,
   billingRules,
+  contractVersions,
+  users,
 } from "../db/schema.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
@@ -26,6 +28,7 @@ import {
 } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { amendmentFacts, contractRef } from "../lib/auditDetail.js";
+import { summarizeAmendment } from "../lib/amendmentSummary.js";
 import { rateRuleError } from "../lib/rateRules.js";
 import { citedDocumentIds, liveSignedLeaseIds } from "../lib/documentRules.js";
 import { isoDate, fenAmount, longText, decimalString, percentString } from "../lib/validate.js";
@@ -153,6 +156,11 @@ const createAmendmentSchema = z.object({
   supportingDocumentId: z.number().int().optional(),
 });
 
+/** The facts every amendment event carries, plus what the amendment changes (shown as old → new in the audit log). */
+function amendmentAuditDetails(a: typeof amendments.$inferSelect) {
+  return { ...amendmentFacts(a), amendmentId: a.id, amendmentLines: summarizeAmendment(a) };
+}
+
 const DRAFT_AMENDMENT_MESSAGE = "A draft contract is edited directly. Amendments are for changing a contract after it has been activated.";
 
 /** Every amendment except an internal correction needs a signed supplement or
@@ -200,7 +208,45 @@ amendmentsRouter.get("/contracts/:contractId/amendments", (req, res) => {
     return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
   }
   const rows = db.select().from(amendments).where(eq(amendments.contractId, contractId)).all();
-  res.json({ amendments: rows });
+  // Each amendment says what it changes (old → new), so the list is useful without opening it.
+  res.json({ amendments: rows.map((a) => ({ ...a, lines: summarizeAmendment(a) })) });
+});
+
+/** One amendment with everything about it: who did what and when, its supporting document, the contract version
+ * it created, and what it changes. */
+amendmentsRouter.get("/amendments/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const a = db.select().from(amendments).where(eq(amendments.id, id)).get();
+  if (!a) return res.status(404).json({ error: { code: "not_found", message: "Amendment not found." } });
+  if (!canAccessContract(req.user!, a.contractId)) {
+    return res.status(403).json({ error: { code: "forbidden", message: "Not assigned to every property this agreement covers." } });
+  }
+  const names = new Map(db.select({ id: users.id, name: users.name }).from(users).all().map((u) => [u.id, u.name]));
+  const who = (uid: number | null) => (uid === null ? null : names.get(uid) ?? null);
+  const doc = a.supportingDocumentId ? db.select().from(documents).where(eq(documents.id, a.supportingDocumentId)).get() : null;
+  const version = db.select().from(contractVersions).where(eq(contractVersions.sourceAmendmentId, id)).get();
+  res.json({
+    amendment: {
+      id: a.id,
+      contractId: a.contractId,
+      contractRef: contractRef(a.contractId),
+      type: a.type,
+      status: a.status,
+      reason: a.reason,
+      effectiveDate: a.effectiveDate,
+      baseContractVersion: a.baseContractVersion,
+      newVersion: version?.versionNumber ?? null,
+      createdAt: a.createdAt,
+      createdBy: who(a.createdBy),
+      submittedAt: a.submittedAt,
+      submittedBy: who(a.submittedBy),
+      reviewedAt: a.reviewedAt,
+      reviewedBy: who(a.reviewedBy),
+      reviewReason: a.reviewReason,
+      supportingDocument: doc ? { id: doc.id, docType: doc.docType, name: doc.name, voided: doc.voided } : null,
+    },
+    lines: summarizeAmendment(a),
+  });
 });
 
 amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", "manager"), (req, res) => {
@@ -244,7 +290,7 @@ amendmentsRouter.post("/contracts/:contractId/amendments", requireRole("admin", 
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_drafted", entityType: "amendment", entityId: inserted.id, reason: parsed.data.reason, details: amendmentFacts(inserted) });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_drafted", entityType: "amendment", entityId: inserted.id, reason: parsed.data.reason, details: amendmentAuditDetails(inserted) });
   res.status(201).json({ amendment: inserted });
 });
 
@@ -291,7 +337,7 @@ amendmentsRouter.patch("/amendments/:id", requireRole("admin", "manager"), (req,
     .where(eq(amendments.id, id))
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_updated", entityType: "amendment", entityId: id, details: { ...amendmentFacts(updated), supportingDocumentId } });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_updated", entityType: "amendment", entityId: id, details: { ...amendmentAuditDetails(updated), supportingDocumentId } });
   res.json({ amendment: updated });
 });
 
@@ -333,7 +379,7 @@ amendmentsRouter.post("/amendments/:id/submit", requireRole("admin", "manager"),
     .returning()
     .get();
 
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_submitted", entityType: "amendment", entityId: id, details: amendmentFacts(updated) });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_submitted", entityType: "amendment", entityId: id, details: amendmentAuditDetails(updated) });
 
   // An Admin's own changes use the same mechanism and may be auto-approved.
   if (req.user!.role === "admin") {
@@ -447,7 +493,7 @@ function applyApproval(req: import("express").Request, res: import("express").Re
   });
 
   recordContractVersion(contract.id, contract.versionNumber + 1, amendment.effectiveDate, amendment.id);
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_approved", entityType: "amendment", entityId: amendment.id, reason: reviewReason, details: { ...amendmentFacts(amendment), newVersion: contract.versionNumber + 1 } });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_approved", entityType: "amendment", entityId: amendment.id, reason: reviewReason, details: { ...amendmentAuditDetails(amendment), newVersion: contract.versionNumber + 1 } });
 
   const updatedAmendment = db.select().from(amendments).where(eq(amendments.id, amendment.id)).get();
   res.json({ amendment: updatedAmendment });
@@ -558,7 +604,7 @@ amendmentsRouter.post("/amendments/:id/reject", requireRole("admin"), (req, res)
     .where(eq(amendments.id, id))
     .returning()
     .get();
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_rejected", entityType: "amendment", entityId: id, reason: reviewReason, details: amendmentFacts(updated) });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_rejected", entityType: "amendment", entityId: id, reason: reviewReason, details: amendmentAuditDetails(updated) });
   res.json({ amendment: updated });
 });
 
@@ -574,6 +620,6 @@ amendmentsRouter.post("/amendments/:id/withdraw", requireRole("admin", "manager"
   }
 
   const updated = db.update(amendments).set({ status: "withdrawn" }).where(eq(amendments.id, id)).returning().get();
-  recordAudit({ actorUserId: req.user!.id, action: "amendment_withdrawn", entityType: "amendment", entityId: id, details: amendmentFacts(updated) });
+  recordAudit({ actorUserId: req.user!.id, action: "amendment_withdrawn", entityType: "amendment", entityId: id, details: amendmentAuditDetails(updated) });
   res.json({ amendment: updated });
 });

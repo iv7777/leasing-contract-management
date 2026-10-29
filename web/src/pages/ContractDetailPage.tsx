@@ -42,6 +42,9 @@ import MonthField from "../components/MonthField";
 import CatchUpBillingModal from "../components/billing/CatchUpBillingModal";
 import OpeningBalancePanel from "../components/billing/OpeningBalancePanel";
 import StatusStrip, { type StripItem } from "../components/billing/StatusStrip";
+import AmendmentLines from "../components/amendment/AmendmentLines";
+import AmendmentDrawer from "../components/amendment/AmendmentDrawer";
+import type { AmendmentLine } from "../components/amendment/amendmentText";
 import StatementTab from "../components/billing/StatementTab";
 import ContractSummaryStrip, { type ChargeFilter } from "../components/billing/ContractSummaryStrip";
 import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/billing/MeterPhoto";
@@ -155,6 +158,7 @@ interface AmendmentDto {
   supportingDocumentId: number | null;
   createdBy: number | null;
   submittedBy: number | null;
+  lines?: AmendmentLine[];
 }
 interface ChargeBalanceDto {
   chargeId: number;
@@ -312,6 +316,7 @@ export default function ContractDetailPage() {
   const [depositModal, setDepositModal] = useState(false);
   const [generateModal, setGenerateModal] = useState(false);
   const [oneOffModal, setOneOffModal] = useState(false);
+  const [amendmentDetailId, setAmendmentDetailId] = useState<number | null>(null);
   const [oneOffForm] = Form.useForm();
   const [catchUpOpen, setCatchUpOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -2327,7 +2332,7 @@ export default function ContractDetailPage() {
                         ),
                       ].filter(Boolean)}
                     >
-                      <Space direction="vertical" size={0}>
+                      <Space direction="vertical" size={2} style={{ cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => setAmendmentDetailId(a.id)}>
                         <span>
                           <Tag>{t(`contracts.amendTypeNames.${a.type}`, { defaultValue: a.type })}</Tag> {a.reason}
                           {a.status === "draft" && needsDocument(a) && <Tag color="orange" style={{ marginLeft: 8 }}>{t("contracts.supportingDocumentMissing")}</Tag>}
@@ -2338,6 +2343,8 @@ export default function ContractDetailPage() {
                             ? ` · ${t("contracts.supportingDocument")}: ${docDisplayName(t, allDocuments.find((d) => d.id === a.supportingDocumentId)!)}`
                             : ""}
                         </Typography.Text>
+                        <AmendmentLines lines={a.lines ?? []} max={2} />
+                        <Typography.Link style={{ fontSize: 12 }}>{t("amendDrawer.details")}</Typography.Link>
                       </Space>
                     </List.Item>
                   )}
@@ -3105,6 +3112,8 @@ export default function ContractDetailPage() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <AmendmentDrawer amendmentId={amendmentDetailId} onClose={() => setAmendmentDetailId(null)} />
 
       <Modal title={t("contracts.oneOffAdd")} open={oneOffModal} onCancel={() => setOneOffModal(false)} onOk={onAddOneOff} okText={t("contracts.oneOffReview")} cancelText={t("common.cancel")} destroyOnClose>
         <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.oneOffHint")} />
