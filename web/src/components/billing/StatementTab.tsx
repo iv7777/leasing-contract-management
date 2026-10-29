@@ -8,7 +8,7 @@ import { apiErrorMessage } from "../../api/errorMessage";
 import { todayInChina } from "@lcm/shared";
 import MonthField from "../MonthField";
 import ChargeDetailDrawer from "./ChargeDetailDrawer";
-import { paymentMethodLabel, periodLabel, streamName, systemReasonLabel, yuan } from "./format";
+import { paymentMethodLabel, streamName, systemReasonLabel, yuan } from "./format";
 import { esc, printHtml } from "./print";
 
 type Mode = "month" | "year" | "custom" | "all";
@@ -87,12 +87,15 @@ export default function StatementTab({ contractId, reloadKey, canExport }: { con
     return (id?: number, feeType?: string) => (id !== undefined && m.get(id)) || (feeType ? streamName(t, feeType, feeType) : "");
   }, [data, t]);
 
-  const describe = (l: Line): string => {
-    const period = l.serviceStart && l.serviceEnd ? periodLabel(l.serviceStart, l.serviceEnd) : "";
-    if (l.kind === "charge") return `${itemName(l.pricingStreamId, l.feeType)} · ${period}`;
-    if (l.kind === "adjustment") return `${t("statement.adjustment")}: ${itemName(l.pricingStreamId, l.feeType)} · ${period}${l.reason ? ` — ${l.reason}` : ""}`;
+  // The service dates a bill or adjustment covers, in full ("2026-11-01 → 2026-11-30").
+  const serviceDates = (l: Line): string => (l.serviceStart && l.serviceEnd ? `${l.serviceStart} → ${l.serviceEnd}` : "");
+  // What the line is, without its dates.
+  const headOf = (l: Line): string => {
+    if (l.kind === "charge") return itemName(l.pricingStreamId, l.feeType);
+    if (l.kind === "adjustment") return `${t("statement.adjustment")}: ${itemName(l.pricingStreamId, l.feeType)}${l.reason ? ` — ${l.reason}` : ""}`;
     return `${t("statement.payment")} · ${l.paymentMethod ? paymentMethodLabel(t, l.paymentMethod) : ""}${l.reference ? ` (${l.reference})` : ""}`;
   };
+  const describe = (l: Line): string => (serviceDates(l) ? `${headOf(l)} · (${serviceDates(l)})` : headOf(l));
   const periodTitle = (): string => {
     if (!data) return "";
     const { from, to } = data.statement;
@@ -264,14 +267,16 @@ ${streamId === null ? `<p>${esc(t("statement.depositHeld"))}: ${esc(yuan(data.de
               renderItem={(l: Line) => (
                 <List.Item style={{ display: "block", cursor: l.chargeId ? "pointer" : undefined }} onClick={rowClick(l)}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, ...style(l) }}>
-                    <span>{describe(l)}</span>
+                    <span>
+                      {headOf(l)} · {l.date}
+                    </span>
                     <Typography.Text strong type={l.creditFen > 0 && l.kind !== "adjustment" ? "success" : undefined} style={{ whiteSpace: "nowrap", ...style(l) }}>
                       {l.creditFen > 0 ? `− ${yuan(l.creditFen)}` : yuan(l.debitFen)}
                     </Typography.Text>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 2 }}>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      {l.date} {mutedTag(l)}
+                      {serviceDates(l)} {mutedTag(l)}
                     </Typography.Text>
                     {l.balanceFen !== null && (
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -311,7 +316,14 @@ ${streamId === null ? `<p>${esc(t("statement.depositHeld"))}: ${esc(yuan(data.de
                   title: t("statement.description"),
                   render: (_: unknown, l: Line) => (
                     <span style={style(l)}>
-                      {describe(l)} {l.broughtForward && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}{l.oneOff && <Tag color="purple">{t("contracts.oneOff")}</Tag>}
+                      {headOf(l)}
+                      {l.serviceStart && l.serviceEnd && (
+                        <>
+                          {" · ("}
+                          <span style={{ whiteSpace: "nowrap" }}>{l.serviceStart} →</span> <span style={{ whiteSpace: "nowrap" }}>{l.serviceEnd})</span>
+                        </>
+                      )}{" "}
+                      {l.broughtForward && <Tag color="blue">{t("openingBalance.broughtForward")}</Tag>}{l.oneOff && <Tag color="purple">{t("contracts.oneOff")}</Tag>}
                       {mutedTag(l)}
                     </span>
                   ),
