@@ -3,7 +3,9 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { eq, sql } from "drizzle-orm";
-import { verifyPassword } from "../lib/password.js";
+import { hashPassword, verifyPassword } from "../lib/password.js";
+import { passwordError } from "../lib/passwordPolicy.js";
+import { endUserSessions } from "../lib/sqliteSessionStore.js";
 import { recordAudit } from "../lib/audit.js";
 import { requireAuth } from "../middleware/auth.js";
 import { loginThrottle } from "../lib/loginThrottle.js";
@@ -77,4 +79,43 @@ authRouter.patch("/me/locale", requireAuth, (req, res) => {
     .where(eq(users.id, req.user!.id))
     .run();
   res.json({ ok: true, preferredLocale: parsed.data.preferredLocale });
+});
+
+const changePasswordSchema = z.object({ currentPassword: z.string().min(1).max(500), newPassword: z.string().min(1).max(200) });
+
+// Self-service: any signed-in user may change their own password. It asks for the current one (so a borrowed,
+// unlocked screen cannot take the account over), applies the same strength rules as an Admin's reset, counts wrong
+// guesses toward the same sign-in lockout, and signs out every other device.
+authRouter.post("/me/password", requireAuth, (req, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Give your current password and a new one." } });
+  const { currentPassword, newPassword } = parsed.data;
+  const row = db.select().from(users).where(eq(users.id, req.user!.id)).get();
+  if (!row) return res.status(404).json({ error: { code: "not_found", message: "User not found." } });
+
+  const cfIp = req.headers["cf-connecting-ip"];
+  const source = (typeof cfIp === "string" && cfIp.trim()) || req.ip || "unknown";
+  const retryMs = loginThrottle.retryAfterMs(source, row.email);
+  if (retryMs > 0) {
+    res.setHeader("Retry-After", String(Math.ceil(retryMs / 1000)));
+    return res.status(429).json({ error: { code: "too_many_attempts", message: "Too many failed sign-in attempts. Wait a few minutes and try again." } });
+  }
+  if (!verifyPassword(currentPassword, row.passwordHash)) {
+    loginThrottle.recordFailure(source, row.email);
+    recordAudit({ actorUserId: row.id, action: "password_change_failed", entityType: "user", entityId: row.id });
+    // Not a 401: the person is still signed in, they only mistyped.
+    return res.status(400).json({ error: { code: "wrong_current_password", message: "Your current password is not correct." } });
+  }
+  const weak = passwordError(newPassword, row.email);
+  if (weak) return res.status(400).json({ error: { code: "weak_password", message: weak } });
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ error: { code: "same_password", message: "The new password must be different from the current one." } });
+  }
+
+  db.update(users).set({ passwordHash: hashPassword(newPassword), updatedAt: new Date().toISOString() }).where(eq(users.id, row.id)).run();
+  loginThrottle.recordSuccess(source, row.email);
+  endUserSessions(row.id, req.sessionID);
+  // Never log the password itself, only that it changed.
+  recordAudit({ actorUserId: row.id, action: "user_password_changed", entityType: "user", entityId: row.id, details: { email: row.email } });
+  res.json({ ok: true });
 });

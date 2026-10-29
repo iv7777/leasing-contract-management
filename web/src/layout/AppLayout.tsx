@@ -1,7 +1,8 @@
+import ChangePasswordModal from "../components/ChangePasswordModal";
 import BackToTop from "../components/BackToTop";
 import { installScrollHints } from "../lib/scrollHints";
 import { useEffect, useState, type ReactNode } from "react";
-import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Typography } from "antd";
+import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Tooltip, Typography } from "antd";
 import {
   DashboardOutlined,
   HomeOutlined,
@@ -20,6 +21,7 @@ import {
   QuestionCircleOutlined,
   ReadOutlined,
   EllipsisOutlined,
+  KeyOutlined,
   SafetyCertificateOutlined,
   RocketOutlined,
   ToolOutlined,
@@ -67,6 +69,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const isMobile = !screens.md;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   useDeviceClasses();
   useEffect(() => installScrollHints(), []);
 
@@ -165,6 +168,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </Button>
             </Dropdown>
             {!isMobile && <Typography.Text>{user?.name}</Typography.Text>}
+            {!isMobile && (
+              <Tooltip title={t("account.changePassword")}>
+                <Button className="app-icon-btn" type="text" icon={<KeyOutlined />} onClick={() => setPasswordOpen(true)} aria-label={t("account.changePassword")} />
+              </Tooltip>
+            )}
             <Button className="app-icon-btn" type="text" icon={<LogoutOutlined />} onClick={() => void logout()}>
               <span className="desktop-only">{t("nav.logout")}</span>
             </Button>
@@ -173,9 +181,23 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
         <Drawer placement="left" open={drawerOpen} onClose={() => setDrawerOpen(false)} width={240} styles={{ body: { padding: 0 } }}>
           {nav}
+          {/* On a phone the header is full: the password change lives here, under the menu. */}
+          <div style={{ padding: 16 }}>
+            <Button
+              block
+              icon={<KeyOutlined />}
+              onClick={() => {
+                setDrawerOpen(false);
+                setPasswordOpen(true);
+              }}
+            >
+              {t("account.changePassword")}
+            </Button>
+          </div>
         </Drawer>
 
         <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
 
         <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 76 : 24 }}>{children}</Content>
 

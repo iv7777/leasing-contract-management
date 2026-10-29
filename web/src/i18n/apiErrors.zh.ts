@@ -6,6 +6,8 @@
 const yuan = (fen: string | number) => `¥${(Number(fen) / 100).toFixed(2)}`;
 
 export const apiErrorsZh: Record<string, string> = {
+  "Your current password is not correct.": "当前密码不正确。",
+  "The new password must be different from the current one.": "新密码不能与当前密码相同。",
   "A per-unit basis only applies to a metered price or a usage service fee. Use \"Usage service fee\" for a fee on top of metered usage.": "“按用量单位”只适用于计量计费或用量服务费。要在计量用量之上加收费用，请选择“用量服务费”。",
   "Only a usage service fee can be linked to a metered item.": "只有用量服务费才能关联到计量计费项。",
   "A per-unit service fee uses the \"per unit\" basis.": "按单位用量收取的服务费应使用“按用量单位”基准。",
@@ -202,6 +204,8 @@ export const apiErrorByCode: Record<string, string> = {
   invalid_json: "请求内容无法识别。",
   already_exists: "该内容已存在。",
   weak_password: "密码强度不够。",
+  wrong_current_password: "当前密码不正确。",
+  same_password: "新密码不能与当前密码相同。",
   too_many_attempts: "登录失败次数过多，请稍后再试。",
   contract_ended: "该合同已结束，只能再登记内部更正。",
   area_below_contracted: "可租面积不能低于合同已占用的面积。",

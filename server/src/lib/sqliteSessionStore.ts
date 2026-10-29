@@ -55,7 +55,11 @@ export class SqliteSessionStore extends session.Store {
 }
 
 /** Ends every session a user has (after a password reset, say), so a stolen or
- * forgotten login stops working at once. */
-export function endUserSessions(userId: number): void {
+ * forgotten login stops working at once. `exceptSid` keeps one (the session that just changed its own password). */
+export function endUserSessions(userId: number, exceptSid?: string): void {
+  if (exceptSid) {
+    sqlite.prepare("DELETE FROM sessions WHERE json_extract(data, '$.userId') = ? AND sid <> ?").run(userId, exceptSid);
+    return;
+  }
   sqlite.prepare("DELETE FROM sessions WHERE json_extract(data, '$.userId') = ?").run(userId);
 }
