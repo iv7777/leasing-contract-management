@@ -2292,6 +2292,8 @@ export default function ContractDetailPage() {
                   dataSource={amendments}
                   renderItem={(a) => (
                     <List.Item
+                      className="clickable-row"
+                      onClick={() => setAmendmentDetailId(a.id)}
                       actions={[
                         a.status === "draft" && (user?.role === "admin" || (user?.role === "manager" && a.createdBy === user.id)) && (
                           <Button
@@ -2330,9 +2332,16 @@ export default function ContractDetailPage() {
                             {t("contracts.withdraw")}
                           </Button>
                         ),
-                      ].filter(Boolean)}
+                      ]
+                        .filter(Boolean)
+                        // A button never also opens the amendment behind it.
+                        .map((el, i) => (
+                          <span key={i} onClick={(e) => e.stopPropagation()}>
+                            {el}
+                          </span>
+                        ))}
                     >
-                      <Space direction="vertical" size={2} style={{ cursor: "pointer", flex: 1, minWidth: 0 }} onClick={() => setAmendmentDetailId(a.id)}>
+                      <Space direction="vertical" size={2} style={{ flex: 1, minWidth: 0 }}>
                         <span>
                           <Tag>{t(`contracts.amendTypeNames.${a.type}`, { defaultValue: a.type })}</Tag> {a.reason}
                           {a.status === "draft" && needsDocument(a) && <Tag color="orange" style={{ marginLeft: 8 }}>{t("contracts.supportingDocumentMissing")}</Tag>}
@@ -2344,7 +2353,6 @@ export default function ContractDetailPage() {
                             : ""}
                         </Typography.Text>
                         <AmendmentLines lines={a.lines ?? []} max={2} />
-                        <Typography.Link style={{ fontSize: 12 }}>{t("amendDrawer.details")}</Typography.Link>
                       </Space>
                     </List.Item>
                   )}

@@ -349,3 +349,11 @@ body {
 .back-top.ant-float-btn .ant-float-btn-body:focus {
   outline: none;
 }
+
+/* A list row that opens its details when clicked: pointer and the same soft highlight as a table row. */
+.clickable-row {
+  cursor: pointer;
+}
+.clickable-row:hover {
+  background: #fafafa;
+}
