@@ -606,6 +606,7 @@ const zh: Translations = {
     readingRemoved: "读数已删除",
   },
   statement: {
+    summary: "汇总",
     mode: { month: "按月", year: "按年", custom: "自选日期", all: "全部" },
     allItems: "全部项目",
     item: "项目",

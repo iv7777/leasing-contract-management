@@ -604,6 +604,7 @@ const en = {
     readingRemoved: "Meter reading removed",
   },
   statement: {
+    summary: "Summary",
     mode: { month: "Month", year: "Year", custom: "Custom dates", all: "All time" },
     allItems: "All items",
     item: "Item",
