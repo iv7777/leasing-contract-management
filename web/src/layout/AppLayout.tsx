@@ -1,5 +1,6 @@
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import BackToTop from "../components/BackToTop";
+import TopLayerPortal from "../components/TopLayerPortal";
 import { installScrollHints } from "../lib/scrollHints";
 import { useEffect, useState, type ReactNode } from "react";
 import { Layout, Menu, Drawer, Button, Dropdown, Grid, Space, Tooltip, Typography } from "antd";
@@ -59,6 +60,11 @@ function useDeviceClasses() {
 }
 
 const BOTTOM_NAV_KEYS = ["/", "/contracts", "/properties", "/reminders"];
+
+/** Puts the children under <html> on a phone (see TopLayerPortal); in place otherwise. */
+function Maybe({ on, children }: { on: boolean; children: ReactNode }) {
+  return on ? <TopLayerPortal>{children}</TopLayerPortal> : <>{children}</>;
+}
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation();
@@ -147,6 +153,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
       )}
 
       <Layout>
+        {/* On a phone the title bar is fixed and lives outside the scrolled page (see TopLayerPortal), so a tap while the
+            page is still coasting works the first time; the spacer keeps the content below it. */}
+        {isMobile && <div style={{ height: 48 }} />}
+        <Maybe on={isMobile}>
         <Header
           style={{
             display: "flex",
@@ -155,8 +165,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
             padding: "0 16px",
             borderBottom: "1px solid #eee",
             // The title bar stays put while the page scrolls under it.
-            position: "sticky",
+            position: isMobile ? "fixed" : "sticky",
             top: 0,
+            ...(isMobile ? { left: 0, right: 0, height: 48, lineHeight: "48px" } : {}),
             zIndex: 50,
           }}
         >
@@ -182,6 +193,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </Button>
           </Space>
         </Header>
+        </Maybe>
 
         <Drawer placement="left" open={drawerOpen} onClose={() => setDrawerOpen(false)} width={240} styles={{ body: { padding: 0 } }}>
           {nav}
@@ -206,9 +218,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <Content style={{ padding: isMobile ? 12 : 24, paddingBottom: isMobile ? 76 : 24 }}>{children}</Content>
 
         {/* One "back to top" button for every long page, the Guide included (see .back-top in index.css). */}
-        <BackToTop />
+        <TopLayerPortal>
+          <BackToTop />
+        </TopLayerPortal>
 
         {isMobile && (
+          <TopLayerPortal>
           <nav className="bottom-nav">
             {items
               .filter((i) => BOTTOM_NAV_KEYS.includes(i.key))
@@ -223,6 +238,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <span>{t("nav.more")}</span>
             </button>
           </nav>
+          </TopLayerPortal>
         )}
       </Layout>
     </Layout>
