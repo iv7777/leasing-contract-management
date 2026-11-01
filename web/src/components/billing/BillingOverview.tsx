@@ -214,26 +214,39 @@ export default function BillingOverview() {
       )}
 
       {data.depositIssues.length > 0 && (
-        <Alert
-          style={{ marginTop: 16 }}
-          type="warning"
-          showIcon
-          message={t("billing.overview.depositTitle", {
-            count: data.depositIssues.length,
-          })}
-          description={data.depositIssues.map((d) => (
-            <div key={d.contractId}>
-              <Link to={`/contracts/${d.contractId}`}>{d.referenceNumber}</Link>{" "}
-              · {d.tenantName} ·{" "}
-              {d.manual
-                ? t("billing.overview.depositManual")
-                : t("billing.overview.depositShort", {
-                    held: yuan(d.heldFen),
-                    required: yuan(d.requiredFen),
-                    shortfall: yuan(d.shortfallFen),
-                  })}
-            </div>
-          ))}
+        // Folded by default, like the bills below: the title says how many, opening it lists each contract.
+        <Collapse
+          style={{ marginTop: 16, background: "#fffbe6", border: "1px solid #ffe58f" }}
+          items={[
+            {
+              key: "deposit",
+              label: (
+                <Space>
+                  <ExclamationCircleFilled style={{ color: "#faad14" }} />
+                  <Typography.Text strong>{t("billing.overview.depositTitle", { count: data.depositIssues.length })}</Typography.Text>
+                </Space>
+              ),
+              children: (
+                <div>
+                  {data.depositIssues.map((d) => (
+                    <div key={d.contractId} style={{ marginBottom: 8 }}>
+                      <Space wrap size={8}>
+                        <Link to={`/contracts/${d.contractId}`}>{d.referenceNumber}</Link>
+                        <Typography.Text>· {d.tenantName}</Typography.Text>
+                        <Link to={`/contracts/${d.contractId}?tab=deposit`}>{t("billing.overview.openDeposit")}</Link>
+                      </Space>
+                      <div style={{ paddingLeft: 16 }}>
+                        •{" "}
+                        {d.manual
+                          ? t("billing.overview.depositManual")
+                          : t("billing.overview.depositShort", { held: yuan(d.heldFen), required: yuan(d.requiredFen), shortfall: yuan(d.shortfallFen) })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+          ]}
         />
       )}
 

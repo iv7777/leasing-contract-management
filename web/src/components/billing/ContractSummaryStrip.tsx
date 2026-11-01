@@ -27,6 +27,7 @@ interface Row {
 interface Overview {
   contracts: Row[];
   missingReadings: { month: string }[];
+  depositIssues?: { shortfallFen: number; manual: boolean }[];
 }
 
 /** What this contract owes, in the Dashboard's own words and numbers: Overdue, Due now, Due later this month,
@@ -47,6 +48,7 @@ export default function ContractSummaryStrip({
   const { token } = theme.useToken();
   const [row, setRow] = useState<Row | null | undefined>(undefined);
   const [missing, setMissing] = useState(0);
+  const [deposit, setDeposit] = useState<{ shortfallFen: number; manual: boolean } | null>(null);
   const [detail, setDetail] = useState<{ chargeId: number | null; projected: { contractId: number; pricingStreamId: number; serviceStart: string; serviceEnd: string } | null }>({ chargeId: null, projected: null });
 
   useEffect(() => {
@@ -55,6 +57,7 @@ export default function ContractSummaryStrip({
       .then((o) => {
         setRow(o.contracts[0] ?? null);
         setMissing(o.missingReadings?.length ?? 0);
+        setDeposit(o.depositIssues?.[0] ?? null);
       })
       .catch(() => setRow(undefined));
   }, [contractId, reloadKey]);
@@ -79,9 +82,11 @@ export default function ContractSummaryStrip({
   ];
   // Metered fees that cannot be billed until a reading is entered.
   if (missing > 0) chips.push({ key: "readings", label: t("billing.summary.readingsNeeded"), value: String(missing), amount: missing, color: token.colorWarning, onClick: () => onTab("usage") });
+  // A deposit below what the lease requires, or one that has to be checked by hand.
+  if (deposit) chips.push({ key: "deposit", label: deposit.manual ? t("billing.summary.depositLabel") : t("billing.summary.depositShort"), value: deposit.manual ? t("billing.summary.depositCheck") : yuan(deposit.shortfallFen), amount: 1, color: token.colorWarning, onClick: () => onTab("deposit") });
   if (row?.nextDueDate) chips.push({ key: "next", label: t("billing.overview.nextDue"), value: `${row.nextDueDate} · ${yuan(row.nextDueFen)}`, amount: row.nextDueFen, onClick: openNext });
 
-  if (!row && missing === 0) return <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>{t("billing.summary.clear")}</Typography.Text>;
+  if (!row && missing === 0 && !deposit) return <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>{t("billing.summary.clear")}</Typography.Text>;
 
   return (
     <>
