@@ -12,6 +12,7 @@ import {
   Tag,
   Typography,
 } from "antd";
+import { ExclamationCircleFilled } from "@ant-design/icons";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api } from "../../api/client";
@@ -119,27 +120,12 @@ export default function BillingOverview() {
     (c) => c.reason === "not_monthly",
   );
 
-  const readingsByContract = new Map<
-    number,
-    {
-      label: string;
-      months: string[];
-      tenantName: string;
-      referenceNumber: string;
-    }
-  >();
+  // Every missing reading, grouped by contract: a contract with electricity and water lists both.
+  const readingsByContract = new Map<number, { tenantName: string; referenceNumber: string; items: { name: string; month: string }[] }>();
   for (const m of data.missingReadings) {
-    const key = m.contractId;
-    const stream =
-      m.stream === m.feeType ? t(`contracts.${camel(m.feeType)}`) : m.stream;
-    const g = readingsByContract.get(key) ?? {
-      label: stream,
-      months: [],
-      tenantName: m.tenantName,
-      referenceNumber: m.referenceNumber,
-    };
-    g.months.push(m.month);
-    readingsByContract.set(key, g);
+    const g = readingsByContract.get(m.contractId) ?? { tenantName: m.tenantName, referenceNumber: m.referenceNumber, items: [] };
+    g.items.push({ name: m.stream === m.feeType ? t(`contracts.${camel(m.feeType)}`) : m.stream, month: m.month });
+    readingsByContract.set(m.contractId, g);
   }
 
   return (
@@ -189,28 +175,41 @@ export default function BillingOverview() {
       </Row>
 
       {readingsByContract.size > 0 && (
-        <Alert
-          style={{ marginTop: 16 }}
-          type="warning"
-          showIcon
-          message={t("billing.overview.readingsTitle", {
-            count: data.missingReadings.length,
-          })}
-          description={
-            <>
-              <div>{t("billing.overview.readingsBody")}</div>
-              {Array.from(readingsByContract.entries()).map(
-                ([contractId, g]) => (
-                  <div key={contractId}>
-                    <Link to={`/contracts/${contractId}`}>
-                      {g.referenceNumber}
-                    </Link>{" "}
-                    · {g.tenantName} · {g.label}: {g.months.join(", ")}
-                  </div>
-                ),
-              )}
-            </>
-          }
+        // Folded by default, like the bills below: the title says how many, opening it lists every one.
+        <Collapse
+          style={{ marginTop: 16, background: "#fffbe6", border: "1px solid #ffe58f" }}
+          items={[
+            {
+              key: "readings",
+              label: (
+                <Space>
+                  <ExclamationCircleFilled style={{ color: "#faad14" }} />
+                  <Typography.Text strong>{t("billing.overview.readingsTitle", { count: data.missingReadings.length })}</Typography.Text>
+                </Space>
+              ),
+              children: (
+                <div>
+                  <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+                    {t("billing.overview.readingsBody")}
+                  </Typography.Paragraph>
+                  {Array.from(readingsByContract.entries()).map(([contractId, g]) => (
+                    <div key={contractId} style={{ marginBottom: 8 }}>
+                      <Space wrap size={8}>
+                        <Link to={`/contracts/${contractId}`}>{g.referenceNumber}</Link>
+                        <Typography.Text>· {g.tenantName}</Typography.Text>
+                        <Link to={`/contracts/${contractId}?tab=usage`}>{t("billing.overview.enterReadings")}</Link>
+                      </Space>
+                      {g.items.map((i, k) => (
+                        <div key={k} style={{ paddingLeft: 16 }}>
+                          • {i.name} {i.month}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+          ]}
         />
       )}
 

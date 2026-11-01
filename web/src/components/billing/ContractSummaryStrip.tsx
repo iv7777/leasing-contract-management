@@ -26,6 +26,7 @@ interface Row {
 }
 interface Overview {
   contracts: Row[];
+  missingReadings: { month: string }[];
 }
 
 /** What this contract owes, in the Dashboard's own words and numbers: Overdue, Due now, Due later this month,
@@ -45,12 +46,16 @@ export default function ContractSummaryStrip({
   const { t } = useTranslation();
   const { token } = theme.useToken();
   const [row, setRow] = useState<Row | null | undefined>(undefined);
+  const [missing, setMissing] = useState(0);
   const [detail, setDetail] = useState<{ chargeId: number | null; projected: { contractId: number; pricingStreamId: number; serviceStart: string; serviceEnd: string } | null }>({ chargeId: null, projected: null });
 
   useEffect(() => {
     void api
       .get<Overview>(`/billing/overview?contractId=${contractId}`)
-      .then((o) => setRow(o.contracts[0] ?? null))
+      .then((o) => {
+        setRow(o.contracts[0] ?? null);
+        setMissing(o.missingReadings?.length ?? 0);
+      })
       .catch(() => setRow(undefined));
   }, [contractId, reloadKey]);
 
@@ -72,9 +77,11 @@ export default function ContractSummaryStrip({
     { key: "later", label: t("billing.overview.dueLater"), value: yuan(row?.upcomingFen ?? 0), amount: row?.upcomingFen ?? 0, onClick: () => onFilter("later") },
     { key: "projected", label: t("billing.overview.nextMonth"), value: yuan(row?.projectedFen ?? 0), amount: row?.projectedFen ?? 0, onClick: () => onTab("upcoming") },
   ];
+  // Metered fees that cannot be billed until a reading is entered.
+  if (missing > 0) chips.push({ key: "readings", label: t("billing.summary.readingsNeeded"), value: String(missing), amount: missing, color: token.colorWarning, onClick: () => onTab("usage") });
   if (row?.nextDueDate) chips.push({ key: "next", label: t("billing.overview.nextDue"), value: `${row.nextDueDate} · ${yuan(row.nextDueFen)}`, amount: row.nextDueFen, onClick: openNext });
 
-  if (!row) return <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>{t("billing.summary.clear")}</Typography.Text>;
+  if (!row && missing === 0) return <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8 }}>{t("billing.summary.clear")}</Typography.Text>;
 
   return (
     <>

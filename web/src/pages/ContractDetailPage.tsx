@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Badge,
@@ -302,7 +302,8 @@ export default function ContractDetailPage() {
   const [pickedFilter, setChargeFilter] = useState<ChargeFilter | null>(null);
   // Voided documents (withdrawn by an approved amendment) are kept on record but are never offered for new work.
   const documents = allDocuments.filter((d) => !d.voided);
-  const [activeTab, setActiveTab] = useState("units");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "units");
   useHelpTopic(`contracts.detail.${activeTab}`);
 
   const [docModal, setDocModal] = useState(false);
@@ -423,6 +424,19 @@ export default function ContractDetailPage() {
   useEffect(load, [id]);
   // Another contract opens on its own default view of the bills.
   useEffect(() => setChargeFilter(null), [id]);
+  // A link such as /contracts/5?tab=usage opens that tab.
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab) setActiveTab(tab);
+  }, [searchParams, id]);
+  // Metered fees waiting for a reading, for the notice on the Usage entries tab.
+  const [neededReadings, setNeededReadings] = useState<{ stream: string; feeType: string; month: string }[]>([]);
+  useEffect(() => {
+    void api
+      .get<{ missingReadings: { stream: string; feeType: string; month: string }[] }>(`/billing/overview?contractId=${id}`)
+      .then((o) => setNeededReadings(o.missingReadings ?? []))
+      .catch(() => setNeededReadings([]));
+  }, [id, usageEntries.length, charges.length]);
 
 
   // Items whose readings carry their own amount (¥) beside the quantity.
@@ -1724,6 +1738,22 @@ export default function ContractDetailPage() {
               return (
                 <>
                   {canManageUsage && contract.status === "draft" && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.draftActionsNote")} />}
+                  {neededReadings.length > 0 && (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message={t("contracts.readingsNeeded", { count: neededReadings.length })}
+                      description={neededReadings.map((m) => `${m.stream === m.feeType ? t(`contracts.${camel(m.feeType)}`) : m.stream} ${m.month}`).join(" · ")}
+                      action={
+                        canManageUsage && contract.status === "active" ? (
+                          <Button size="small" type="primary" onClick={() => setReadingsGridOpen(true)}>
+                            {t("contracts.enterReadings")}
+                          </Button>
+                        ) : undefined
+                      }
+                    />
+                  )}
                   {meteredFrom && <Alert type="info" showIcon style={{ marginBottom: 12 }} message={t("contracts.meteredFromNote", { date: meteredFrom })} />}
                   {canManageUsage && contract.status !== "draft" && (
                     <Button
