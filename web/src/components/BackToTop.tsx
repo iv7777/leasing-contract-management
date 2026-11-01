@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FloatButton } from "antd";
 import { VerticalAlignTopOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+import { pageScrollTop, scrollPageToTop } from "../lib/pageScroll";
 
 /** The one "back to top" button for every page: appears after scrolling down a screen or so, and one tap scrolls
  * straight back up with the browser's own smooth scrolling (so it never needs a second tap). */
@@ -13,7 +14,7 @@ export default function BackToTop() {
     let queued = false;
     const check = () => {
       queued = false;
-      setShow(window.scrollY > 400);
+      setShow(pageScrollTop() > 400);
     };
     const onScroll = () => {
       if (queued) return;
@@ -21,8 +22,9 @@ export default function BackToTop() {
       requestAnimationFrame(check);
     };
     check();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    // capture: a scroll inside <body> (phone) does not bubble up to the window
+    window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+    return () => window.removeEventListener("scroll", onScroll, true);
   }, []);
 
   if (!show) return null;
@@ -31,7 +33,7 @@ export default function BackToTop() {
       className="back-top"
       icon={<VerticalAlignTopOutlined />}
       aria-label={t("common.backToTop")}
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      onClick={() => scrollPageToTop()}
     />
   );
 }

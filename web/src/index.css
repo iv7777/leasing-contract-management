@@ -11,6 +11,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Phone held upright: the page scrolls inside <body>, and the title bar, bottom bar and back-to-top button live outside it
+ * (children of <html>, see TopLayerPortal). On an iPhone a tap that lands on the scrolling area while it is still coasting only
+ * stops the scrolling; a tap on something outside it is handled at once. Helpers in lib/pageScroll.ts. */
+@media (max-width: 767px) {
+  html,
+  body {
+    overflow: auto;
+  }
+  body {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 .mobile-only {
   display: none;
 }
