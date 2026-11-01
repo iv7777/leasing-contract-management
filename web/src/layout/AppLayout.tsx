@@ -140,7 +140,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <Layout style={{ minHeight: "100vh" }}>
       {!isMobile && (
-        <Sider width={220} theme="light" style={{ borderInlineEnd: "1px solid #eee" }}>
+        <Sider width={220} theme="light" style={{ borderInlineEnd: "1px solid #eee", position: "sticky", top: 0, height: "100vh", overflow: "auto", alignSelf: "flex-start" }}>
           <div className="app-sider-title" style={{ padding: "16px 20px", fontWeight: 600, fontSize: 16 }}>{t("app.title")}</div>
           {nav}
         </Sider>
@@ -154,6 +154,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
             justifyContent: "space-between",
             padding: "0 16px",
             borderBottom: "1px solid #eee",
+            // The title bar stays put while the page scrolls under it.
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
           }}
         >
           <Space>
