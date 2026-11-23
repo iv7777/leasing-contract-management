@@ -9,7 +9,7 @@ import { isoDate, positiveFen } from "../lib/validate.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { generateChargeLines } from "../billing/chargeEngine.js";
 import { recordAudit } from "../lib/audit.js";
-import { contractRef, chargeFacts } from "../lib/auditDetail.js";
+import { contractRef, contractWho, chargeFacts } from "../lib/auditDetail.js";
 import { applyPlan, billingEligibility, currentCutoff, planBilling, type BillingPlan } from "../billing/autoBilling.js";
 import { loadChargeContext } from "../billing/generate.js";
 import { readingBehind } from "./chargeDetail.js";
@@ -334,6 +334,7 @@ billingRouter.get("/contracts/:id/billing/projected", (req, res) => {
       id: null,
       contractId,
       contractRef: contractRef(contractId),
+      ...contractWho(contractId),
       contractStatus: ctx.contract.status,
       feeType: planned.feeType,
       itemName: planned.streamLabel,

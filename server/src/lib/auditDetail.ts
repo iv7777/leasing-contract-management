@@ -28,6 +28,18 @@ export function contractRef(contractId: number): string | null {
   return db.select({ r: contracts.referenceNumber }).from(contracts).where(eq(contracts.id, contractId)).get()?.r ?? null;
 }
 
+/** Who and where a contract is for, to put on the details a person reads or prints: the tenant's name and its units
+ * (property and unit, as the statement lists them). */
+export function contractWho(contractId: number): { tenantName: string | null; units: string[] } {
+  const c = db.select().from(contracts).where(eq(contracts.id, contractId)).get();
+  if (!c) return { tenantName: null, units: [] };
+  const tenantName = db.select({ n: parties.name }).from(parties).where(eq(parties.id, c.tenantPartyId)).get()?.n ?? null;
+  const unitIds = new Set(db.select().from(contractUnits).where(eq(contractUnits.contractId, contractId)).all().map((x) => x.unitId));
+  const propertyNames = new Map(db.select({ id: properties.id, name: properties.name }).from(properties).all().map((p) => [p.id, p.name]));
+  const labels = db.select().from(units).all().filter((u) => unitIds.has(u.id)).map((u) => `${propertyNames.get(u.propertyId) ?? ""} ${u.unitLabel}`.trim());
+  return { tenantName, units: labels };
+}
+
 export function streamName(streamId: number | null): string | null {
   if (streamId === null) return null;
   const s = db.select().from(pricingStreams).where(eq(pricingStreams.id, streamId)).get();

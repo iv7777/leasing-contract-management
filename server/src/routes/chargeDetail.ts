@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { charges, chargeAdjustments, contracts, documents, pricingStreams, rateSchedule, receiptAllocations, receipts, billingRules, usageEntries, users } from "../db/schema.js";
 import { requireAuth } from "../middleware/auth.js";
 import { canAccessContract } from "../lib/contractScope.js";
-import { contractRef } from "../lib/auditDetail.js";
+import { contractRef, contractWho } from "../lib/auditDetail.js";
 import { broughtForwardId } from "../lib/openingBalance.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
@@ -105,6 +105,7 @@ chargeDetailRouter.get("/charges/:id", (req, res) => {
       id: charge.id,
       contractId: charge.contractId,
       contractRef: contractRef(charge.contractId),
+      ...contractWho(charge.contractId),
       contractStatus: contract?.status ?? null,
       feeType: charge.feeType,
       itemName: stream?.label ?? charge.feeType,

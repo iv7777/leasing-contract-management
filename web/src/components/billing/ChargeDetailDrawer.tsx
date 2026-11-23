@@ -33,6 +33,8 @@ interface Detail {
     id: number | null;
     contractId: number;
     contractRef: string | null;
+    tenantName?: string | null;
+    units?: string[];
     contractStatus: string | null;
     feeType: string;
     itemName: string;
@@ -127,9 +129,9 @@ export default function ChargeDetailDrawer({
     const rows = (data.snapshot?.subperiods ?? []).map((s) => `<tr><td>${esc(`${s.start} → ${s.end}`)}</td><td>${esc(rateLine(t, s))}</td><td class="r">${esc(money(s.amountAfterConcession))}</td></tr>`).join("");
     const pays = data.payments.map((p) => `<tr><td>${esc(p.receivedDate ?? "")}</td><td>${esc(p.paymentMethod ? paymentMethodLabel(t, p.paymentMethod) : "")}</td><td class="r">${esc(yuan(p.amountFen))}</td></tr>`).join("");
     printHtml(
-      `${c.contractRef ?? ""} ${item}`,
-      `<h1>${esc(`${c.contractRef ?? ""} · ${item} · ${periodLabel(c.serviceStart, c.serviceEnd)}`)}</h1>
-<table><tr><th>${esc(t("contracts.dueDate"))}</th><td>${esc(c.dueDate)}</td><th>${esc(t("contracts.amount"))}</th><td class="r">${esc(yuan(c.amountFen))}</td></tr>
+      [c.tenantName, c.contractRef, item].filter(Boolean).join(" · "),
+      `<h1>${esc([c.tenantName, c.contractRef, item, periodLabel(c.serviceStart, c.serviceEnd)].filter(Boolean).join(" · "))}</h1>
+<table>${c.tenantName ? `<tr><th>${esc(t("statement.tenant"))}</th><td>${esc(c.tenantName)}</td><th>${esc(t("statement.units"))}</th><td>${esc((c.units ?? []).join(", "))}</td></tr>` : ""}<tr><th>${esc(t("contracts.dueDate"))}</th><td>${esc(c.dueDate)}</td><th>${esc(t("contracts.amount"))}</th><td class="r">${esc(yuan(c.amountFen))}</td></tr>
 ${data.balance ? `<tr><th>${esc(t("chargeDetail.paidSoFar"))}</th><td class="r">${esc(yuan(netPaid))}</td><th>${esc(t("contracts.balance"))}</th><td class="r">${esc(yuan(data.balance.balanceFen))}</td></tr>` : ""}</table>
 ${rows ? `<h2>${esc(t("chargeDetail.how"))}</h2><table>${rows}</table>` : ""}
 ${data.reading ? `<p>${esc(t("chargeDetail.reading"))}: ${esc(`${data.reading.quantity} ${data.reading.unit}${data.reading.amountFen != null ? ` · ${yuan(data.reading.amountFen)}` : ""}`)}</p>` : ""}
@@ -156,6 +158,8 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
           <Descriptions.Item label={t("audit.fields.contract")}>
             <Link to={`/contracts/${c.contractId}`}>{c.contractRef}</Link>
           </Descriptions.Item>
+          {c.tenantName && <Descriptions.Item label={t("statement.tenant")}>{c.tenantName}</Descriptions.Item>}
+          {c.units && c.units.length > 0 && <Descriptions.Item label={t("statement.units")}>{c.units.join(", ")}</Descriptions.Item>}
           <Descriptions.Item label={t("contracts.fee")}>{item}</Descriptions.Item>
           <Descriptions.Item label={t("contracts.serviceStart")}>{c.serviceStart}</Descriptions.Item>
           <Descriptions.Item label={t("contracts.serviceEnd")}>{c.serviceEnd}</Descriptions.Item>

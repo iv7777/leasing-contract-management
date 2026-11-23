@@ -8,7 +8,7 @@ import { DUPLICATE_PAYMENT_REFERENCE, paymentReferenceUsed } from "../lib/receip
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { recordAudit } from "../lib/audit.js";
-import { contractRef, chargeFacts, receiptFacts } from "../lib/auditDetail.js";
+import { contractRef, contractWho, chargeFacts, receiptFacts } from "../lib/auditDetail.js";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance, computeUnallocatedFen, validateAllocation } from "../billing/ledger.js";
 import { computeLatePenalty } from "../billing/latePenalty.js";
@@ -265,6 +265,7 @@ receiptsRouter.get("/receipts/:id", (req, res) => {
       id: receipt.id,
       contractId: receipt.contractId,
       contractRef: contractRef(receipt.contractId),
+      ...contractWho(receipt.contractId),
       contractStatus: contract?.status ?? null,
       receivedDate: receipt.receivedDate,
       amountFen: receipt.amountFen,

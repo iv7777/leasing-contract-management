@@ -13,6 +13,8 @@ interface Detail {
     id: number;
     contractId: number;
     contractRef: string | null;
+    tenantName: string | null;
+    units: string[];
     contractStatus: string | null;
     receivedDate: string;
     amountFen: number;
@@ -88,9 +90,9 @@ export default function ReceiptDetailDrawer({
       .map((a) => `<tr><td>${esc(billName(a))}</td><td>${esc(a.serviceStart && a.serviceEnd ? periodLabel(a.serviceStart, a.serviceEnd) : "")}</td><td>${esc(a.dueDate ?? "")}</td><td class="r">${esc(yuan(a.amountFen))}</td></tr>`)
       .join("");
     printHtml(
-      `${r.contractRef ?? ""} ${t("receiptDetail.title")}`,
-      `<h1>${esc(`${r.contractRef ?? ""} · ${t("receiptDetail.title")} · ${r.receivedDate}`)}</h1>
-<table><tr><th>${esc(t("contracts.paymentMethod"))}</th><td>${esc(paymentMethodLabel(t, r.paymentMethod))}</td><th>${esc(t("contracts.amount"))}</th><td class="r">${esc(yuan(r.amountFen))}</td></tr>
+      [r.tenantName, r.contractRef, t("receiptDetail.title")].filter(Boolean).join(" · "),
+      `<h1>${esc([r.tenantName, r.contractRef, t("receiptDetail.title"), r.receivedDate].filter(Boolean).join(" · "))}</h1>
+<table>${r.tenantName ? `<tr><th>${esc(t("statement.tenant"))}</th><td>${esc(r.tenantName)}</td><th>${esc(t("statement.units"))}</th><td>${esc(r.units.join(", "))}</td></tr>` : ""}<tr><th>${esc(t("contracts.paymentMethod"))}</th><td>${esc(paymentMethodLabel(t, r.paymentMethod))}</td><th>${esc(t("contracts.amount"))}</th><td class="r">${esc(yuan(r.amountFen))}</td></tr>
 <tr><th>${esc(t("receiptDetail.appliedSoFar"))}</th><td class="r">${esc(yuan(data.allocatedFen))}</td><th>${esc(t("contracts.unallocated"))}</th><td class="r">${esc(yuan(data.unallocatedFen))}</td></tr>
 ${r.externalReference ? `<tr><th>${esc(t("receiptDetail.reference"))}</th><td colspan="3">${esc(r.externalReference)}</td></tr>` : ""}</table>
 ${rows ? `<h2>${esc(t("receiptDetail.appliedTo"))}</h2><table>${rows}</table>` : ""}`,
@@ -112,6 +114,8 @@ ${rows ? `<h2>${esc(t("receiptDetail.appliedTo"))}</h2><table>${rows}</table>` :
           <Descriptions.Item label={t("audit.fields.contract")}>
             <Link to={`/contracts/${r.contractId}`}>{r.contractRef}</Link>
           </Descriptions.Item>
+          {r.tenantName && <Descriptions.Item label={t("statement.tenant")}>{r.tenantName}</Descriptions.Item>}
+          {r.units.length > 0 && <Descriptions.Item label={t("statement.units")}>{r.units.join(", ")}</Descriptions.Item>}
           <Descriptions.Item label={t("contracts.receivedDate")}>{r.receivedDate}</Descriptions.Item>
           <Descriptions.Item label={t("contracts.paymentMethod")}>{paymentMethodLabel(t, r.paymentMethod)}</Descriptions.Item>
           {r.externalReference && <Descriptions.Item label={t("receiptDetail.reference")}>{r.externalReference}</Descriptions.Item>}

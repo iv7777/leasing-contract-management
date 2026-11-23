@@ -12,7 +12,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
-import { changesBetween, chargeFacts, contractRef, streamName } from "../lib/auditDetail.js";
+import { changesBetween, chargeFacts, contractRef, contractWho, streamName } from "../lib/auditDetail.js";
 import { Decimal, daysInMonth, todayInChina } from "@lcm/shared";
 import { loadLedgerInputs } from "../billing/ledgerLoad.js";
 import { computeChargeBalance } from "../billing/ledger.js";
@@ -178,6 +178,7 @@ usageEntriesRouter.get("/usage-entries/:id", (req, res) => {
       id: entry.id,
       contractId: entry.contractId,
       contractRef: contractRef(entry.contractId),
+      ...contractWho(entry.contractId),
       contractStatus: contract?.status ?? null,
       feeType: stream?.feeType ?? null,
       itemName: stream?.label ?? stream?.feeType ?? null,

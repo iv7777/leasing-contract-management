@@ -5,7 +5,7 @@ export function printHtml(title: string, body: string) {
   document.body.appendChild(frame);
   const doc = frame.contentDocument!;
   doc.open();
-  doc.write(`<!doctype html><meta charset="utf-8"><title>${title}</title><style>body{font:14px/1.5 sans-serif;margin:24px;color:#222}h1{font-size:18px}h2{font-size:15px;margin-top:18px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left}td.r{text-align:right}</style>${body}`);
+  doc.write(`<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:14px/1.5 sans-serif;margin:24px;color:#222}h1{font-size:18px}h2{font-size:15px;margin-top:18px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left}td.r{text-align:right}</style>${body}`);
   doc.close();
   frame.contentWindow!.focus();
   frame.contentWindow!.print();
