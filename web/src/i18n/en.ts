@@ -702,6 +702,18 @@ const en = {
     allTime: "All time",
     printedOn: "Printed on {{date}}.",
   },
+  receiptDetail: {
+    title: "Receipt details",
+    posted: "Received",
+    appliedSoFar: "Applied to bills",
+    appliedTo: "Applied to",
+    noneApplied: "Nothing has been applied to a bill yet; the whole amount is unallocated credit.",
+    recordedBy: "Recorded by",
+    reference: "Reference",
+    reversedBy: "Reversed by {{who}} on {{when}}",
+    removedNote: "Removed on {{when}} during its correction window; whatever it had paid off was taken back.",
+    depositTransferNote: "Created when deposit money was transferred to rent.",
+  },
   chargeDetail: {
     title: "Bill details",
     notBilledTitle: "Not billed yet",

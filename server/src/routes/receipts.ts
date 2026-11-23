@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { receipts, receiptAllocations, charges, billingRules } from "../db/schema.js";
+import { receipts, receiptAllocations, charges, billingRules, contracts, pricingStreams, users, auditEvents } from "../db/schema.js";
 import { isoDate, positiveFen } from "../lib/validate.js";
 import { DUPLICATE_PAYMENT_REFERENCE, paymentReferenceUsed } from "../lib/receiptRules.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -216,6 +216,72 @@ receiptsRouter.post("/receipts/:id/allocate", requireRole("admin", "manager", "c
 
   recordAudit({ actorUserId: req.user!.id, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId, ...chargeFacts(parsed.data.chargeId), amountFen: parsed.data.amountFen } });
   res.status(201).json({ allocation: inserted });
+});
+
+// Everything about one receipt in one place: who recorded it and when, what it paid off (and what was taken back),
+// what is still unallocated and, if reversed or removed, who did it and why. Read-only.
+receiptsRouter.get("/receipts/:id", (req, res) => {
+  const id = Number(req.params.id);
+  const receipt = db.select().from(receipts).where(eq(receipts.id, id)).get();
+  if (!receipt) return res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
+  if (!ensureContractAccess(req, res, receipt.contractId)) return;
+
+  const contract = db.select().from(contracts).where(eq(contracts.id, receipt.contractId)).get();
+  const names = new Map(db.select({ id: users.id, name: users.name }).from(users).all().map((u) => [u.id, u.name]));
+  const data = loadLedgerInputs(receipt.contractId);
+  const streams = new Map(db.select().from(pricingStreams).where(eq(pricingStreams.contractId, receipt.contractId)).all().map((st) => [st.id, st.label ?? st.feeType]));
+  const chargeById = new Map(db.select().from(charges).where(eq(charges.contractId, receipt.contractId)).all().map((c) => [c.id, c]));
+
+  const allocations = db
+    .select()
+    .from(receiptAllocations)
+    .where(eq(receiptAllocations.receiptId, id))
+    .all()
+    .sort((a, b) => a.id - b.id)
+    .map((a) => {
+      const c = chargeById.get(a.chargeId);
+      return {
+        id: a.id,
+        chargeId: a.chargeId,
+        amountFen: a.amountFen,
+        reversal: a.amountFen < 0,
+        appliedAt: a.createdAt,
+        by: a.createdBy ? names.get(a.createdBy) ?? null : null,
+        feeType: c?.feeType ?? null,
+        itemName: c ? streams.get(c.pricingStreamId) ?? c.feeType : null,
+        serviceStart: c?.serviceStart ?? null,
+        serviceEnd: c?.serviceEnd ?? null,
+        dueDate: c?.dueDate ?? null,
+      };
+    });
+
+  const reversedEvent =
+    receipt.status === "reversed" && !receipt.removedAt
+      ? db.select().from(auditEvents).where(and(eq(auditEvents.entityType, "receipt"), eq(auditEvents.entityId, id), eq(auditEvents.action, "receipt_reversed"))).all().sort((a, b) => b.id - a.id)[0]
+      : undefined;
+
+  res.json({
+    receipt: {
+      id: receipt.id,
+      contractId: receipt.contractId,
+      contractRef: contractRef(receipt.contractId),
+      contractStatus: contract?.status ?? null,
+      receivedDate: receipt.receivedDate,
+      amountFen: receipt.amountFen,
+      paymentMethod: receipt.paymentMethod,
+      externalReference: receipt.externalReference,
+      status: receipt.status,
+      removedAt: receipt.removedAt,
+      recordedBy: names.get(receipt.recordedBy) ?? null,
+      createdAt: receipt.createdAt,
+      reversedAt: reversedEvent?.createdAt ?? null,
+      reversedBy: reversedEvent?.actorUserId ? names.get(reversedEvent.actorUserId) ?? null : null,
+      reverseReason: reversedEvent?.reason ?? null,
+    },
+    allocatedFen: allocations.reduce((sum, a) => sum + a.amountFen, 0),
+    unallocatedFen: computeUnallocatedFen(receipt, data.allocations),
+    allocations,
+  });
 });
 
 /** A receipt that can still take money: found, reachable by this user, on a contract that is not a draft, not reversed. */

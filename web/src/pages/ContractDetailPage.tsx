@@ -52,6 +52,7 @@ import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/bil
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import BillRows from "../components/billing/BillRows";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
+import ReceiptDetailDrawer from "../components/billing/ReceiptDetailDrawer";
 import AllocateReceiptModal from "../components/billing/AllocateReceiptModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
 import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel } from "../components/billing/format";
@@ -348,6 +349,7 @@ export default function ContractDetailPage() {
   const [usageEntryModal, setUsageEntryModal] = useState(false);
   const [editUsageEntryModal, setEditUsageEntryModal] = useState<UsageEntryDto | null>(null);
   const [detailChargeId, setDetailChargeId] = useState<number | null>(null);
+  const [detailReceiptId, setDetailReceiptId] = useState<number | null>(null);
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [editConcessionModal, setEditConcessionModal] = useState<ConcessionDto | null>(null);
@@ -552,7 +554,7 @@ export default function ContractDetailPage() {
   const shownDepositTxns = showRemoved ? depositTxns : depositTxns.filter((x) => !x.removedAt && !removedDepositIds.has(x.id));
   // The buttons on a receipt: apply the unallocated part, correct it while that is allowed, reverse it (Admin).
   const receiptActions = (r: ReceiptDto) => (
-                    <Space>
+                    <Space onClick={(e) => e.stopPropagation()}>
                             {(receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0) > 0 && (
                               <Button size="small" onClick={() => setAllocateModal({ receiptId: r.id })}>
                                 {t("contracts.allocate")}
@@ -2093,7 +2095,7 @@ export default function ContractDetailPage() {
                     renderItem={(r: ReceiptDto) => {
                       const unallocated = receiptBalances.find((b) => b.receiptId === r.id)?.unallocatedFen ?? 0;
                       return (
-                        <List.Item style={{ display: "block" }}>
+                        <List.Item style={{ display: "block", cursor: "pointer" }} onClick={() => setDetailReceiptId(r.id)}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                             <Typography.Text strong>
                               {r.receivedDate} · {paymentMethodLabel(t, r.paymentMethod)}
@@ -2120,6 +2122,7 @@ export default function ContractDetailPage() {
                   rowKey="id"
                   size="small"
                   dataSource={shownReceipts}
+                  onRow={(r: ReceiptDto) => ({ onClick: () => setDetailReceiptId(r.id), style: { cursor: "pointer" } })}
                   columns={[
                     { title: t("contracts.receivedDate"), dataIndex: "receivedDate" },
                     { title: t("contracts.paymentMethod"), dataIndex: "paymentMethod", render: (v: string) => paymentMethodLabel(t, v) },
@@ -3624,6 +3627,15 @@ export default function ContractDetailPage() {
         charges={charges}
         onClose={() => setReadingsGridOpen(false)}
         onDone={load}
+      />
+      <ReceiptDetailDrawer
+        receiptId={detailReceiptId}
+        onClose={() => setDetailReceiptId(null)}
+        onAllocate={(rid) => {
+          setDetailReceiptId(null);
+          setAllocateModal({ receiptId: rid });
+        }}
+        onOpenCharge={(cid) => setDetailChargeId(cid)}
       />
       <ChargeDetailDrawer
         chargeId={detailChargeId}

@@ -704,6 +704,18 @@ const zh: Translations = {
     allTime: "全部",
     printedOn: "打印日期：{{date}}。",
   },
+  receiptDetail: {
+    title: "收款详情",
+    posted: "已收款",
+    appliedSoFar: "已核销到账单",
+    appliedTo: "核销明细",
+    noneApplied: "尚未核销到任何账单，整笔金额为未核销余额。",
+    recordedBy: "录入人",
+    reference: "参考编号",
+    reversedBy: "{{who}} 于 {{when}} 冲销",
+    removedNote: "已于 {{when}} 在更正期内移除；其已核销的款项已退回。",
+    depositTransferNote: "由押金转入租金时生成。",
+  },
   chargeDetail: {
     title: "账单详情",
     notBilledTitle: "尚未出账",
