@@ -432,6 +432,9 @@ export default function ContractDetailPage() {
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab) setActiveTab(tab);
+    // ...and ?tab=charges&filter=overdue opens it on that group of bills.
+    const filter = searchParams.get("filter");
+    if (tab === "charges" && (["all", "unpaid", "overdue", "due", "later", "paid"] as string[]).includes(filter ?? "")) setChargeFilter(filter as ChargeFilter);
   }, [searchParams, id]);
   // Metered fees waiting for a reading, for the notice on the Usage entries tab.
   const [neededReadings, setNeededReadings] = useState<{ stream: string; feeType: string; month: string }[]>([]);

@@ -16,6 +16,16 @@ interface Reminder {
   params: Record<string, string | number>;
 }
 
+/** Where a reminder takes you on its contract: the tab that shows what it is about (a renewal has no tab of its own, so it opens the contract). */
+const TARGET: Record<ReminderType, string> = {
+  overdue_balance: "?tab=charges&filter=overdue",
+  missing_reading: "?tab=usage",
+  deposit_shortfall: "?tab=deposit",
+  deposit_check: "?tab=deposit",
+  rate_change: "?tab=pricing",
+  renewal_notice: "",
+};
+
 const severityColor: Record<Reminder["severity"], string> = { info: "blue", warning: "orange", critical: "red" };
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
 
@@ -80,7 +90,7 @@ export default function RemindersPage() {
         loading={loading}
         dataSource={filter === "all" ? reminders : reminders.filter((r) => r.type === filter)}
         renderItem={(r) => (
-          <List.Item onClick={() => navigate(`/contracts/${r.contractId}`)} style={{ cursor: "pointer" }}>
+          <List.Item onClick={() => navigate(`/contracts/${r.contractId}${TARGET[r.type]}`)} style={{ cursor: "pointer" }}>
             <List.Item.Meta
               title={
                 <span>
