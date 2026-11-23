@@ -52,6 +52,7 @@ import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/bil
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import BillRows from "../components/billing/BillRows";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
+import UsageEntryDetailDrawer from "../components/billing/UsageEntryDetailDrawer";
 import ReceiptDetailDrawer from "../components/billing/ReceiptDetailDrawer";
 import AllocateReceiptModal from "../components/billing/AllocateReceiptModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
@@ -350,6 +351,7 @@ export default function ContractDetailPage() {
   const [editUsageEntryModal, setEditUsageEntryModal] = useState<UsageEntryDto | null>(null);
   const [detailChargeId, setDetailChargeId] = useState<number | null>(null);
   const [detailReceiptId, setDetailReceiptId] = useState<number | null>(null);
+  const [detailUsageId, setDetailUsageId] = useState<number | null>(null);
   const [newPhoto, setNewPhoto] = useState<File | null>(null);
   const [editPhoto, setEditPhoto] = useState<File | null>(null);
   const [editConcessionModal, setEditConcessionModal] = useState<ConcessionDto | null>(null);
@@ -1693,7 +1695,7 @@ export default function ContractDetailPage() {
                 return s ? s.label ?? t(`contracts.${camel(s.feeType)}`) : streamId;
               };
               const actionsOf = (u: UsageEntryDto) => (
-                <Space>
+                <Space onClick={(e) => e.stopPropagation()}>
                                   {u.canEdit === false ? (
                                     <Tooltip title={t(`contracts.usageLocked.${u.lockReason ?? "paid"}`)}>
                                       <Button size="small" icon={<LockOutlined />} onClick={() => message.info(t(`contracts.usageLocked.${u.lockReason ?? "paid"}`))} />
@@ -1772,7 +1774,7 @@ export default function ContractDetailPage() {
                       dataSource={usageEntries}
                       locale={{ emptyText: t("common.noData", { defaultValue: "No data" }) }}
                       renderItem={(u: UsageEntryDto) => (
-                        <List.Item style={{ display: "block" }}>
+                        <List.Item style={{ display: "block", cursor: "pointer" }} onClick={() => setDetailUsageId(u.id)}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                             <Typography.Text strong>
                               {streamLabel(u.pricingStreamId)} · {periodOf(u)}
@@ -1783,7 +1785,7 @@ export default function ContractDetailPage() {
                             <Typography.Text type="secondary" ellipsis style={{ flex: 1, minWidth: 0 }}>
                               {u.source ?? ""}
                             </Typography.Text>
-                            <Space size={4}>
+                            <Space size={4} onClick={(e) => e.stopPropagation()}>
                               <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
                               {canManageUsage && actionsOf(u)}
                             </Space>
@@ -1797,6 +1799,7 @@ export default function ContractDetailPage() {
                     size="small"
                     dataSource={usageEntries}
                     pagination={false}
+                    onRow={(u: UsageEntryDto) => ({ onClick: () => setDetailUsageId(u.id), style: { cursor: "pointer" } })}
                     columns={[
                       { title: t("contracts.usageEntryStream"), key: "stream", render: (_: unknown, u: UsageEntryDto) => streamLabel(u.pricingStreamId) },
                       { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
@@ -1807,7 +1810,9 @@ export default function ContractDetailPage() {
                         title: t("contracts.photo"),
                         key: "photo",
                         render: (_: unknown, u: UsageEntryDto) => (
-                          <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
+                          </span>
                         ),
                       },
                       ...(canManageUsage
@@ -3628,6 +3633,7 @@ export default function ContractDetailPage() {
         onClose={() => setReadingsGridOpen(false)}
         onDone={load}
       />
+      <UsageEntryDetailDrawer entryId={detailUsageId} onClose={() => setDetailUsageId(null)} onOpenCharge={(cid) => setDetailChargeId(cid)} />
       <ReceiptDetailDrawer
         receiptId={detailReceiptId}
         onClose={() => setDetailReceiptId(null)}

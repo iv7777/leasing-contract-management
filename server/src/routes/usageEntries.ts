@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments, documents, billingRules } from "../db/schema.js";
+import { usageEntries, rateSchedule, charges, receiptAllocations, chargeAdjustments, documents, billingRules, contracts, pricingStreams, users } from "../db/schema.js";
 import multer from "multer";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +13,9 @@ import { canAccessContract, rejectIfDraft } from "../lib/contractScope.js";
 import { pricingStreamBelongsToContract } from "../lib/ownership.js";
 import { recordAudit } from "../lib/audit.js";
 import { changesBetween, chargeFacts, contractRef, streamName } from "../lib/auditDetail.js";
-import { Decimal, daysInMonth } from "@lcm/shared";
+import { Decimal, daysInMonth, todayInChina } from "@lcm/shared";
+import { loadLedgerInputs } from "../billing/ledgerLoad.js";
+import { computeChargeBalance } from "../billing/ledger.js";
 
 import { isoDate, decimalString } from "../lib/validate.js";
 import { canEditEntry, editWindowEnd, withinEditWindow } from "../lib/editWindow.js";
@@ -141,6 +143,58 @@ usageEntriesRouter.get("/contracts/:contractId/usage-entries", (req, res) => {
         editableUntil: billed ? editWindowEnd(r.createdAt) : null,
       };
     }),
+  });
+});
+
+// Everything about one reading in one place: the price it was worked out at, who entered it and when, the photo, and the
+// bill(s) it produced with their state. Read-only.
+usageEntriesRouter.get("/usage-entries/:id", (req, res) => {
+  const entry = db.select().from(usageEntries).where(eq(usageEntries.id, Number(req.params.id))).get();
+  if (!entry) return res.status(404).json({ error: { code: "not_found", message: "Usage entry not found." } });
+  if (!ensureContractAccess(req, res, entry.contractId)) return;
+
+  const stream = db.select().from(pricingStreams).where(eq(pricingStreams.id, entry.pricingStreamId)).get();
+  const contract = db.select().from(contracts).where(eq(contracts.id, entry.contractId)).get();
+  const enteredBy = db.select({ name: users.name }).from(users).where(eq(users.id, entry.enteredBy)).get()?.name ?? null;
+  const rate = db
+    .select()
+    .from(rateSchedule)
+    .where(eq(rateSchedule.pricingStreamId, entry.pricingStreamId))
+    .all()
+    .find((r) => r.effectiveStart <= entry.serviceStart && (!r.effectiveEnd || r.effectiveEnd >= entry.serviceStart));
+  const photo = photoOf(entry.id);
+
+  const data = loadLedgerInputs(entry.contractId);
+  const today = todayInChina();
+  const streamNames = new Map(db.select().from(pricingStreams).where(eq(pricingStreams.contractId, entry.contractId)).all().map((st) => [st.id, st.label ?? st.feeType]));
+  const bills = billedChargesFor(entry).map((c) => {
+    const ledgerCharge = data.charges.find((x) => x.id === c.id)!;
+    const balance = computeChargeBalance(ledgerCharge, data.adjustments, data.allocations, today, data.overdueGraceDays);
+    return { chargeId: c.id, feeType: c.feeType, itemName: streamNames.get(c.pricingStreamId) ?? c.feeType, dueDate: c.dueDate, amountFen: c.amountFen, balanceFen: balance.balanceFen, isOverdue: balance.isOverdue, daysOverdue: balance.daysOverdue };
+  });
+
+  res.json({
+    entry: {
+      id: entry.id,
+      contractId: entry.contractId,
+      contractRef: contractRef(entry.contractId),
+      contractStatus: contract?.status ?? null,
+      feeType: stream?.feeType ?? null,
+      itemName: stream?.label ?? stream?.feeType ?? null,
+      serviceStart: entry.serviceStart,
+      serviceEnd: entry.serviceEnd,
+      quantity: entry.quantity,
+      unit: entry.unit,
+      amountFen: entry.amountFen,
+      source: entry.source,
+      enteredBy,
+      createdAt: entry.createdAt,
+      calculationMethod: rate?.calculationMethod ?? null,
+      unitPrice: rate?.amountOrRate ?? null,
+      photoDocumentId: photo?.id ?? null,
+      photoMissing: photo ? !fs.existsSync(photo.filePath) : false,
+    },
+    bills,
   });
 });
 

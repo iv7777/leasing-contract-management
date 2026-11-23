@@ -704,6 +704,18 @@ const zh: Translations = {
     allTime: "全部",
     printedOn: "打印日期：{{date}}。",
   },
+  usageDetail: {
+    title: "读数详情",
+    price: "单价",
+    pricePerUnit: "{{price}} / {{unit}}",
+    amountWithReading: "随读数一并录入的金额",
+    source: "来源",
+    enteredBy: "录入人",
+    enteredOn: "录入日期",
+    noPhoto: "无照片",
+    bills: "由此读数生成的账单",
+    noBills: "尚未由此读数生成账单。",
+  },
   receiptDetail: {
     title: "收款详情",
     posted: "已收款",

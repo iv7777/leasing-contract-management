@@ -702,6 +702,18 @@ const en = {
     allTime: "All time",
     printedOn: "Printed on {{date}}.",
   },
+  usageDetail: {
+    title: "Reading details",
+    price: "Price",
+    pricePerUnit: "{{price}} per {{unit}}",
+    amountWithReading: "Amount entered with the reading",
+    source: "Source",
+    enteredBy: "Entered by",
+    enteredOn: "Entered on",
+    noPhoto: "No photo",
+    bills: "Bills made from this reading",
+    noBills: "No bill has been made from this reading yet.",
+  },
   receiptDetail: {
     title: "Receipt details",
     posted: "Received",
