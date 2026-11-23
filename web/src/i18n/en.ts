@@ -365,6 +365,7 @@ const en = {
     unallocated: "Unallocated",
     allocate: "Allocate",
     allocateTo: "Allocate to charge",
+    noBillsToAllocate: "No bills with an outstanding balance.",
     reverse: "Reverse",
     reversed: "Reversed",
     removeEntry: "Remove",

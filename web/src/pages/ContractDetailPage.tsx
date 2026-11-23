@@ -1406,6 +1406,10 @@ export default function ContractDetailPage() {
   };
 
   // Same balance rules as the Dashboard and Reminders, from the ledger already on this page.
+  // Bills that can still take money (a receipt allocation or a deposit transfer): posted with a balance, oldest due date first.
+  const payableCharges = charges
+    .filter((c) => c.status === "posted" && (chargeBalances.find((x) => x.chargeId === c.id)?.balanceFen ?? 0) > 0)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.serviceStart.localeCompare(b.serviceStart) || a.id - b.id);
   const overdueBalances = chargeBalances.filter((b) => b.isOverdue && b.balanceFen > 0);
   const overdue =
     contract.status === "active" && overdueBalances.length > 0
@@ -3280,7 +3284,8 @@ export default function ContractDetailPage() {
         >
           <Form.Item name="chargeId" label={t("contracts.charges")} rules={[{ required: true }]}>
             <Select
-              options={charges.map((c) => {
+              notFoundContent={t("contracts.noBillsToAllocate")}
+              options={payableCharges.map((c) => {
                 const b = chargeBalances.find((x) => x.chargeId === c.id);
                 return { value: c.id, label: `${t(`contracts.${camel(c.feeType)}`)} ${c.serviceStart} — ${b ? yuan(b.balanceFen) : ""}` };
               })}
@@ -3388,7 +3393,7 @@ export default function ContractDetailPage() {
           </Form.Item>
           {depositTxnType === "transfer_to_rent" && (
             <Form.Item name="chargeId" label={t("contracts.charges")} rules={[{ required: true }]}>
-              <Select options={charges.map((c) => ({ value: c.id, label: `${t(`contracts.${camel(c.feeType)}`)} ${c.serviceStart}` }))} />
+              <Select notFoundContent={t("contracts.noBillsToAllocate")} options={payableCharges.map((c) => ({ value: c.id, label: `${t(`contracts.${camel(c.feeType)}`)} ${c.serviceStart}` }))} />
             </Form.Item>
           )}
           <Form.Item name="reason" label={t("contracts.reason")} rules={[{ required: true }]}>

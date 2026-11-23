@@ -367,6 +367,7 @@ const zh: Translations = {
     unallocated: "未核销",
     allocate: "核销",
     allocateTo: "核销至账单",
+    noBillsToAllocate: "没有未结清的账单。",
     reverse: "冲销",
     reversed: "已冲销",
     removeEntry: "删除",
