@@ -92,7 +92,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: [
         "**Record payment**: date, amount and method — it is applied to the oldest unpaid bills.",
         "**Bulk payments** enters many past payments at once, in date order.",
-        "**Allocate** puts leftover credit onto a bill later.",
+        "**Allocate** puts leftover credit onto one or several bills later — they are listed oldest first, like Record payment, and you can change the amounts.",
         "The **pencil** corrects a payment for 24 hours after you saved it (you, or an Admin); the **bin** removes it (no reason needed — the record stays, marked Removed). The time left shows beside the pencil.",
         "Admin: **Reverse** a wrong receipt (a reason is required).",
         "A bank reference can only be used once per contract, and the received date can't be in the future.",
@@ -232,7 +232,7 @@ export const helpMore: Record<Lang, Record<string, HelpExtra>> = {
       steps: [
         "**录入收款**：日期、金额和方式——自动核销到最早的未付账单。",
         "**批量录入收款**一次录入多笔历史收款，按日期顺序处理。",
-        "**核销**可以之后把剩余余额用到某笔账单上。",
+        "**核销**可以之后把剩余余额用到一张或多张账单上——账单按最早的在前列出，与「录入收款」一样，金额可以修改。",
         "保存后的 24 小时内，录入者本人（或管理员）可用**铅笔**按钮更正这笔收款，或用**垃圾桶**删除（无需填写原因，记录会保留并标记为已删除）。铅笔旁边会显示剩余时间。",
         "管理员：**冲销**录错的收款（需填写原因）。",
         "同一份合同上，一个银行流水号只能使用一次；收款日期不能晚于今天。",

@@ -14,7 +14,8 @@ import { computeChargeBalance, computeUnallocatedFen, validateAllocation } from 
 import { computeLatePenalty } from "../billing/latePenalty.js";
 import { canEditEntry, editWindowEnd, EDIT_NOT_YOURS, EDIT_WINDOW_CLOSED, withinEditWindow } from "../lib/editWindow.js";
 import { changesBetween } from "../lib/auditDetail.js";
-import { PaymentError, reapplyReceipt } from "./payments.js";
+import { PaymentError, applyAllocations, openChargesFor, reapplyReceipt } from "./payments.js";
+import { proposeAllocations } from "../billing/allocation.js";
 import { markOpeningReversedForReceipt } from "./openingBalance.js";
 import { OPENING_METHOD } from "../lib/openingBalance.js";
 import { todayInChina } from "@lcm/shared";
@@ -215,6 +216,58 @@ receiptsRouter.post("/receipts/:id/allocate", requireRole("admin", "manager", "c
 
   recordAudit({ actorUserId: req.user!.id, action: "receipt_allocated", entityType: "receipt_allocation", entityId: inserted.id, details: { receiptId, ...chargeFacts(parsed.data.chargeId), amountFen: parsed.data.amountFen } });
   res.status(201).json({ allocation: inserted });
+});
+
+/** A receipt that can still take money: found, reachable by this user, on a contract that is not a draft, not reversed. */
+function openReceiptFor(req: import("express").Request, res: import("express").Response) {
+  const receipt = db.select().from(receipts).where(eq(receipts.id, Number(req.params.id))).get();
+  if (!receipt) {
+    res.status(404).json({ error: { code: "not_found", message: "Receipt not found." } });
+    return null;
+  }
+  if (!ensureContractAccess(req, res, receipt.contractId)) return null;
+  if (rejectIfDraft(res, receipt.contractId)) return null;
+  if (receipt.status === "reversed") {
+    res.status(409).json({ error: { code: "allocation_rejected", message: "This receipt has been reversed." } });
+    return null;
+  }
+  return receipt;
+}
+
+// What a receipt's unallocated money would do: every unpaid bill, oldest first, with the amount an oldest-first split would put on it.
+receiptsRouter.post("/receipts/:id/allocate/preview", requireRole("admin", "manager", "collector"), (req, res) => {
+  const receipt = openReceiptFor(req, res);
+  if (!receipt) return;
+  const unallocatedFen = computeUnallocatedFen(receipt, loadLedgerInputs(receipt.contractId).allocations);
+  const { open, info } = openChargesFor(receipt.contractId, todayInChina());
+  const proposed = new Map(proposeAllocations(open, unallocatedFen).allocations.map((a) => [a.chargeId, a.amountFen]));
+  res.json({
+    unallocatedFen,
+    openCharges: open.map((o) => ({ chargeId: o.chargeId, ...info.get(o.chargeId)!, amountFen: proposed.get(o.chargeId) ?? 0 })),
+    openChargeCount: open.length,
+  });
+});
+
+// Applies a receipt's unallocated money to several bills in one go; all-or-nothing.
+const allocateManySchema = z.object({
+  allocations: z.array(z.object({ chargeId: z.number().int(), amountFen: positiveFen })).min(1).max(500),
+});
+
+receiptsRouter.post("/receipts/:id/allocations", requireRole("admin", "manager", "collector"), (req, res) => {
+  const receipt = openReceiptFor(req, res);
+  if (!receipt) return;
+  const parsed = allocateManySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: { code: "invalid_input", message: "Invalid allocation payload." } });
+  try {
+    const total = db.transaction((tx) => {
+      applyAllocations(tx, receipt.contractId, req.user!.id, receipt, parsed.data.allocations);
+      return parsed.data.allocations.reduce((sum, a) => sum + a.amountFen, 0);
+    });
+    res.status(201).json({ allocatedFen: total, count: parsed.data.allocations.length });
+  } catch (err) {
+    if (err instanceof PaymentError) return res.status(409).json({ error: { code: "allocation_rejected", message: err.message } });
+    throw err;
+  }
 });
 
 receiptsRouter.post("/receipt-allocations/:id/reverse", requireRole("admin"), (req, res) => {

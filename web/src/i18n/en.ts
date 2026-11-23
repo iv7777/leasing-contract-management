@@ -873,6 +873,10 @@ const en = {
       apply: "Apply",
       overAllocated: "The applied amounts add up to more than the payment.",
       credit: "{{amount}} will be kept as unallocated credit.",
+      toAllocate: "Unallocated credit to apply",
+      allocated: "Receipt allocated.",
+      noBillsOwed: "There are no unpaid bills, so the whole amount stays as unallocated credit.",
+      overAllocatedReceipt: "The applied amounts add up to more than the receipt's unallocated credit.",
     },
     methods: {
       bankTransfer: "Bank transfer",

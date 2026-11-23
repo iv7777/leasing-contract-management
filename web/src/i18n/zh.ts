@@ -875,6 +875,10 @@ const zh: Translations = {
       apply: "核销金额",
       overAllocated: "核销金额合计超过了收款金额。",
       credit: "{{amount}} 将作为未核销余额保留。",
+      toAllocate: "可核销的未核销余额",
+      allocated: "已核销。",
+      noBillsOwed: "目前没有未付账单，整笔金额将作为未核销余额保留。",
+      overAllocatedReceipt: "核销金额合计超过了这笔收款的未核销余额。",
     },
     methods: {
       bankTransfer: "银行转账",

@@ -470,7 +470,7 @@ export const guideEn: GuideContent = {
             ["Recorded the wrong amount", "For 24 hours after saving, whoever recorded it (or an Admin) presses the **pencil** on the receipt and fixes the date, amount, method or reference — the bills it pays are re-applied for you. After that an Admin presses **Reverse** and gives a reason; both entries stay visible; then record the right one."],
           ],
         },
-        { type: "callout", kind: "info", title: "The older “Record receipt only” button", text: "It saves the money without applying it to any bill — use **Allocate** afterwards. For everyday collections, **Record payment** does both steps in one." },
+        { type: "callout", kind: "info", title: "The older “Record receipt only” button", text: "It saves the money without applying it to any bill — use **Allocate** afterwards (it lists every unpaid bill, oldest first, so you can apply the money to several bills in one go). For everyday collections, **Record payment** does both steps in one." },
         {
           type: "p",
           text: "If the contract has a **late penalty** configured (a flat daily rate, with an optional cap), it is calculated on overdue balances and shown on the ledger. It starts after the grace period.",

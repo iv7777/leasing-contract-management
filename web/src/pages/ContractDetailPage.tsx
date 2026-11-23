@@ -52,6 +52,7 @@ import { MeterPhotoCell, PhotoPicker, uploadMeterPhoto } from "../components/bil
 import ChargeDetailDrawer from "../components/billing/ChargeDetailDrawer";
 import BillRows from "../components/billing/BillRows";
 import RecordPaymentModal from "../components/billing/RecordPaymentModal";
+import AllocateReceiptModal from "../components/billing/AllocateReceiptModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
 import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
@@ -360,7 +361,6 @@ export default function ContractDetailPage() {
   const [amendmentForm] = Form.useForm();
   const [editAmendmentForm] = Form.useForm();
   const [receiptForm] = Form.useForm();
-  const [allocateForm] = Form.useForm();
   const [reverseReceiptForm] = Form.useForm();
   const [depositTxnForm] = Form.useForm();
   const [editReceiptForm] = Form.useForm();
@@ -1293,19 +1293,6 @@ export default function ContractDetailPage() {
       await api.post(`/contracts/${id}/receipts`, { ...values, amountFen: Math.round(values.amountFen * 100) });
       setReceiptModal(false);
       receiptForm.resetFields();
-      load();
-    } catch (err) {
-      handleError(err);
-    }
-  };
-
-  const onAllocate = async () => {
-    if (!allocateModal) return;
-    try {
-      const values = await allocateForm.validateFields();
-      await api.post(`/receipts/${allocateModal.receiptId}/allocate`, { chargeId: values.chargeId, amountFen: Math.round(values.amountFen * 100) });
-      setAllocateModal(null);
-      allocateForm.resetFields();
       load();
     } catch (err) {
       handleError(err);
@@ -3262,40 +3249,7 @@ export default function ContractDetailPage() {
         </Form>
       </Modal>
 
-      <Modal
-        title={t("contracts.allocateTo")}
-        open={!!allocateModal}
-        onCancel={() => setAllocateModal(null)}
-        onOk={onAllocate}
-        okText={t("contracts.allocate")}
-        cancelText={t("common.cancel")}
-      >
-        <Form
-          form={allocateForm}
-          layout="vertical"
-          onValuesChange={(v) => {
-            if (v.chargeId === undefined || !allocateModal) return;
-            // The most this receipt can put on that bill: its unallocated credit or the bill's balance, whichever is smaller.
-            const credit = receiptBalances.find((r) => r.receiptId === allocateModal.receiptId)?.unallocatedFen ?? 0;
-            const owed = chargeBalances.find((c) => c.chargeId === v.chargeId)?.balanceFen ?? 0;
-            const fen = Math.min(credit, owed);
-            if (fen > 0) allocateForm.setFieldsValue({ amountFen: fen / 100 });
-          }}
-        >
-          <Form.Item name="chargeId" label={t("contracts.charges")} rules={[{ required: true }]}>
-            <Select
-              notFoundContent={t("contracts.noBillsToAllocate")}
-              options={payableCharges.map((c) => {
-                const b = chargeBalances.find((x) => x.chargeId === c.id);
-                return { value: c.id, label: `${t(`contracts.${camel(c.feeType)}`)} ${c.serviceStart} — ${b ? yuan(b.balanceFen) : ""}` };
-              })}
-            />
-          </Form.Item>
-          <Form.Item name="amountFen" label={t("contracts.amountYuan")} rules={[{ required: true }]}>
-            <InputNumber style={{ width: "100%" }} min={0} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <AllocateReceiptModal receiptId={allocateModal?.receiptId ?? null} onClose={() => setAllocateModal(null)} onDone={load} />
 
       <Modal
         title={t("contracts.reverse")}
