@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import { apiErrorMessage } from "../../api/errorMessage";
-import { periodLabel, streamName, yuan } from "./format";
+import { periodLabel, streamName, usageSourceLabel, yuan } from "./format";
 import { MeterPhotoCell } from "./MeterPhoto";
 import { esc, printHtml } from "./print";
 
@@ -81,7 +81,7 @@ export default function UsageEntryDetailDrawer({
 <table>${e.tenantName ? `<tr><th>${esc(t("statement.tenant"))}</th><td>${esc(e.tenantName)}</td><th>${esc(t("statement.units"))}</th><td>${esc(e.units.join(", "))}</td></tr>` : ""}
 <tr><th>${esc(t("contracts.usageEntryQuantity"))}</th><td>${esc(`${Number(e.quantity)} ${e.unit}`)}</td><th>${esc(t("usageDetail.price"))}</th><td>${esc(price ?? "")}</td></tr>
 ${e.amountFen != null ? `<tr><th>${esc(t("contracts.amount"))}</th><td class="r">${esc(yuan(e.amountFen))}</td><th>${esc(t("usageDetail.enteredOn"))}</th><td>${esc(e.createdAt.slice(0, 10))}</td></tr>` : `<tr><th>${esc(t("usageDetail.enteredOn"))}</th><td colspan="3">${esc(e.createdAt.slice(0, 10))}</td></tr>`}
-${e.source ? `<tr><th>${esc(t("usageDetail.source"))}</th><td colspan="3">${esc(e.source)}</td></tr>` : ""}</table>
+${e.source ? `<tr><th>${esc(t("usageDetail.source"))}</th><td colspan="3">${esc(usageSourceLabel(t, e.source))}</td></tr>` : ""}</table>
 ${bills ? `<h2>${esc(t("usageDetail.bills"))}</h2><table>${bills}</table>` : ""}`,
     );
   };
@@ -107,7 +107,7 @@ ${bills ? `<h2>${esc(t("usageDetail.bills"))}</h2><table>${bills}</table>` : ""}
           </Descriptions.Item>
           {price && <Descriptions.Item label={t("usageDetail.price")}>{price}</Descriptions.Item>}
           {e.amountFen != null && <Descriptions.Item label={t("contracts.amount")}>{yuan(e.amountFen)}</Descriptions.Item>}
-          {e.source && <Descriptions.Item label={t("usageDetail.source")}>{e.source}</Descriptions.Item>}
+          {e.source && <Descriptions.Item label={t("usageDetail.source")}>{usageSourceLabel(t, e.source)}</Descriptions.Item>}
           {e.enteredBy && <Descriptions.Item label={t("usageDetail.enteredBy")}>{e.enteredBy}</Descriptions.Item>}
           <Descriptions.Item label={t("usageDetail.enteredOn")}>{e.createdAt.slice(0, 10)}</Descriptions.Item>
           <Descriptions.Item label={t("contracts.photo")}>

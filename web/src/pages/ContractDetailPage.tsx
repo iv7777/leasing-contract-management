@@ -56,7 +56,7 @@ import UsageEntryDetailDrawer from "../components/billing/UsageEntryDetailDrawer
 import ReceiptDetailDrawer from "../components/billing/ReceiptDetailDrawer";
 import AllocateReceiptModal from "../components/billing/AllocateReceiptModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel, usageSourceLabel } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -1786,7 +1786,7 @@ export default function ContractDetailPage() {
                           </div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 6 }}>
                             <Typography.Text type="secondary" ellipsis style={{ flex: 1, minWidth: 0 }}>
-                              {u.source ?? ""}
+                              {usageSourceLabel(t, u.source)}
                             </Typography.Text>
                             <Space size={4} onClick={(e) => e.stopPropagation()}>
                               <MeterPhotoCell entryId={u.id} documentId={u.photoDocumentId ?? null} missing={!!u.photoMissing} canEdit={canManageUsage && u.canEdit !== false} onChanged={load} />
@@ -1808,7 +1808,7 @@ export default function ContractDetailPage() {
                       { title: t("contracts.serviceStart"), dataIndex: "serviceStart" },
                       { title: t("contracts.serviceEnd"), dataIndex: "serviceEnd" },
                       { title: t("contracts.usageEntryQuantity"), key: "quantity", render: (_: unknown, u: UsageEntryDto) => `${u.quantity} ${u.unit}${u.amountFen != null ? ` · ${yuan(u.amountFen)}` : ""}` },
-                      { title: t("contracts.usageEntrySource"), dataIndex: "source" },
+                      { title: t("contracts.usageEntrySource"), dataIndex: "source", render: (v: string | null) => usageSourceLabel(t, v) },
                       {
                         title: t("contracts.photo"),
                         key: "photo",

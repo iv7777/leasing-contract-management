@@ -177,18 +177,17 @@ test("computeDueDate: 25th of the prior month, with short-month fallback", () =>
   assert.equal(computeDueDate("2026-03-01", { dueDay: 31, dueMonthOffset: -1 }), "2026-02-28");
 });
 
-test("metered charges are billed in arrears: due the month after the usage month", () => {
-  // Rent due the 1st of the service month; electricity for March can only be
-  // known in April, so it is due April 1 — not March 1.
-  const rules = { dueDay: 1, dueMonthOffset: 0 };
-  assert.equal(computeMeteredDueDate("2026-03-01", rules), "2026-04-01");
-  // Rent billed in advance (offset -1) still leaves metered due next month.
-  assert.equal(computeMeteredDueDate("2026-03-01", { dueDay: 25, dueMonthOffset: -1 }), "2026-04-25");
-  // A contract that already bills rent in arrears keeps its own offset.
-  assert.equal(computeMeteredDueDate("2026-03-01", { dueDay: 10, dueMonthOffset: 2 }), "2026-05-10");
+test("metered charges are billed in arrears: due 3 working days after the usage month ends", () => {
+  // March usage: the statement is treated as issued on April 1 (a Wednesday), so it is due Monday April 6
+  // (Thursday 2, Friday 3, Monday 6; the weekend is skipped) whatever the contract's rent due day is.
+  assert.equal(computeMeteredDueDate("2026-03-01"), "2026-04-06");
+  // October usage: November 1 2026 is a Sunday, so it is due Wednesday November 4.
+  assert.equal(computeMeteredDueDate("2026-10-01"), "2026-11-04");
+  // Across a year end.
+  assert.equal(computeMeteredDueDate("2026-12-01"), "2027-01-06");
 });
 
-test("metered line gets the arrears due date, and a missing reading reports it", () => {
+test("metered line gets the arrears due date (3 working days after the month), and a missing reading reports it", () => {
   const rate: RateScheduleInput = { id: 100, pricingStreamId: 10, effectiveStart: "2026-01-01", effectiveEnd: null, calculationMethod: "metered", amountOrRate: "1", rateBasis: "per_unit", escalationBase: null, escalationPercentage: null, escalationIntervalMonths: null, unit: "kWh" };
   const streams = [{ id: 10, feeType: "electricity_base", targetType: "unit" as const }];
   const rules = { dueDay: 1, dueMonthOffset: 0 };
@@ -198,10 +197,10 @@ test("metered line gets the arrears due date, and a missing reading reports it",
     "2026-03-01",
     "2026-03-31",
   );
-  assert.equal(withUsage.lines[0].dueDate, "2026-04-01");
+  assert.equal(withUsage.lines[0].dueDate, "2026-04-06");
 
   const without = generateChargeLines(baseInput({ billingRules: rules, pricingStreams: streams, rateSchedule: [rate] }), "2026-03-01", "2026-03-31");
-  assert.deepEqual(without.missingUsage, [{ pricingStreamId: 10, dueDate: "2026-04-01" }]);
+  assert.deepEqual(without.missingUsage, [{ pricingStreamId: 10, dueDate: "2026-04-06" }]);
 });
 
 // ---------------------------------------------------------------------------

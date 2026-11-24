@@ -79,6 +79,19 @@ export function addMonths(date: IsoDate, months: number): IsoDate {
   return `${newYear}-${String(newMonth1to12).padStart(2, "0")}-${String(clampedDay).padStart(2, "0")}`;
 }
 
+/** The date `n` working days after `date`: Saturdays and Sundays are skipped (public holidays are not known). */
+export function addWorkingDays(date: IsoDate, n: number): IsoDate {
+  const [y, m, d] = date.split("-").map(Number);
+  const cur = new Date(Date.UTC(y, m - 1, d));
+  let left = n;
+  while (left > 0) {
+    cur.setUTCDate(cur.getUTCDate() + 1);
+    const day = cur.getUTCDay();
+    if (day !== 0 && day !== 6) left -= 1;
+  }
+  return cur.toISOString().slice(0, 10);
+}
+
 export function lastDayOfMonth(year: number, month1to12: number): IsoDate {
   return `${year}-${String(month1to12).padStart(2, "0")}-${String(daysInMonth(year, month1to12)).padStart(2, "0")}`;
 }

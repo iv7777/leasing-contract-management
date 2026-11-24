@@ -398,7 +398,7 @@ export const guideEn: GuideContent = {
         { type: "h", text: "Meter readings (electricity and water)" },
         {
           type: "p",
-          text: "A metered bill needs the month's quantity. It cannot be known in advance, so it is the one input the system waits for. Metered bills are due on the contract's due day in the **month after** the usage month.",
+          text: "A metered bill needs the month's quantity. It cannot be known in advance, so it is the one input the system waits for. Metered bills are due **3 working days after the usage month ends** (weekends skipped), whenever the reading is entered: a reading entered late makes a bill that is already overdue.",
         },
         {
           type: "steps",

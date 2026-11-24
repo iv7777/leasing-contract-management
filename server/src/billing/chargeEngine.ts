@@ -5,6 +5,8 @@ import {
   daysInMonth,
   monthsBetween,
   lastDayOfMonth,
+  addMonths,
+  addWorkingDays,
   type IsoDate,
 } from "@lcm/shared";
 import type {
@@ -143,7 +145,7 @@ export function generateChargeLines(
   const billedEnd = input.billingEnd && input.billingEnd < periodEnd ? input.billingEnd : periodEnd;
 
   const dueDate = computeDueDate(periodStart, input.billingRules);
-  const meteredDueDate = computeMeteredDueDate(periodStart, input.billingRules);
+  const meteredDueDate = computeMeteredDueDate(periodStart);
 
   const lines: ChargeLine[] = [];
   const skippedMissingUsage: number[] = [];
@@ -374,13 +376,14 @@ export function generateChargeLines(
   return { lines, skippedMissingUsage, missingUsage };
 }
 
-/** Metered charges (electricity, water) can only be computed after the
- * usage month ends, so they are billed in arrears: due on the contract's due
- * day in the month after the usage month — or later, if the contract's own
- * offset already puts rent that far out. Due on the rent schedule instead,
- * a March meter reading entered in April would be born overdue. */
-export function computeMeteredDueDate(periodStart: IsoDate, billingRules: { dueDay: number; dueMonthOffset: number }): IsoDate {
-  return computeDueDate(periodStart, { dueDay: billingRules.dueDay, dueMonthOffset: Math.max(1, billingRules.dueMonthOffset) });
+/** Metered charges (electricity, water) can only be computed after the usage month ends, so they are billed in
+ * arrears, and the tenant pays within METERED_PAYMENT_WORKING_DAYS working days of the statement. The statement is
+ * treated as issued on the first day after the usage month, whenever the reading is actually entered: the same
+ * reading gives the same due date no matter who types it, or when. A reading entered late therefore makes a bill
+ * that is already overdue. Weekends are skipped (public holidays are not known). */
+export const METERED_PAYMENT_WORKING_DAYS = 3;
+export function computeMeteredDueDate(periodStart: IsoDate): IsoDate {
+  return addWorkingDays(addMonths(periodStart, 1), METERED_PAYMENT_WORKING_DAYS);
 }
 
 /** "25th of the prior month" == dueDay 25, dueMonthOffset -1 from the

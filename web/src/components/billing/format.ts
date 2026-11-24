@@ -31,6 +31,13 @@ export function paymentMethodLabel(t: (key: string) => string, method: string): 
   return (PAYMENT_METHODS as readonly string[]).includes(method) ? t(`billing.methods.${camel(method.toLowerCase().replace(/ /g, "_"))}`) : method;
 }
 
+/** The reading list's "source": the app writes "bulk entry" for readings from the grid; show it in the viewer's language.
+ * Anything typed by hand is shown as is. */
+export function usageSourceLabel(t: (key: string) => string, source: string | null | undefined): string {
+  if (!source) return "";
+  return source === "bulk entry" ? t("contracts.usageSourceBulk") : source;
+}
+
 /** What a document is called in lists: the name its uploader gave it, or else its type. */
 export function docDisplayName(t: (key: string) => string, d: { name?: string | null; docType: string }): string {
   return d.name?.trim() ? d.name.trim() : docTypeLabel(t, d.docType);
