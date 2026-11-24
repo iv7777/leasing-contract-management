@@ -79,13 +79,18 @@ export default function MeterReadingsGridModal({
   }, [charges]);
   const beforeStart = (month: string) => !!meteredFrom && month < meteredFrom.slice(0, 7);
 
-  // Newest month first, from the current month back to the lease's first month.
+  // Newest month first, from the current month back to the lease's first month, or to the month metered billing
+  // starts: the closed months before that can never take a reading, so they are left out (unless one already holds a reading).
   const months = useMemo(() => {
     const last = termEnd.slice(0, 7) < todayInChina().slice(0, 7) ? termEnd.slice(0, 7) : todayInChina().slice(0, 7);
+    const from = meteredFrom && meteredFrom.slice(0, 7) > termStart.slice(0, 7) ? meteredFrom.slice(0, 7) : termStart.slice(0, 7);
+    const hasReading = new Set(usageEntries.map((u) => u.serviceStart.slice(0, 7)));
     const list: string[] = [];
-    for (let m = `${termStart.slice(0, 7)}-01`; m.slice(0, 7) <= last; m = addMonths(m, 1)) list.push(m.slice(0, 7));
+    for (let m = `${termStart.slice(0, 7)}-01`; m.slice(0, 7) <= last; m = addMonths(m, 1)) {
+      if (m.slice(0, 7) >= from || hasReading.has(m.slice(0, 7))) list.push(m.slice(0, 7));
+    }
     return list.reverse();
-  }, [termStart, termEnd]);
+  }, [termStart, termEnd, meteredFrom, usageEntries]);
 
   useEffect(() => {
     if (open) {
