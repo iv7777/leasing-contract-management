@@ -22,6 +22,7 @@ interface UsageEntry {
 interface PostedCharge {
   pricingStreamId: number;
   serviceStart: string;
+  serviceEnd: string;
   status: string;
 }
 
@@ -74,7 +75,10 @@ export default function MeterReadingsGridModal({
 
   const locked = useMemo(() => {
     const s = new Set<string>();
-    for (const c of charges) if (c.status === "posted") s.add(cellKey(c.pricingStreamId, c.serviceStart.slice(0, 7)));
+    // A month is billed only by a bill for the whole month. A balance brought forward at go-live sits on one day
+    // (the go-live date, often in the first open month) and is not that month's bill, so it must not lock it.
+    const wholeMonth = (c: PostedCharge) => c.serviceStart.endsWith("-01") && c.serviceEnd.slice(0, 7) === c.serviceStart.slice(0, 7) && c.serviceEnd > c.serviceStart;
+    for (const c of charges) if (c.status === "posted" && wholeMonth(c)) s.add(cellKey(c.pricingStreamId, c.serviceStart.slice(0, 7)));
     return s;
   }, [charges]);
   const beforeStart = (month: string) => !!meteredFrom && month < meteredFrom.slice(0, 7);
