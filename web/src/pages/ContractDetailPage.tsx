@@ -56,7 +56,7 @@ import UsageEntryDetailDrawer from "../components/billing/UsageEntryDetailDrawer
 import ReceiptDetailDrawer from "../components/billing/ReceiptDetailDrawer";
 import AllocateReceiptModal from "../components/billing/AllocateReceiptModal";
 import BulkPaymentsModal from "../components/billing/BulkPaymentsModal";
-import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel, usageSourceLabel } from "../components/billing/format";
+import { paymentMethodLabel, docTypeLabel, docDisplayName, PAYMENT_METHODS, timeLeft, systemReasonLabel, isMeteredMethod, impliedPrice, priceDeviation, PRICE_JUMP, periodLabel, usageSourceLabel, meterOrder } from "../components/billing/format";
 import UpcomingBillsTab from "../components/billing/UpcomingBillsTab";
 import MeterReadingsGridModal from "../components/billing/MeterReadingsGridModal";
 
@@ -2922,6 +2922,7 @@ export default function ContractDetailPage() {
             <Select
               options={streams
                 .filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)))
+                .sort((x, y) => meterOrder(x.feeType) - meterOrder(y.feeType) || x.id - y.id)
                 .map((s) => ({ value: s.id, label: s.label ?? t(`contracts.${camel(s.feeType)}`) }))}
             />
           </Form.Item>
@@ -3624,6 +3625,7 @@ export default function ContractDetailPage() {
         termEnd={contract.termEnd}
         streams={streams
           .filter((s) => rates.some((r) => r.pricingStreamId === s.id && isMeteredMethod(r.calculationMethod)))
+          .sort((a, b) => meterOrder(a.feeType) - meterOrder(b.feeType) || a.id - b.id)
           .map((s) => ({
             id: s.id,
             name: s.label ?? t(`contracts.${camel(s.feeType)}`),

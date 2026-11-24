@@ -31,6 +31,10 @@ export function paymentMethodLabel(t: (key: string) => string, method: string): 
   return (PAYMENT_METHODS as readonly string[]).includes(method) ? t(`billing.methods.${camel(method.toLowerCase().replace(/ /g, "_"))}`) : method;
 }
 
+/** Metered items in one fixed order wherever they are listed side by side: electricity, then water, then anything else
+ * (otherwise the order follows whichever item was created first on each contract). */
+export const meterOrder = (feeType: string): number => (feeType === "electricity_base" ? 0 : feeType === "water" ? 1 : 2);
+
 /** The reading list's "source": the app writes "bulk entry" for readings from the grid; show it in the viewer's language.
  * Anything typed by hand is shown as is. */
 export function usageSourceLabel(t: (key: string) => string, source: string | null | undefined): string {
