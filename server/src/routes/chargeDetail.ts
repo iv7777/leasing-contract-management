@@ -41,6 +41,7 @@ export function readingBehind(pricingStreamId: number, serviceStart: string, ser
     unit: entry.unit,
     amountFen: entry.amountFen,
     itemName: readingStream ? readingStream.label ?? readingStream.feeType : null,
+    itemFeeType: readingStream ? readingStream.feeType : null,
     photoDocumentId: photo?.id ?? null,
     photoMissing: photo ? !fs.existsSync(photo.filePath) : false,
   };

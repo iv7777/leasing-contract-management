@@ -53,7 +53,7 @@ interface Detail {
   balance: null | { balanceFen: number; allocatedFen: number; adjustedFen: number; isOverdue: boolean; daysOverdue: number; latePenaltyFen: number };
   payments: { id: number; receiptId: number; amountFen: number; reversal: boolean; receivedDate: string | null; paymentMethod: string | null }[];
   adjustments: { id: number; amountFen: number; reason: string; createdAt: string; by: string | null }[];
-  reading: { id: number; quantity: string; unit: string; amountFen: number | null; itemName: string | null; photoDocumentId: number | null; photoMissing: boolean } | null;
+  reading: { id: number; quantity: string; unit: string; amountFen: number | null; itemName: string | null; itemFeeType: string | null; photoDocumentId: number | null; photoMissing: boolean } | null;
 }
 
 /** "10008.8000" -> "10008.8". */
@@ -225,7 +225,7 @@ ${pays ? `<h2>${esc(t("chargeDetail.payments"))}</h2><table>${pays}</table>` : "
 
         {data.reading && (
           <Descriptions bordered size="small" column={1} title={t("chargeDetail.reading")}>
-            <Descriptions.Item label={data.reading.itemName ? streamName(t, data.reading.itemName, data.reading.itemName) : item}>
+            <Descriptions.Item label={data.reading.itemName ? streamName(t, data.reading.itemName, data.reading.itemFeeType ?? "") : item}>
               {data.reading.quantity} {data.reading.unit}
               {data.reading.amountFen != null ? ` · ${yuan(data.reading.amountFen)}` : ""}
             </Descriptions.Item>
