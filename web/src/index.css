@@ -19,8 +19,14 @@ body {
   body {
     overflow: auto;
   }
-  body {
-    -webkit-overflow-scrolling: touch;
+  /* No "-webkit-overflow-scrolling: touch" here: on iOS it makes <body> a stacking context, which puts every drawer and
+   * modal (they live inside <body>) UNDER the title bar and bottom bar that sit beside it under <html>, covering the
+   * drawer's close button. iOS 13+ scrolls with momentum without it. */
+
+  /* Belt and braces: while a drawer or modal is open the bars behind its mask are not needed, so they step aside and can
+   * never cover it, whatever the browser does with stacking. */
+  html:has(.ant-drawer-open, .ant-modal-wrap:not([style*="display: none"])) [data-top-layer] {
+    visibility: hidden;
   }
 }
 

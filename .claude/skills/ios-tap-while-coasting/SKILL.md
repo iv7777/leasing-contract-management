@@ -29,7 +29,9 @@ Make `<body>` the scroller on the phone layout, and put every always-visible bar
    html, body, #root { height: 100%; margin: 0; }
    @media (max-width: 767px) {
      html, body { overflow: auto; }
-     body { -webkit-overflow-scrolling: touch; }
+     /* NEVER add body { -webkit-overflow-scrolling: touch }: on iOS it turns <body> into a stacking context, so every
+        drawer/modal inside <body> ends up UNDER the bars outside it (header and bottom bar cover the drawer's top and
+        bottom, its close button cannot be tapped). Momentum scrolling is already the default on iOS 13+. */
    }
    ```
 2. Copy `TopLayerPortal.tsx` into the app and wrap the title bar, bottom nav and back-to-top / floating buttons.
